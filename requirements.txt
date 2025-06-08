@@ -1,76 +1,56 @@
-﻿# ── Core Streamlit Framework ──────────────────────────────────────────────────
-streamlit>=1.28.0
+﻿streamlit>=1.28.0
 streamlit-option-menu>=0.3.6
 
-# ── Scientific Computing Core ─────────────────────────────────────────────────
 numpy>=1.24.0
 pandas>=1.5.0
 scipy>=1.10.0
 
-# ── Visualization Libraries ───────────────────────────────────────────────────
 matplotlib>=3.6.0
 seaborn>=0.12.0
 plotly>=5.15.0
 altair>=4.0,<6
 
-# ── Bioinformatics Core Libraries ─────────────────────────────────────────────
 biopython>=1.81
 scikit-bio>=0.5.8
 
-# ── Sequence Analysis and Logos ───────────────────────────────────────────────
 logomaker>=0.8.0
 
-# ── DNA/Protein Visualization ─────────────────────────────────────────────────
 dna-features-viewer>=3.0.0
 py3Dmol>=2.0.0
 
-# ── Machine Learning & AI ─────────────────────────────────────────────────────
 transformers>=4.20.0
 torch>=1.12.0
 scikit-learn>=1.2.0
 
-# ── Web Requests and APIs ─────────────────────────────────────────────────────
 requests>=2.28.0
 urllib3>=1.26.0
 
-# ── Image Processing ───────────────────────────────────────────────────────────
 Pillow>=9.0.0
 opencv-python>=4.7.0
 
-# ── File Format Support ───────────────────────────────────────────────────────
 openpyxl>=3.0.0
 xlsxwriter>=3.0.0
 
-# ── Additional Bioinformatics Tools ───────────────────────────────────────────
 primer3-py>=2.0.0
 pysam>=0.21.0
-pyvcf>=0.6.8
 
-# ── Statistical Analysis ──────────────────────────────────────────────────────
 statsmodels>=0.14.0
 
-# ── Sequence Motif Analysis ───────────────────────────────────────────────────
 weblogo>=3.7.9
 
-# ── CRISPR Design Tools ───────────────────────────────────────────────────────
 azimuth>=2.0.0
 
-# ── Network Analysis ──────────────────────────────────────────────────────────
 networkx>=2.8.0
 
-# ── Progress Bars and UI Enhancements ────────────────────────────────────────
 tqdm>=4.64.0
 rich>=13.0.0
 
-# ── Development and Testing (Optional) ────────────────────────────────────────
 pytest>=7.0.0
 black>=22.0.0
 flake8>=5.0.0
 
-# ── Performance Optimization ──────────────────────────────────────────────────
 numba>=0.56.0
 joblib>=1.2.0
 
-# ── Database Connectivity (Optional) ──────────────────────────────────────────
 sqlalchemy>=1.4.0
 psycopg2-binary>=2.9.0
