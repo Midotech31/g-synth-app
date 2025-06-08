@@ -1,9 +1,4 @@
-﻿# ═══════════════════════════════════════════════════════════════════════════════
-# G-Synth 2025.2.0 - Complete Requirements List
-# Advanced Gene Synthesis and Bioinformatics Toolkit
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# ── Core Streamlit Framework ──────────────────────────────────────────────────
+﻿# ── Core Streamlit Framework ──────────────────────────────────────────────────
 streamlit>=1.28.0
 streamlit-option-menu>=0.3.6
 
@@ -33,10 +28,6 @@ py3Dmol>=2.0.0
 transformers>=4.20.0
 torch>=1.12.0
 scikit-learn>=1.2.0
-
-# ── Structural Biology & Docking ──────────────────────────────────────────────
-autodock-vina>=1.2.0
-pymol-open-source>=2.5.0
 
 # ── Web Requests and APIs ─────────────────────────────────────────────────────
 requests>=2.28.0
@@ -83,8 +74,3 @@ joblib>=1.2.0
 # ── Database Connectivity (Optional) ──────────────────────────────────────────
 sqlalchemy>=1.4.0
 psycopg2-binary>=2.9.0
-
-# ── Conda-specific packages (if using conda) ─────────────────────────────────
-# clustalw  # Install via: conda install -c bioconda clustalw
-# muscle    # Install via: conda install -c bioconda muscle
-# mafft     # Install via: conda install -c bioconda mafft
