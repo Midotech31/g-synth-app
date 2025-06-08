@@ -1,0 +1,490 @@
+﻿/* ───────────────────────────────────────────────────────────────────────────────
+   assets/styles.css
+   Enhanced G-Synth 2025.2.0 Styling with Fixed Sidebar Legibility
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   1. IMPORT FONTS
+   ───────────────────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   2. GLOBAL STYLES
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Body reset & typography */
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Nunito Sans', 'Inter', sans-serif;
+    background-color: #f9fafb;
+    color: #1c1f24;
+    line-height: 1.6;
+}
+
+/* Root variables for consistent theming */
+:root {
+    --primary-color: #ff4b4b;
+    --primary-dark: #e53e3e;
+    --secondary-color: #0b1f3b;
+    --accent-blue: #2563EB;
+    --text-dark: #1a202c;
+    --text-medium: #4a5568;
+    --text-light: #718096;
+    --background-light: #f7fafc;
+    --border-light: #e2e8f0;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+    --shadow-lg: 0 10px 25px rgba(0,0,0,0.1);
+}
+
+/* Enhanced typography */
+.header-title {
+    font-size: 2.4rem;
+    font-weight: 800;
+    color: var(--secondary-color);
+    margin-bottom: 0.5rem;
+    font-family: 'Inter', sans-serif;
+}
+
+/* Hyperlinks */
+a {
+    color: var(--secondary-color);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+a:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   3. FIXED SIDEBAR STYLING - BOLD BLACK TEXT FOR MAXIMUM LEGIBILITY
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Sidebar container with enhanced gradient */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%) !important;
+    border-right: 3px solid var(--primary-color) !important;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.3) !important;
+    font-family: 'Nunito Sans', sans-serif !important;
+}
+
+/* Enhanced sidebar content area */
+[data-testid="stSidebar"] > div {
+    background: transparent !important;
+    padding-top: 1rem !important;
+}
+
+/* CRITICAL FIX: Sidebar buttons with BOLD BLACK text for maximum legibility */
+[data-testid="stSidebar"] .stButton > button {
+    font-family: 'Nunito Sans', sans-serif !important;
+    font-size: 0.95rem !important;
+    font-weight: 700 !important; /* Bold text for maximum legibility */
+    line-height: 1.4 !important;
+    padding: 0.75rem 1.25rem !important;
+    margin: 0.25rem 0.5rem !important;
+    color: #000000 !important; /* BOLD BLACK TEXT - Maximum contrast */
+    background: rgba(255, 255, 255, 0.98) !important; /* Nearly opaque white background */
+    border-radius: 12px !important;
+    border: 2px solid rgba(255, 255, 255, 0.4) !important;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    width: calc(100% - 1rem) !important;
+    text-align: left !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+    cursor: pointer !important;
+}
+
+/* Ensure ALL button text content is bold and black */
+[data-testid="stSidebar"] .stButton > button p,
+[data-testid="stSidebar"] .stButton > button span,
+[data-testid="stSidebar"] .stButton > button div,
+[data-testid="stSidebar"] .stButton > button * {
+    color: #000000 !important;
+    font-weight: 700 !important;
+    text-shadow: none !important;
+}
+
+/* Enhanced hover effects for sidebar buttons */
+[data-testid="stSidebar"] .stButton > button:hover {
+    color: #ffffff !important; /* White text on hover for contrast */
+    background: linear-gradient(135deg, var(--primary-color), #ff6b6b) !important;
+    border-color: var(--primary-color) !important;
+    transform: translateX(8px) scale(1.02) !important;
+    box-shadow: 0 8px 25px rgba(255, 75, 75, 0.4) !important;
+}
+
+/* Hover text color override - ensure white text on red background */
+[data-testid="stSidebar"] .stButton > button:hover p,
+[data-testid="stSidebar"] .stButton > button:hover span,
+[data-testid="stSidebar"] .stButton > button:hover div,
+[data-testid="stSidebar"] .stButton > button:hover * {
+    color: #ffffff !important;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
+}
+
+/* Active/focused state for sidebar buttons */
+[data-testid="stSidebar"] .stButton > button:focus,
+[data-testid="stSidebar"] .stButton > button:active {
+    background: rgba(255, 255, 255, 1.0) !important;
+    color: #000000 !important;
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 4px 15px rgba(255, 75, 75, 0.3) !important;
+    transform: translateX(8px) !important;
+    font-weight: 800 !important;
+    outline: none !important;
+}
+
+/* Disabled state for sidebar buttons */
+[data-testid="stSidebar"] .stButton > button[disabled] {
+    color: #666666 !important;
+    opacity: 0.6 !important;
+    background: rgba(255, 255, 255, 0.6) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    cursor: not-allowed !important;
+}
+
+/* Enhanced workflow section headers */
+.workflow-section {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #cc0000 100%) !important;
+    color: white !important;
+    padding: 1rem 1.5rem !important;
+    border-radius: 12px !important;
+    margin: 1.5rem 0.5rem 1rem 0.5rem !important;
+    box-shadow: 0 6px 20px rgba(255, 75, 75, 0.3) !important;
+    text-align: center !important;
+}
+
+.workflow-section h3 {
+    margin: 0 !important;
+    font-weight: 700 !important;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+    color: #ffffff !important;
+    font-family: 'Nunito Sans', sans-serif !important;
+    font-size: 1.1rem !important;
+}
+
+/* Enhanced sidebar headers and text */
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+    margin-bottom: 1.5rem !important;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+    font-family: 'Nunito Sans', sans-serif !important;
+}
+
+[data-testid="stSidebar"] p:not(.stButton p), 
+[data-testid="stSidebar"] span:not(.stButton span), 
+[data-testid="stSidebar"] div:not(.stButton div) {
+    color: #ffffff !important;
+    font-family: 'Nunito Sans', sans-serif !important;
+}
+
+/* Status indicator in sidebar */
+.status-indicator {
+    background: linear-gradient(145deg, #22c55e, #16a34a) !important;
+    color: white !important;
+    padding: 0.4rem 0.8rem !important;
+    border-radius: 16px !important;
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    text-align: center !important;
+    margin: 0.5rem !important;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3) !important;
+    font-family: 'Nunito Sans', sans-serif !important;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   4. ENHANCED CARD STYLING
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Base card styling */
+.feature-card, .card, .floating-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
+    border: 2px solid var(--border-light) !important;
+    border-radius: 16px !important;
+    padding: 1.5rem !important;
+    margin: 0.75rem 0 !important;
+    box-shadow: var(--shadow-md) !important;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    cursor: pointer !important;
+    font-family: 'Nunito Sans', sans-serif !important;
+}
+
+/* Card hover effects */
+.feature-card:hover, .card:hover, .floating-card:hover {
+    background: linear-gradient(135deg, var(--primary-color), #ff6b6b) !important;
+    color: #ffffff !important;
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 12px 40px rgba(255, 75, 75, 0.4) !important;
+    transform: translateY(-8px) scale(1.02) !important;
+}
+
+/* Card text elements on hover */
+.feature-card:hover h1, .feature-card:hover h2, .feature-card:hover h3, .feature-card:hover h4, .feature-card:hover p,
+.card:hover h1, .card:hover h2, .card:hover h3, .card:hover h4, .card:hover p,
+.floating-card:hover h1, .floating-card:hover h2, .floating-card:hover h3, .floating-card:hover h4, .floating-card:hover p {
+    color: #ffffff !important;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+}
+
+/* Home page feature cards specific styling */
+.home-feature-card {
+    border-left: 5px solid var(--primary-color) !important;
+    background: white !important;
+    border-radius: 8px !important;
+    box-shadow: var(--shadow-sm) !important;
+    transition: all 0.2s ease !important;
+}
+
+.home-feature-card:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   5. ENHANCED UI ELEMENTS (EXCLUDING SIDEBAR)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Modern buttons (main content area only - NOT sidebar) */
+.stButton > button:not([data-testid="stSidebar"] .stButton > button) {
+    background: linear-gradient(135deg, var(--primary-color), #ff6b6b) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 0.75rem 1.5rem !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 4px 15px rgba(255, 75, 75, 0.3) !important;
+    font-family: 'Nunito Sans', sans-serif !important;
+}
+
+.stButton > button:not([data-testid="stSidebar"] .stButton > button):hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 25px rgba(255, 75, 75, 0.4) !important;
+    background: linear-gradient(135deg, var(--primary-dark), var(--primary-color)) !important;
+}
+
+/* Enhanced input fields */
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea,
+.stSelectbox > div > div > select,
+.stNumberInput > div > div > input {
+    border-radius: 12px !important;
+    border: 2px solid var(--border-light) !important;
+    transition: all 0.3s ease !important;
+    font-family: 'Nunito Sans', sans-serif !important;
+    padding: 0.75rem 1rem !important;
+    font-size: 0.95rem !important;
+}
+
+.stTextInput > div > div > input:focus,
+.stTextArea > div > div > textarea:focus,
+.stSelectbox > div > div > select:focus,
+.stNumberInput > div > div > input:focus {
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 0 0 3px rgba(255, 75, 75, 0.1) !important;
+    outline: none !important;
+}
+
+/* Enhanced alerts */
+.stAlert {
+    border-radius: 12px !important;
+    border: none !important;
+    font-size: 0.95rem !important;
+    padding: 1rem 1.25rem !important;
+    font-family: 'Nunito Sans', sans-serif !important;
+    margin: 1rem 0 !important;
+}
+
+.stSuccess {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.1)) !important;
+    color: #059669 !important;
+    border-left: 4px solid #10b981 !important;
+}
+
+.stWarning {
+    background: linear-gradient(135deg, rgba(251, 146, 60, 0.1), rgba(245, 158, 11, 0.1)) !important;
+    color: #d97706 !important;
+    border-left: 4px solid #f59e0b !important;
+}
+
+.stError {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.1)) !important;
+    color: #dc2626 !important;
+    border-left: 4px solid #ef4444 !important;
+}
+
+.stInfo {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.1)) !important;
+    color: var(--accent-blue) !important;
+    border-left: 4px solid var(--accent-blue) !important;
+}
+
+/* Enhanced metrics */
+.stMetric {
+    background: white !important;
+    border-radius: 12px !important;
+    padding: 1rem !important;
+    box-shadow: var(--shadow-sm) !important;
+    border: 1px solid var(--border-light) !important;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   6. ENHANCED TABLE STYLES
+   ───────────────────────────────────────────────────────────────────────────── */
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Nunito Sans', sans-serif;
+    margin: 1rem 0;
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+
+table th,
+table td {
+    border: 1px solid var(--border-light);
+    padding: 0.75rem 1rem;
+    text-align: left;
+    color: var(--text-dark);
+    font-size: 0.95rem;
+}
+
+table th {
+    background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--secondary-color);
+}
+
+table tr:nth-child(even) {
+    background-color: #f8fafc;
+}
+
+table tr:hover {
+    background-color: #f1f5f9;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   7. ENHANCED ANIMATIONS
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Apply animations to cards */
+.feature-card, .card, .floating-card {
+    animation: fadeIn 0.6s ease-out !important;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   8. RESPONSIVE DESIGN
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    [data-testid="stSidebar"] .stButton > button {
+        font-size: 0.9rem !important;
+        padding: 0.6rem 1rem !important;
+        font-weight: 700 !important; /* Maintain bold text on mobile */
+    }
+    
+    .feature-card, .card, .floating-card {
+        padding: 1rem !important;
+        margin: 0.5rem 0 !important;
+    }
+    
+    .header-title {
+        font-size: 2rem !important;
+    }
+}
+
+@media (max-width: 480px) {
+    [data-testid="stSidebar"] .stButton > button {
+        font-size: 0.85rem !important;
+        padding: 0.5rem 0.8rem !important;
+        font-weight: 700 !important; /* Maintain bold text on small screens */
+    }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   9. UTILITY CLASSES
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.text-primary { color: var(--primary-color) !important; }
+.text-secondary { color: var(--secondary-color) !important; }
+.text-accent { color: var(--accent-blue) !important; }
+.bg-light { background-color: var(--background-light) !important; }
+.shadow-sm { box-shadow: var(--shadow-sm) !important; }
+.shadow-md { box-shadow: var(--shadow-md) !important; }
+.shadow-lg { box-shadow: var(--shadow-lg) !important; }
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   10. CUSTOM SCROLLBAR
+   ───────────────────────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, var(--primary-color), #ff6b6b);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, var(--primary-dark), var(--primary-color));
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   11. FIXES FOR STREAMLIT SPECIFICS
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Hide Streamlit default elements */
+#MainMenu { visibility: hidden; }
+.stDeployButton { display: none; }
+footer { visibility: hidden; }
+.stActionButton { visibility: hidden; }
+
+/* Enhance main content area */
+.main .block-container {
+    padding-top: 2rem !important;
+    padding-bottom: 2rem !important;
+    max-width: 1200px !important;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   END OF STYLES
+   ───────────────────────────────────────────────────────────────────────────── */
