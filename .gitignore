@@ -1,19 +1,20 @@
-__pycache__/
-*.py[cod]
-*.so
-build/
-dist/
-*.egg-info/
-.coverage
-.pytest_cache/
-.ruff_cache/
-.venv/
-venv/
-env/
-.idea/
-.vscode/
-.DS_Store
+# Logs
 *.log
 g-synth.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+env/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
 Thumbs.db
-.streamlit/secrets.toml
