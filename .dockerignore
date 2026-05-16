@@ -14,6 +14,9 @@ env/
 .vscode/
 .DS_Store
 *.log
-g-synth.log
-Thumbs.db
-.streamlit/secrets.toml
+.git/
+.github/
+tests/
+Dockerfile
+.dockerignore
+README.md
