@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gsynth"
+version = "3.0.1"
+description = "G-Synth — Advanced gene-synthesis & molecular-biology platform"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Dr. Mohamed Merzoug", email = "merzoug.mohamed@essbo.dz" }]
+keywords = ["bioinformatics", "gene-synthesis", "cloning", "crispr", "codon-optimization"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+  "biopython>=1.83",
+  "primer3-py>=2.0.0",
+  "numpy>=1.24",
+  "pandas>=2.0",
+  "requests>=2.31",
+]
+
+[project.optional-dependencies]
+ui = ["streamlit>=1.32", "plotly>=5.18", "matplotlib>=3.8", "dna-features-viewer>=3.1"]
+snapgene = ["snapgene-reader>=0.1.20"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.3"]
+all = ["gsynth[ui,snapgene,dev]"]
+
+[project.urls]
+Repository = "https://github.com/gsynth-team/gsynth"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gsynth_core*", "gsynth_ui*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
