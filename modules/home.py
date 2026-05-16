@@ -43,52 +43,54 @@ def main():
     )
 
     # ── 2. UPDATED CARDS WITH MORE RELEVANT ICONS ───────────────────
+    # Third tuple element is the module key (matches MODULE_MAPPING values in app.py)
+    # so query-string routing (?page=<key>) can look up the right sidebar entry.
     cards = [
         ("🔬 Small Sequence Design",
          "Reverse complement sequences, calculate GC% and Tₘ, find ORFs, design primers and oligos.",
-         "Small Sequence Design"),
+         "ssd"),
         ("🧬 Translation Tools",
          "Convert DNA → protein, reverse-translate protein → DNA, and switch between one/three-letter codes.",
-         "Translation / Reverse Transl."),
+         "translation"),
         ("⚙️ Codon Optimization",
          "Optimize codon usage (E. coli, yeast, CHO, human) – tune GC content and avoid restriction sites.",
-         "Codon Optimization"),
+         "codon_optimization"),
         ("🔗 Extended Synthesis",
          "Fragment long DNA into overlapping oligos with sticky ends, verify assembly, export protocols.",
-         "Extended Synthesis"),
+         "extended_synthesis"),
         ("🧪 Hybridization & Ligation Check",
          "Calculate melting temps for hybridization and check ligation compatibility of fragments.",
-         "Hybridization"),
+         "hybridization"),
         ("🎯 Primer Generator",
          "Design primers for PCR, sequencing, or site-directed mutagenesis with adjustable parameters.",
-         "Primer Generator"),
+         "primer_generator"),
         ("🔄 Reverse Complement",
          "Instantly get the reverse complement of any DNA sequence.",
-         "Reverse Complement"),
+         "reverse_complement"),
         ("✂️ CRISPR sgRNA Designer",
          "Scan for candidate guides, score on-target/off-target (Doench 2016), and link to UCSC genome browser.",
-         "CRISPR sgRNA Designer"),
+         "crispr_designer"),
         ("🧫 Plasmid Visualizer & Editor",
          "Upload GenBank/FASTA, annotate features, render maps, and export SVG/PNG/GenBank.",
-         "Plasmid Visualizer"),
+         "plasmid_visualizer"),
         ("🧩 Ligation Calculator",
          "Verify overhang complementarity, calculate ΔG/efficiency, and visualize enzyme cut sites.",
-         "Ligation Calculator"),
+         "ligase_calculator"),
         ("🖥️ In Silico Docking",
          "Perform AI-based docking simulations and visualize predicted binding modes.",
-         "In Silico Docking"),
+         "docking_module"),
         ("🧠 Functional Prediction",
          "Predict protein function from sequence using machine learning models.",
-         "Functional Prediction"),
+         "functional_prediction"),
         ("📊 Alignment Tools",
          "Perform multiple sequence alignments and visualize results.",
-         "Alignment Tools"),
+         "alignment_tools"),
         ("⚡ Settings & Preferences",
          "Toggle Dark Mode, manage user settings, and customize your G-Synth workspace.",
-         "Settings"),
+         "settings"),
         ("📖 Help & Guide",
          "Comprehensive user manual, FAQs, and troubleshooting tips.",
-         "Help & Guide"),
+         "help_guide"),
     ]
 
     # ── 3. Render cards in rows of 4 for a more compact, classy look ────────────
@@ -96,9 +98,9 @@ def main():
     for row_start in range(0, len(cards), cards_per_row):
         row_cards = cards[row_start:row_start + cards_per_row]
         cols = st.columns(cards_per_row, gap="small")
-        for idx, (title, desc, label) in enumerate(row_cards):
+        for idx, (title, desc, module_key) in enumerate(row_cards):
             col = cols[idx]
-            href = f"/?page={label.replace(' ', '+')}"
+            href = f"?page={module_key}"
             # Enhanced card styling
             card_html = f"""
                 <a href="{href}" style="text-decoration:none;">

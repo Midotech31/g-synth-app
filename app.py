@@ -622,6 +622,37 @@ def render_enhanced_footer():
 # ───────────────────────────────────────────────────────────────────────────────
 # 4. MAIN APPLICATION
 # ───────────────────────────────────────────────────────────────────────────────
+def _route_from_query_params():
+    """
+    Read ?page=<module_key> from the URL on the FIRST run only and route to
+    the matching sidebar entry. This is what makes the home-page cards work
+    (they generate ?page=ssd, ?page=crispr_designer, etc.).
+
+    Processed once per session to avoid hijacking sidebar navigation after
+    the user starts clicking buttons.
+    """
+    if st.session_state.get("_url_routed"):
+        return
+    st.session_state["_url_routed"] = True
+
+    try:
+        query_page = st.query_params.get("page")
+    except Exception:
+        # Older Streamlit (<1.30) fallback
+        params = st.experimental_get_query_params() if hasattr(st, "experimental_get_query_params") else {}
+        query_page = params.get("page", [None])[0] if isinstance(params.get("page"), list) else params.get("page")
+
+    if not query_page:
+        return
+
+    for label, key in MODULE_MAPPING.items():
+        if key == query_page:
+            st.session_state["selected_module"] = label
+            logger.info(f"Routed from URL ?page={query_page} -> {label}")
+            return
+    logger.warning(f"Unknown ?page={query_page} in URL; ignoring")
+
+
 def main():
     # Streamlit page configuration
     st.set_page_config(
@@ -636,6 +667,9 @@ def main():
 
     # Load user settings
     settings = load_settings()
+
+    # Route from ?page=<key> URL on first run (home page cards rely on this)
+    _route_from_query_params()
 
     # Enhanced sidebar navigation
     selected = display_enhanced_sidebar()
