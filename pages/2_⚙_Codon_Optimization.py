@@ -1,7 +1,7 @@
 """Codon optimization page."""
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
 from gsynth_ui.state import init_state, get_active_sequence, store_result

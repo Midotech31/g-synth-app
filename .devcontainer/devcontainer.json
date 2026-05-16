@@ -19,7 +19,7 @@
   },
   "updateContentCommand": "pip3 install --user --upgrade pip && pip3 install --user -e '.[ui,dev]' && echo '✅ G-Synth 3.0 installed'",
   "postAttachCommand": {
-    "server": "streamlit run gsynth_ui/app.py --server.address=0.0.0.0"
+    "server": "streamlit run app.py --server.address=0.0.0.0"
   },
   "portsAttributes": {
     "8501": {

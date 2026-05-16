@@ -1,6 +1,6 @@
 """G-Synth 3.0 — Streamlit application entry point.
 
-Run with: `streamlit run gsynth_ui/app.py`
+Run with: `streamlit run app.py`
 """
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 # Ensure repo root is on path
 _HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE.parent))
+sys.path.insert(0, str(_HERE))
 
 import streamlit as st
 
@@ -33,7 +33,7 @@ apply_theme()
 
 
 # ── Sidebar ────────────────────────────────────────────────────────────────
-_LOGO_PATH = _HERE.parent / "assets" / "logo.png"
+_LOGO_PATH = _HERE / "assets" / "logo.png"
 
 with st.sidebar:
     if _LOGO_PATH.exists():

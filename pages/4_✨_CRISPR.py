@@ -1,7 +1,7 @@
 """CRISPR guide RNA design."""
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
 import pandas as pd

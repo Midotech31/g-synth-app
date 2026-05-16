@@ -23,10 +23,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # `gsynth_core` / `gsynth_ui` packages on disk to discover them via
 # pyproject.toml's `packages.find` configuration; installing before COPY
 # would silently install only the dependencies and leave the package empty.
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md app.py ./
 COPY assets/      ./assets/
 COPY gsynth_core/ ./gsynth_core/
 COPY gsynth_ui/   ./gsynth_ui/
+COPY pages/       ./pages/
 COPY .streamlit/  ./.streamlit/
 
 RUN pip install --upgrade pip && \
@@ -43,5 +44,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request, sys; \
         sys.exit(0 if urllib.request.urlopen('http://localhost:8501/_stcore/health').status == 200 else 1)"
 
-ENTRYPOINT ["streamlit", "run", "gsynth_ui/app.py", \
+ENTRYPOINT ["streamlit", "run", "app.py", \
             "--server.port=8501", "--server.address=0.0.0.0"]

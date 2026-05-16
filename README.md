@@ -45,7 +45,7 @@ guides = design_guides("ATGCTAG...", cas=CasType.SpCas9, min_on_target=0.5)
 ## UI
 
 ```bash
-streamlit run gsynth_ui/app.py
+streamlit run app.py
 ```
 
 ## Run tests
@@ -76,7 +76,9 @@ gsynth/
 │   ├── alignment/         NW global, SW local, MSA
 │   ├── io/                FASTA, GenBank, SnapGene, NCBI, UniProt
 │   └── annotation/        auto-detect plasmid features
-├── gsynth_ui/             Streamlit reference UI
+├── app.py                 Streamlit entry point (at repo root for Streamlit Cloud)
+├── pages/                 Streamlit multi-page navigator
+├── gsynth_ui/             UI helpers (state, theme)
 ├── tests/                 pytest
 ├── assets/                Logo and brand assets
 ├── Dockerfile
