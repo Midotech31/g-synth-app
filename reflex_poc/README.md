@@ -12,6 +12,27 @@ FastAPI). Demonstrates the architecture for a real multi-user G-Synth:
 The existing Streamlit app on `main` is **not affected**. This lives in
 its own subdirectory so you can compare side-by-side.
 
+## Try it in one click — GitHub Codespaces
+
+You don't need Python, Node, or anything else installed locally.
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?repo=Midotech31/g-synth-app&ref=claude/reflex-poc&devcontainer_path=.devcontainer/reflex-poc/devcontainer.json)
+
+1. Click the badge above (signs you in to GitHub if needed).
+2. Pick the smallest "2-core / 8 GB" machine and **Create codespace**.
+3. Wait ~3 min — the container builds, installs Reflex, runs `reflex init`,
+   and starts `reflex run` in the background.
+4. When port 3000 finishes forwarding, Codespaces auto-opens the preview
+   tab. The very first React compile is silent for ~2 min before the page
+   appears — that's normal. Tail `/tmp/reflex.log` in the terminal if you
+   want a heartbeat.
+5. Sign up with any email + password (≥ 8 chars), the data lives in the
+   in-container SQLite for the lifetime of the codespace.
+
+When you're done, stop the codespace from
+[github.com/codespaces](https://github.com/codespaces) — free tier
+includes 60 hours/month.
+
 ## What this is, what it isn't
 
 | | |

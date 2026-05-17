@@ -1,0 +1,47 @@
+{
+  "name": "G-Synth Reflex POC",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.11-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    },
+    "codespaces": {
+      "openFiles": [
+        "reflex_poc/README.md",
+        "reflex_poc/gsynth_poc/gsynth_poc.py"
+      ]
+    }
+  },
+
+  "postCreateCommand": "cd reflex_poc && pip install --upgrade pip && pip install -r requirements.txt && reflex init --template blank",
+
+  "postAttachCommand": {
+    "reflex": "cd reflex_poc && nohup reflex run --frontend-port 3000 --backend-port 8000 > /tmp/reflex.log 2>&1 & echo 'Reflex starting in the background. First compile takes 2-4 min. Tail the log with: tail -f /tmp/reflex.log'"
+  },
+
+  "forwardPorts": [3000, 8000],
+
+  "portsAttributes": {
+    "3000": {
+      "label": "Reflex frontend (open this)",
+      "onAutoForward": "openPreview",
+      "visibility": "public"
+    },
+    "8000": {
+      "label": "Reflex backend",
+      "onAutoForward": "silent",
+      "visibility": "public"
+    }
+  },
+
+  "remoteUser": "vscode"
+}
