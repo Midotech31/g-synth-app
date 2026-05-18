@@ -12,34 +12,32 @@
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance"
-      ]
+      ],
+      "settings": {
+        "task.allowAutomaticTasks": "on",
+        "security.workspace.trust.startupPrompt": "never",
+        "security.workspace.trust.enabled": false
+      }
     },
     "codespaces": {
       "openFiles": [
-        "reflex_poc/README.md",
-        "reflex_poc/gsynth_poc/gsynth_poc.py"
+        "reflex_poc/README.md"
       ]
     }
   },
 
-  "postCreateCommand": "cd reflex_poc && pip install --upgrade pip && pip install -r requirements.txt && reflex init --template blank",
-
-  "postAttachCommand": {
-    "reflex": "cd reflex_poc && nohup reflex run --frontend-port 3000 --backend-port 8000 > /tmp/reflex.log 2>&1 & echo 'Reflex starting in the background. First compile takes 2-4 min. Tail the log with: tail -f /tmp/reflex.log'"
-  },
+  "postCreateCommand": "cd reflex_poc && pip install --upgrade pip && pip install -r requirements.txt && reflex init --template blank && echo 'Setup complete. The Reflex dev server will auto-start when VS Code opens this workspace.'",
 
   "forwardPorts": [3000, 8000],
 
   "portsAttributes": {
     "3000": {
       "label": "Reflex frontend (open this)",
-      "onAutoForward": "openPreview",
-      "visibility": "public"
+      "onAutoForward": "openPreview"
     },
     "8000": {
       "label": "Reflex backend",
-      "onAutoForward": "silent",
-      "visibility": "public"
+      "onAutoForward": "silent"
     }
   },
 
