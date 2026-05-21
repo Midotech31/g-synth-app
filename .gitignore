@@ -18,3 +18,11 @@ env/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local database (SQLite demo mode) — never commit user data
+*.db
+*.db-journal
+gsynth.db
+
+# Streamlit secrets — never commit DATABASE_URL or credentials
+.streamlit/secrets.toml

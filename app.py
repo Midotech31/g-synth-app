@@ -14,6 +14,9 @@ from pathlib import Path
 import streamlit as st
 from streamlit_option_menu import option_menu
 
+from utils import auth
+from modules import account as account_module
+
 # ───────────────────────────────────────────────────────────────────────────────
 # 1. LOGGING CONFIGURATION
 # ───────────────────────────────────────────────────────────────────────────────
@@ -36,6 +39,7 @@ LOGO_PATH = "assets/logo.png"
 MODULE_MAPPING = {
     # Core Workflow (Main Pipeline)
     "🏠 Home": "home",
+    "📁 My Projects": "my_projects",
     "🔬 Small Sequence Design": "ssd",
     "🧬 Translation Tools": "translation",
     "⚙️ Codon Optimization": "codon_optimization",
@@ -56,6 +60,7 @@ MODULE_MAPPING = {
     "🧠 Functional Prediction": "functional_prediction",
     
     # System Tools
+    "👤 My Account": "account",
     "⚡ Settings": "settings",
     "📖 Help & Guide": "help_guide",
 }
@@ -398,24 +403,54 @@ def display_enhanced_sidebar():
             </div>
             """, unsafe_allow_html=True)
 
+        # Signed-in user card + sign-out
+        _user = auth.current_user()
+        if _user:
+            st.markdown(
+                f"""
+                <div style="
+                    background: rgba(255,255,255,0.1);
+                    border: 1px solid rgba(255,255,255,0.2);
+                    border-radius: 12px;
+                    padding: 0.75rem 1rem;
+                    margin-bottom: 0.75rem;
+                ">
+                    <div style="color:#ffffff; font-weight:600; font-size:0.95rem;">
+                        👤 {_user['name'] or _user['email'].split('@')[0]}
+                    </div>
+                    <div style="color:#cbd5e1; font-size:0.78rem; word-break:break-all;">
+                        {_user['email']}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if st.button("🚪 Sign out", key="sidebar_sign_out",
+                         use_container_width=True):
+                auth.sign_out()
+                st.rerun()
+
         # Workflow sections
         workflow_sections = {
+            "Workspace": [
+                "🏠 Home", "📁 My Projects"
+            ],
             "Core Workflow": [
-                "🏠 Home", "🔬 Small Sequence Design", "🧬 Translation Tools", 
+                "🔬 Small Sequence Design", "🧬 Translation Tools",
                 "⚙️ Codon Optimization", "🔗 Extended Synthesis", "🧪 Hybridization", "🔗 Ligation Check"
             ],
             "Design Tools": [
                 "🎯 Primer Generator", "🔄 Reverse Complement"
             ],
             "Advanced Analysis": [
-                "✂️ CRISPR sgRNA Designer", "🧫 Plasmid Visualizer", 
+                "✂️ CRISPR sgRNA Designer", "🧫 Plasmid Visualizer",
                 "🧩 Ligation Calculator", "📊 Alignment Tools"
             ],
             "AI Tools": [
                 "🖥️ In Silico Docking", "🧠 Functional Prediction"
             ],
             "System": [
-                "⚡ Settings", "📖 Help & Guide"
+                "👤 My Account", "⚡ Settings", "📖 Help & Guide"
             ]
         }
 
@@ -664,6 +699,12 @@ def main():
 
     # Inject enhanced CSS with FIXED sidebar styling
     inject_custom_css()
+
+    # Authentication gate — the whole app is multi-user.
+    # When signed out, show the login / sign-up screen and stop here.
+    if not auth.is_authenticated():
+        account_module.render_auth_gate()
+        return
 
     # Load user settings
     settings = load_settings()
