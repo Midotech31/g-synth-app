@@ -4,6 +4,13 @@ Base Django settings for G-Synth web platform.
 Environment-driven — read every deployment-specific value through
 `environ`. dev.py and prod.py inherit from this file and only override
 what actually differs.
+
+IMPORTANT — how defaults work here:
+    Defaults are supplied at the *call site* (`env("X", default=...)`),
+    never on the `Env()` constructor. A schema-level default silently
+    satisfies every later read, which makes it impossible for prod.py to
+    demand a value. Keeping defaults at the call site lets prod.py drop
+    them and fail loudly on a missing env var.
 """
 from datetime import timedelta
 from pathlib import Path
@@ -12,16 +19,18 @@ import environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-env = environ.Env(
-    DEBUG=(bool, False),
-    ALLOWED_HOSTS=(list, ["*"]),
-    CORS_ALLOWED_ORIGINS=(list, []),
-)
+# Only DEBUG carries a schema default — it is not security-sensitive and
+# every settings module overrides it explicitly anyway.
+env = environ.Env(DEBUG=(bool, False))
 environ.Env.read_env(BASE_DIR / ".env")
 
-SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-insecure-do-not-use-in-production-32chars-min")
+# The value below is public (it is committed to the repository). It exists
+# so a fresh checkout runs without setup. prod.py refuses to boot with it.
+INSECURE_DEV_SECRET_KEY = "dev-insecure-do-not-use-in-production-32chars-min"
+
+SECRET_KEY = env("DJANGO_SECRET_KEY", default=INSECURE_DEV_SECRET_KEY)
 DEBUG = env("DEBUG")
-ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Apps
@@ -36,7 +45,9 @@ DJANGO_APPS = [
 ]
 THIRD_PARTY_APPS = [
     "rest_framework",
-    "rest_framework_simplejwt",
+    # Persists refresh tokens so they can actually be revoked — required for
+    # logout and for cutting off stolen tokens on password change.
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
 ]
 LOCAL_APPS = [
@@ -77,7 +88,9 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Database — Postgres in prod (via DATABASE_URL), SQLite by default in dev
+# Database — SQLite by default so a fresh checkout runs; prod.py *requires*
+# DATABASE_URL so a misconfigured deploy can never silently land on an
+# ephemeral SQLite file inside a container.
 # ─────────────────────────────────────────────────────────────────────────────
 DATABASES = {
     "default": env.db_url(
@@ -102,7 +115,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # ─────────────────────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # Subclass of simplejwt's JWTAuthentication that additionally rejects
+        # tokens minted before the user's last credential change.
+        "apps.accounts.authentication.VersionedJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
@@ -113,20 +128,36 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
+    # Rate limiting. `register` and `login` are unauthenticated and therefore
+    # the two endpoints an attacker can hammer for free — they get their own
+    # tighter scopes, applied per-view via ScopedRateThrottle.
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "120/hour",
+        "user": "2000/hour",
+        "register": "5/hour",
+        "login": "10/min",
+    },
 }
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
     "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": False,
+    # Rotation without blacklisting leaves the superseded refresh token valid,
+    # which defeats both logout and password-change revocation.
+    "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
+    "TOKEN_OBTAIN_SERIALIZER": "apps.accounts.serializers.VersionedTokenObtainPairSerializer",
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CORS — the React SPA will call the API from another origin in dev
 # ─────────────────────────────────────────────────────────────────────────────
-CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CORS_ALLOW_CREDENTIALS = True
 
 # ─────────────────────────────────────────────────────────────────────────────

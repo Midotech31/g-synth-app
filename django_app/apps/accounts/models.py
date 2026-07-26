@@ -40,6 +40,13 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
 
+    # Bumped whenever credentials change. Every issued JWT carries the value
+    # it was minted with; VersionedJWTAuthentication rejects any token whose
+    # version is stale. This is what makes "change my password" actually cut
+    # off an attacker holding a previously stolen access token — JWTs are
+    # stateless and cannot otherwise be revoked before they expire.
+    token_version = models.PositiveIntegerField(default=0)
+
     objects = UserManager()
 
     USERNAME_FIELD = "email"
@@ -55,3 +62,29 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def display_name(self) -> str:
         return self.name or self.email.split("@")[0]
+
+    def revoke_all_tokens(self) -> int:
+        """Invalidate every JWT previously issued to this user.
+
+        Two mechanisms, because access and refresh tokens fail differently:
+
+        1. `token_version` is bumped, so any *access* token still in flight
+           carries a stale version and is rejected on its next request.
+        2. Every outstanding *refresh* token is blacklisted, so it can no
+           longer be exchanged for a fresh access token.
+
+        Returns the number of refresh tokens blacklisted.
+        """
+        from rest_framework_simplejwt.token_blacklist.models import (
+            BlacklistedToken,
+            OutstandingToken,
+        )
+
+        self.token_version += 1
+        self.save(update_fields=["token_version"])
+
+        blacklisted = 0
+        for token in OutstandingToken.objects.filter(user=self):
+            _, created = BlacklistedToken.objects.get_or_create(token=token)
+            blacklisted += int(created)
+        return blacklisted

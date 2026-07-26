@@ -1,9 +1,28 @@
-"""DRF serializers for user registration and profile."""
+"""DRF serializers for user registration, profile, and token issuance."""
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+
+from apps.accounts.tokens import VersionedRefreshToken
 
 User = get_user_model()
+
+
+class VersionedTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """Issues tokens carrying the user's current `token_version`.
+
+    simplejwt copies custom claims from a refresh token onto the access
+    tokens minted from it, so a refresh token issued before a password
+    change produces access tokens carrying the stale version — which
+    `VersionedJWTAuthentication` then rejects.
+    """
+
+    token_class = VersionedRefreshToken
+
+    @classmethod
+    def get_token(cls, user):
+        return VersionedRefreshToken.for_user(user)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -59,10 +78,33 @@ class ChangePasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"current_password": "Current password is incorrect."}
             )
+        if attrs["new_password"] == attrs["current_password"]:
+            raise serializers.ValidationError(
+                {"new_password": "The new password must differ from the current one."}
+            )
         return attrs
 
     def save(self, **kwargs):
         user = self.context["request"].user
         user.set_password(self.validated_data["new_password"])
         user.save(update_fields=["password"])
+        # Cut off every token issued under the old password.
+        user.revoke_all_tokens()
         return user
+
+
+class LogoutSerializer(serializers.Serializer):
+    """Blacklist one refresh token (single-device sign-out)."""
+
+    refresh = serializers.CharField(required=True)
+
+    def save(self, **kwargs):
+        from rest_framework_simplejwt.exceptions import TokenError
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        try:
+            RefreshToken(self.validated_data["refresh"]).blacklist()
+        except TokenError as exc:
+            raise serializers.ValidationError(
+                {"refresh": "Token is invalid or already revoked."}
+            ) from exc
