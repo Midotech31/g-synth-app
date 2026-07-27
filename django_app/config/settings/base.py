@@ -12,12 +12,19 @@ IMPORTANT — how defaults work here:
     demand a value. Keeping defaults at the call site lets prod.py drop
     them and fail loudly on a missing env var.
 """
+import sys
 from datetime import timedelta
 from pathlib import Path
 
 import environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+# gsynth_engine lives at the repository root, one level above django_app, so
+# the design logic is shared with the Streamlit app rather than duplicated.
+REPO_ROOT = BASE_DIR.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 # Only DEBUG carries a schema default — it is not security-sensitive and
 # every settings module overrides it explicitly anyway.
@@ -54,6 +61,7 @@ LOCAL_APPS = [
     "apps.accounts",
     "apps.projects",
     "apps.sequences",
+    "apps.design",
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
