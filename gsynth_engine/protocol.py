@@ -16,7 +16,8 @@ import io
 from dataclasses import dataclass
 
 from gsynth_engine.merzoug import AssemblyPlan
-from gsynth_engine.sequence import gc_content, melting_temperature
+from gsynth_engine.sequence import gc_content
+from gsynth_engine.thermo import ANNEALING, melting_temperature
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,7 @@ def order_sheet(plan: AssemblyPlan, *, construct_name: str = "construct") -> lis
                     sequence=sequence,
                     length=len(sequence),
                     gc_percent=round(gc_content(sequence), 1),
-                    tm=round(melting_temperature(sequence), 1),
+                    tm=round(melting_temperature(sequence, conditions=ANNEALING), 1),
                     scale=scale,
                     purification=purification,
                     role=role,
@@ -140,6 +141,9 @@ def bench_protocol(
     for order in orders:
         add(f"   {order.name:<{width}}  {order.length:>3} nt  "
             f"Tm {order.tm:>5.1f}°C  {order.scale:>9}  {order.purification}")
+    add("")
+    add("   Tm: nearest-neighbour model (SantaLucia 1998) under the annealing")
+    add(f"   conditions of step 3 — {ANNEALING.summary}.")
     add("")
 
     add("2. RESUSPENSION")

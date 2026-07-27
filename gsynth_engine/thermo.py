@@ -23,6 +23,7 @@ References
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import Final
 
 from gsynth_engine.sequence import (
@@ -30,6 +31,47 @@ from gsynth_engine.sequence import (
     gc_content,
     is_palindrome,
     reverse_complement,
+)
+
+
+@dataclass(frozen=True)
+class BufferConditions:
+    """The reaction a melting temperature refers to.
+
+    A Tm quoted without its conditions is not actionable: the same oligo
+    melts several degrees apart in a primer dilution and in the 25 µM
+    annealing reaction this protocol prescribes. Every Tm the engine
+    reports carries the conditions it was computed under.
+    """
+
+    name: str
+    oligo_nM: float   #: total strand concentration Ct, not per-strand
+    na_mM: float
+    mg_mM: float = 0.0
+    dntp_mM: float = 0.0
+
+    @property
+    def summary(self) -> str:
+        """One line, for an order sheet footnote or a UI tooltip."""
+        parts = [f"{self.oligo_nM / 1000:g} µM total strand", f"{self.na_mM:g} mM Na⁺"]
+        if self.mg_mM:
+            parts.append(f"{self.mg_mM:g} mM Mg²⁺")
+        if self.dntp_mM:
+            parts.append(f"{self.dntp_mM:g} mM dNTP")
+        return ", ".join(parts)
+
+
+#: The annealing reaction in `protocol.py`: 5 µL + 5 µL of 100 µM oligos in
+#: 20 µL, so 25 µM of each strand and Ct = 50 µM, in 1× annealing buffer
+#: (50 mM NaCl, no Mg²⁺). This is what the oligos actually experience, so it
+#: is what the design pages report.
+ANNEALING: Final["BufferConditions"] = BufferConditions(
+    name="annealing reaction", oligo_nM=50_000.0, na_mM=50.0
+)
+
+#: A conventional primer Tm, for comparison against a supplier's datasheet.
+PRIMER: Final["BufferConditions"] = BufferConditions(
+    name="primer", oligo_nM=500.0, na_mM=50.0
 )
 
 #: SantaLucia 1998 unified parameters, ΔH (kcal/mol) and ΔS (cal/mol/K).
@@ -132,20 +174,27 @@ def _salt_corrected(
 def melting_temperature(
     sequence: str,
     *,
-    oligo_nM: float = 500.0,
-    na_mM: float = 50.0,
-    mg_mM: float = 0.0,
-    dntp_mM: float = 0.0,
+    conditions: BufferConditions = PRIMER,
+    oligo_nM: float | None = None,
+    na_mM: float | None = None,
+    mg_mM: float | None = None,
+    dntp_mM: float | None = None,
 ) -> float:
     """Tm in °C for a perfectly matched duplex.
 
-    Defaults describe a standard oligo annealing reaction: 500 nM oligo in
-    50 mM Na⁺, no Mg²⁺. Pass `mg_mM` for a ligation or PCR buffer.
+    `conditions` sets the reaction; the individual keywords override single
+    values within it. The default is a conventional primer Tm — pass
+    `conditions=ANNEALING` for the reaction the G-Synth protocol prescribes.
 
     Sequences shorter than 8 nt fall back to the Wallace rule, where the
     nearest-neighbour model is not parameterised — junction overhangs of
     4–8 nt land in that range deliberately.
     """
+    oligo_nM = conditions.oligo_nM if oligo_nM is None else oligo_nM
+    na_mM = conditions.na_mM if na_mM is None else na_mM
+    mg_mM = conditions.mg_mM if mg_mM is None else mg_mM
+    dntp_mM = conditions.dntp_mM if dntp_mM is None else dntp_mM
+
     seq = clean_dna(sequence)
     if not seq:
         return 0.0

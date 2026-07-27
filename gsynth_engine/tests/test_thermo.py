@@ -13,6 +13,9 @@ import pytest
 
 from gsynth_engine.sequence import melting_temperature as sequence_tm
 from gsynth_engine.thermo import (
+    ANNEALING,
+    PRIMER,
+    BufferConditions,
     duplex_thermodynamics,
     melting_temperature,
 )
@@ -179,6 +182,50 @@ def test_eight_nucleotides_is_the_first_nearest_neighbour_length():
 def test_empty_sequence_is_zero():
     assert melting_temperature("") == 0.0
     assert duplex_thermodynamics("") == (0.0, 0.0)
+
+
+# ------------------------------------------------------------------ conditions
+
+
+def test_annealing_conditions_match_the_protocol_reaction():
+    """protocol.py mixes 5 µL + 5 µL of 100 µM oligos into 20 µL.
+
+    That is 25 µM of each strand, so a total strand concentration of 50 µM
+    in 1× annealing buffer. If the protocol's volumes change, this constant
+    has to change with them or every reported Tm becomes fiction.
+    """
+    assert ANNEALING.oligo_nM == 50_000.0
+    assert ANNEALING.na_mM == 50.0
+    assert ANNEALING.mg_mM == 0.0
+
+
+def test_the_annealing_reaction_melts_higher_than_a_primer_dilution():
+    """A hundredfold concentration difference is worth several degrees."""
+    sequence = "GTAAAACGACGGCCAGT"
+    assert melting_temperature(sequence, conditions=ANNEALING) > melting_temperature(
+        sequence, conditions=PRIMER
+    ) + 5.0
+
+
+def test_keywords_override_individual_values_within_conditions():
+    sequence = "GTAAAACGACGGCCAGT"
+    assert melting_temperature(sequence, conditions=ANNEALING, mg_mM=1.5) > (
+        melting_temperature(sequence, conditions=ANNEALING)
+    )
+    assert melting_temperature(
+        sequence, conditions=ANNEALING, oligo_nM=PRIMER.oligo_nM
+    ) == pytest.approx(melting_temperature(sequence, conditions=PRIMER))
+
+
+def test_conditions_summarise_themselves_for_a_report():
+    plain = BufferConditions(name="test", oligo_nM=500.0, na_mM=50.0)
+    assert plain.summary == "0.5 µM total strand, 50 mM Na⁺"
+
+    with_salts = BufferConditions(
+        name="pcr", oligo_nM=500.0, na_mM=50.0, mg_mM=1.5, dntp_mM=0.8
+    )
+    assert "1.5 mM Mg²⁺" in with_salts.summary
+    assert "0.8 mM dNTP" in with_salts.summary
 
 
 # ------------------------------------------------------------------ integration

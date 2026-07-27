@@ -42,10 +42,10 @@ from gsynth_engine.constants import (
 from gsynth_engine.sequence import (
     SequenceError,
     gc_content,
-    melting_temperature,
     reverse_complement,
     validate_dna,
 )
+from gsynth_engine.thermo import ANNEALING, melting_temperature
 
 
 @dataclass(frozen=True)
@@ -87,11 +87,12 @@ class SSDResult:
 
     @property
     def forward_tm(self) -> float:
-        return round(melting_temperature(self.forward), 1)
+        """Tm under the annealing reaction, not a generic primer dilution."""
+        return round(melting_temperature(self.forward, conditions=ANNEALING), 1)
 
     @property
     def reverse_tm(self) -> float:
-        return round(melting_temperature(self.reverse), 1)
+        return round(melting_temperature(self.reverse, conditions=ANNEALING), 1)
 
     @property
     def left_overhang(self) -> str:

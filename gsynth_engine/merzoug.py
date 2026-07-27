@@ -40,9 +40,9 @@ from gsynth_engine.sequence import (
     gc_content,
     is_palindrome,
     longest_homopolymer,
-    melting_temperature,
     reverse_complement,
 )
+from gsynth_engine.thermo import ANNEALING, melting_temperature
 from gsynth_engine.ssd import SSDResult, design_small_sequence
 
 #: Overhang lengths the method allows. 4 nt is the practical minimum for a
@@ -77,11 +77,12 @@ class OligoPair:
 
     @property
     def forward_tm(self) -> float:
-        return round(melting_temperature(self.forward), 1)
+        """Tm under the annealing reaction, not a generic primer dilution."""
+        return round(melting_temperature(self.forward, conditions=ANNEALING), 1)
 
     @property
     def reverse_tm(self) -> float:
-        return round(melting_temperature(self.reverse), 1)
+        return round(melting_temperature(self.reverse, conditions=ANNEALING), 1)
 
     @property
     def duplex_gc(self) -> float:
