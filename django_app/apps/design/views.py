@@ -14,10 +14,12 @@ from gsynth_engine.constants import (
     RESTRICTION_ENZYMES,
     overhang,
 )
+from gsynth_engine.duplex import DuplexView, construct_duplex
 from gsynth_engine.merzoug import AssemblyPlan, design_merzoug_assembly
 from gsynth_engine.protocol import bench_protocol, order_sheet, order_sheet_csv
 from gsynth_engine.sequence import SequenceError, gc_content
 from gsynth_engine.ssd import SSDResult, design_small_sequence
+from gsynth_engine.thermo import ANNEALING
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -66,6 +68,36 @@ def _ssd_payload(result: SSDResult) -> dict:
     }
 
 
+def _duplex_payload(view: DuplexView) -> dict:
+    """The hybridisation view, as coordinates the client draws from.
+
+    Sent as two padded strings plus spans rather than as pre-wrapped lines,
+    so the browser can re-wrap to its own width without asking again.
+    """
+    return {
+        "top": view.top,
+        "bottom": view.bottom,
+        "pairs": view.paired(),
+        "width": view.width,
+        "left_overhang": view.left_overhang,
+        "right_overhang": view.right_overhang,
+        "junctions": view.junctions,
+        "mismatches": view.mismatches(),
+        "segments": [
+            {"name": span.name, "start": span.start, "end": span.end}
+            for span in view.segments
+        ],
+        "top_fragments": [
+            {"name": span.name, "start": span.start, "end": span.end}
+            for span in view.top_fragments
+        ],
+        "bottom_fragments": [
+            {"name": span.name, "start": span.start, "end": span.end}
+            for span in view.bottom_fragments
+        ],
+    }
+
+
 def _assembly_payload(plan: AssemblyPlan, construct_name: str) -> dict:
     return {
         "construct_forward": plan.construct_forward,
@@ -91,6 +123,9 @@ def _assembly_payload(plan: AssemblyPlan, construct_name: str) -> dict:
                 "top_end": fragment.top_end,
                 "left_overhang": fragment.left_overhang,
                 "right_overhang": fragment.right_overhang,
+                "left_overhang_strand": fragment.left_overhang_strand,
+                "right_overhang_strand": fragment.right_overhang_strand,
+                "bottom_offset": fragment.bottom_offset,
                 "is_first": fragment.is_first,
                 "is_last": fragment.is_last,
             }
@@ -98,6 +133,13 @@ def _assembly_payload(plan: AssemblyPlan, construct_name: str) -> dict:
         ],
         "oligos": [order.as_row for order in order_sheet(plan, construct_name=construct_name)],
         "ssd": _ssd_payload(plan.ssd),
+        "duplex": _duplex_payload(construct_duplex(plan)),
+        # Tm is meaningless without the reaction it refers to.
+        "tm_conditions": {
+            "name": ANNEALING.name,
+            "summary": ANNEALING.summary,
+            "model": "Nearest-neighbour (SantaLucia 1998)",
+        },
         "warnings": plan.warnings,
         # Empty means: re-ligating these oligos reproduces the design exactly.
         "verification": plan.verify(),

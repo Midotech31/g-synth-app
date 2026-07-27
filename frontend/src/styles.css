@@ -57,6 +57,13 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .mono { font-family: var(--mono); }
 .nums { font-variant-numeric: tabular-nums; }
 
+.note {
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.note b { font-family: var(--mono); font-weight: 600; color: var(--ink); }
+
 .label {
   font-family: var(--mono);
   font-size: 0.68rem;
@@ -186,8 +193,11 @@ textarea { resize: vertical; min-height: 72px; }
 .card > .card-head {
   padding: 0.85rem 1.1rem;
   border-bottom: 1px solid var(--line);
-  display: flex; align-items: center; gap: 0.75rem;
+  display: flex; align-items: center; gap: 0.6rem;
+  flex-wrap: wrap;
 }
+/* The heading keeps its line; the buttons wrap under it when space runs out. */
+.card > .card-head > h2 { white-space: nowrap; }
 .card > .card-body { padding: 1.1rem; }
 
 .notice {
@@ -364,3 +374,66 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .table-scroll { overflow-x: auto; }
 .seq-cell { max-width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.76rem; }
+
+/* ── Hybridisation view ───────────────────────────────────────────────── */
+/* Both strands in one monospace grid. A space is a column where that strand
+   is absent, which is what a single-stranded overhang looks like — so the
+   stagger at each end and at each junction is drawn, not described. */
+.duplex { display: flex; flex-direction: column; gap: 0.7rem; }
+
+.duplex-legend { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.duplex-legend .grow { flex: 1; }
+
+.seg-toggle { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; }
+.seg-toggle button {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.28rem 0.7rem;
+  border: 0;
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.seg-toggle button + button { border-left: 1px solid var(--line-strong); }
+.seg-toggle button.on { background: var(--accent); color: var(--accent-ink); }
+
+.duplex .keys { display: flex; flex-wrap: wrap; gap: 0.55rem; }
+.duplex .key { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.74rem; color: var(--ink-soft); }
+.duplex .key i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+.duplex-scroll {
+  overflow-x: auto;
+  padding: 0.7rem 0.8rem;
+  background: #fbfaf7;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.duplex-row {
+  display: grid;
+  grid-template-columns: max-content max-content max-content;
+  column-gap: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  white-space: pre;
+}
+.duplex-row + .duplex-row { margin-top: 0.9rem; }
+
+.dx-num { color: var(--muted); text-align: right; font-size: 0.7rem; }
+.dx-end { color: var(--muted); }
+.dx-seq { letter-spacing: 0.02em; }
+.dx-ticks { color: var(--line-strong); }
+
+.dx-base { font-weight: 500; }
+/* Unpaired: an overhang. Lighter, so the double-stranded core reads first. */
+.dx-single { opacity: 0.55; font-style: italic; }
+.dx-mismatch { background: var(--danger); color: #fff; }
+/* Where a strand is cut. Each strand is cut at a different column — the
+   distance between the two rules is the overhang, which is the whole
+   reason the fragments ligate in one defined order. */
+.dx-cut { box-shadow: inset 1.5px 0 0 0 var(--navy); }
+.dx-stagger { background: rgba(11, 31, 59, 0.09); }
+.dx-gap { color: transparent; }
+
+.duplex-foot { margin: 0; max-width: 78ch; }

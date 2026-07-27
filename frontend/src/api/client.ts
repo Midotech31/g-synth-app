@@ -81,11 +81,36 @@ export type Fragment = {
   top_end: number;
   left_overhang: string;
   right_overhang: string;
+  /** Which strand the overhang sits on: "top", "bottom" or "blunt". */
+  left_overhang_strand: string;
+  right_overhang_strand: string;
+  /** How far right the bottom strand's left end sits, in bases. */
+  bottom_offset: number;
   is_first: boolean;
   is_last: boolean;
 };
 
 export type Oligo = Record<string, string | number>;
+
+export type DuplexSpan = { name: string; start: number; end: number };
+
+/**
+ * Both strands in one coordinate frame. A space means that strand is absent
+ * from the column — which is what a single-stranded overhang looks like.
+ */
+export type Duplex = {
+  top: string;
+  bottom: string;
+  pairs: string;
+  width: number;
+  left_overhang: string;
+  right_overhang: string;
+  junctions: number[];
+  mismatches: number[];
+  segments: DuplexSpan[];
+  top_fragments: DuplexSpan[];
+  bottom_fragments: DuplexSpan[];
+};
 
 export type AssemblyResult = {
   construct_forward: string;
@@ -100,6 +125,8 @@ export type AssemblyResult = {
   fragments: Fragment[];
   oligos: Oligo[];
   ssd: SSDResult;
+  duplex: Duplex;
+  tm_conditions: { name: string; summary: string; model: string };
   warnings: string[];
   /** Empty means the oligos re-ligate to the design. Non-empty blocks ordering. */
   verification: string[];

@@ -159,6 +159,42 @@ class TestAssemblyEndpoint:
         assert fragments[0]["left_overhang"] == "TA"
         assert fragments[-1]["right_overhang"] == "TCGA"
 
+    def test_includes_the_hybridisation_view(self, auth_client):
+        """The client draws the duplex from coordinates, not from prose."""
+        response = auth_client.post(reverse(self.url_name), {"sequence": LONG_INSERT})
+        duplex = response.data["duplex"]
+
+        assert duplex["mismatches"] == []
+        assert len(duplex["top"]) == len(duplex["bottom"]) == duplex["width"]
+        assert len(duplex["pairs"]) == duplex["width"]
+        assert duplex["top"].strip() == response.data["construct_forward"]
+
+    def test_duplex_spans_cover_both_strands(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {"sequence": LONG_INSERT})
+        duplex = response.data["duplex"]
+
+        assert len(duplex["top_fragments"]) == response.data["fragment_count"]
+        assert len(duplex["bottom_fragments"]) == response.data["fragment_count"]
+        assert duplex["segments"], "the cassette should be labelled for colouring"
+
+        for span, fragment in zip(duplex["top_fragments"], response.data["fragments"]):
+            assert duplex["top"][span["start"]:span["end"]] == fragment["forward"]
+
+    def test_reports_which_strand_carries_each_overhang(self, auth_client):
+        """NdeI and XhoI both leave 5' overhangs, so both sit on the outer top/bottom."""
+        response = auth_client.post(reverse(self.url_name), {"sequence": LONG_INSERT})
+        fragments = response.data["fragments"]
+
+        assert fragments[0]["left_overhang_strand"] == "top"
+        assert fragments[-1]["right_overhang_strand"] == "bottom"
+
+    def test_states_the_conditions_every_tm_refers_to(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {"sequence": LONG_INSERT})
+        conditions = response.data["tm_conditions"]
+
+        assert "SantaLucia" in conditions["model"]
+        assert "µM" in conditions["summary"] and "Na" in conditions["summary"]
+
     def test_includes_the_order_sheet(self, auth_client):
         response = auth_client.post(reverse(self.url_name), {
             "sequence": LONG_INSERT, "name": "pGS-EntA",

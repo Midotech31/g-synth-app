@@ -7,6 +7,8 @@ import {
   type Catalogue,
   type DesignParams,
 } from "../api/client";
+import DuplexView from "../components/DuplexView";
+import { segmentColour } from "../components/segmentColour";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
 
@@ -23,21 +25,6 @@ const DEFAULTS: DesignParams = {
   target_oligo_length: 90,
   overhang_length: 4,
 };
-
-/** Colour each labelled part of the construct so the cassette reads at a glance. */
-const SEGMENT_COLOURS: Record<string, string> = {
-  overhang: "#c97634",
-  "start codon": "#9e3d3d",
-  linker: "#78889b",
-  "6×His tag": "#0e6e77",
-  site: "#6a4c93",
-  insert: "#3f7a52",
-};
-
-function segmentColour(name: string): string {
-  const key = Object.keys(SEGMENT_COLOURS).find((k) => name.toLowerCase().includes(k.toLowerCase()));
-  return key ? SEGMENT_COLOURS[key] : "#78889b";
-}
 
 export default function Design() {
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
@@ -338,6 +325,20 @@ export default function Design() {
 
                 <div className="card">
                   <div className="card-head">
+                    <h2 style={{ flex: 1 }}>Hybridisation</h2>
+                    <span className="label">
+                      {result.duplex.mismatches.length === 0
+                        ? "no mismatches"
+                        : `${result.duplex.mismatches.length} mismatches`}
+                    </span>
+                  </div>
+                  <div className="card-body">
+                    <DuplexView duplex={result.duplex} />
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-head">
                     <h2 style={{ flex: 1 }}>Oligos to order</h2>
                     <button className="btn btn-outline" onClick={() => download("order-sheet")}
                             disabled={!verified}>
@@ -356,7 +357,11 @@ export default function Design() {
                       <thead>
                         <tr>
                           <th>Name</th><th>Sequence (5'→3')</th>
-                          <th>Length</th><th>Tm</th><th>Scale</th><th>Purification</th>
+                          <th>Length</th>
+                          <th title={`${result.tm_conditions.model} · ${result.tm_conditions.summary}`}>
+                            Tm
+                          </th>
+                          <th>Scale</th><th>Purification</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -372,6 +377,12 @@ export default function Design() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="card-body" style={{ paddingTop: 0 }}>
+                    <p className="note" style={{ margin: 0 }}>
+                      Tm from the {result.tm_conditions.model} model, under the
+                      conditions of the annealing step — {result.tm_conditions.summary}.
+                    </p>
                   </div>
                 </div>
 
