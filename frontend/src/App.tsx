@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from "react-r
 
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Dashboard from "./pages/Dashboard";
+import Design from "./pages/Design";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Viewer from "./pages/Viewer";
@@ -21,6 +22,9 @@ function Rail() {
 
       <nav>
         <NavLink to="/" end className={({ isActive }) => (isActive ? "active" : "")}>
+          Design
+        </NavLink>
+        <NavLink to="/projects" className={({ isActive }) => (isActive ? "active" : "")}>
           Projects
         </NavLink>
       </nav>
@@ -94,7 +98,8 @@ export default function App() {
             }
           />
           <Route element={<Protected />}>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Design />} />
+            <Route path="/projects" element={<Dashboard />} />
             <Route path="/projects/:id" element={<Viewer />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

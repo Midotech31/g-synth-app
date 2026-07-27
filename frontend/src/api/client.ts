@@ -40,6 +40,101 @@ export type ParsedRecord = {
   annotations: Annotation[];
 };
 
+export type Segment = {
+  name: string;
+  start: number;
+  end: number;
+  sequence: string;
+};
+
+export type SSDResult = {
+  forward: string;
+  reverse: string;
+  forward_length: number;
+  reverse_length: number;
+  forward_gc: number;
+  reverse_gc: number;
+  forward_tm: number;
+  reverse_tm: number;
+  left_enzyme: string;
+  right_enzyme: string;
+  left_overhang: string;
+  right_overhang: string;
+  cleavage_site: string | null;
+  orf_start: number;
+  coding_region: string;
+  segments: Segment[];
+  warnings: string[];
+  project_id?: number;
+};
+
+export type Fragment = {
+  index: number;
+  name: string;
+  forward: string;
+  reverse: string;
+  forward_length: number;
+  reverse_length: number;
+  forward_tm: number;
+  reverse_tm: number;
+  top_start: number;
+  top_end: number;
+  left_overhang: string;
+  right_overhang: string;
+  is_first: boolean;
+  is_last: boolean;
+};
+
+export type Oligo = Record<string, string | number>;
+
+export type AssemblyResult = {
+  construct_forward: string;
+  construct_reverse: string;
+  construct_length: number;
+  construct_gc: number;
+  fragment_count: number;
+  oligo_count: number;
+  overhang_length: number;
+  longest_oligo: number;
+  junction_overhangs: string[];
+  fragments: Fragment[];
+  oligos: Oligo[];
+  ssd: SSDResult;
+  warnings: string[];
+  /** Empty means the oligos re-ligate to the design. Non-empty blocks ordering. */
+  verification: string[];
+  project_id?: number;
+};
+
+export type Enzyme = {
+  name: string;
+  recognition: string;
+  overhang: string;
+  overhang_type: string;
+  supplies_start_codon: boolean;
+};
+
+export type Catalogue = {
+  enzymes: Enzyme[];
+  common_pairs: string[];
+  cleavage_sites: { name: string; sequence: string }[];
+};
+
+export type DesignParams = {
+  sequence: string;
+  name?: string;
+  left_enzyme: string;
+  right_enzyme: string;
+  is_coding: boolean;
+  remove_stop: boolean;
+  cleavage_site: string | null;
+  include_his_tag: boolean;
+  include_linkers: boolean;
+  target_oligo_length?: number;
+  overhang_length?: number;
+  save_as_project?: boolean;
+};
+
 export type ProjectSummary = {
   id: number;
   name: string;
@@ -211,6 +306,34 @@ export const api = {
 
   deleteProject: (id: number) =>
     request<void>(`/api/projects/${id}/`, { method: "DELETE" }),
+
+  catalogue: () => request<Catalogue>("/api/design/enzymes/", { auth: false }),
+
+  designSSD: (params: DesignParams) =>
+    request<SSDResult>("/api/design/ssd/", { method: "POST", body: params }),
+
+  designAssembly: (params: DesignParams) =>
+    request<AssemblyResult>("/api/design/assembly/", { method: "POST", body: params }),
+
+  /** Downloads stream as files, so they bypass the JSON request helper. */
+  download: async (path: string, params: DesignParams, filename: string) => {
+    const response = await fetch(path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${tokenStore.access ?? ""}`,
+      },
+      body: JSON.stringify(params),
+    });
+    if (!response.ok) throw new ApiError(response.status, "Download failed.");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  },
 
   parseFile: (file: File) => {
     const formData = new FormData();

@@ -1,0 +1,397 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import {
+  ApiError,
+  api,
+  type AssemblyResult,
+  type Catalogue,
+  type DesignParams,
+} from "../api/client";
+
+const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
+
+const DEFAULTS: DesignParams = {
+  sequence: SAMPLE,
+  name: "construct",
+  left_enzyme: "NdeI",
+  right_enzyme: "XhoI",
+  is_coding: false,
+  remove_stop: false,
+  cleavage_site: "Thrombin",
+  include_his_tag: true,
+  include_linkers: true,
+  target_oligo_length: 90,
+  overhang_length: 4,
+};
+
+/** Colour each labelled part of the construct so the cassette reads at a glance. */
+const SEGMENT_COLOURS: Record<string, string> = {
+  overhang: "#c97634",
+  "start codon": "#9e3d3d",
+  linker: "#78889b",
+  "6×His tag": "#0e6e77",
+  site: "#6a4c93",
+  insert: "#3f7a52",
+};
+
+function segmentColour(name: string): string {
+  const key = Object.keys(SEGMENT_COLOURS).find((k) => name.toLowerCase().includes(k.toLowerCase()));
+  return key ? SEGMENT_COLOURS[key] : "#78889b";
+}
+
+export default function Design() {
+  const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
+  const [params, setParams] = useState<DesignParams>(DEFAULTS);
+  const [result, setResult] = useState<AssemblyResult | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState("");
+
+  useEffect(() => {
+    api.catalogue().then(setCatalogue).catch(() => {
+      setError("Could not load the enzyme catalogue.");
+    });
+  }, []);
+
+  const set = useCallback(
+    <K extends keyof DesignParams>(key: K, value: DesignParams[K]) => {
+      setParams((current) => ({ ...current, [key]: value }));
+      setResult(null);
+      setSaved("");
+    },
+    [],
+  );
+
+  const enzymeInfo = useMemo(() => {
+    const byName = new Map((catalogue?.enzymes ?? []).map((e) => [e.name, e]));
+    return {
+      left: byName.get(params.left_enzyme),
+      right: byName.get(params.right_enzyme),
+    };
+  }, [catalogue, params.left_enzyme, params.right_enzyme]);
+
+  async function design(saveAsProject = false) {
+    setBusy(true);
+    setError("");
+    setSaved("");
+    try {
+      const data = await api.designAssembly({ ...params, save_as_project: saveAsProject });
+      setResult(data);
+      if (data.project_id) setSaved(`Saved to your projects (#${data.project_id}).`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "The design failed.");
+      setResult(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function download(kind: "order-sheet" | "protocol") {
+    const suffix = kind === "order-sheet" ? "oligos.csv" : "protocol.txt";
+    try {
+      await api.download(
+        `/api/design/assembly/${kind}/`,
+        params,
+        `${(params.name || "construct").replace(/\s+/g, "_")}_${suffix}`,
+      );
+    } catch {
+      setError("The download failed. Try designing again first.");
+    }
+  }
+
+  const verified = result !== null && result.verification.length === 0;
+
+  return (
+    <>
+      <div className="topbar">
+        <div className="grow">
+          <h1>Design a construct</h1>
+          <p className="sub">
+            Insert → annealed oligo pairs with 4–8 nt junction overhangs, ligated
+            in order. No PCR.
+          </p>
+        </div>
+        <button className="btn btn-primary" onClick={() => design(false)} disabled={busy}>
+          {busy && <span className="spinner" />}
+          {busy ? "Designing…" : "Design"}
+        </button>
+      </div>
+
+      <div className="content" style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+        {error && <div className="notice notice-error">{error}</div>}
+        {saved && <div className="notice notice-info">{saved}</div>}
+
+        <div className="design-layout">
+          {/* ── Inputs ─────────────────────────────────────────────────── */}
+          <div className="card">
+            <div className="card-head"><h2>Insert</h2></div>
+            <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+              <div className="field">
+                <label htmlFor="name">Construct name</label>
+                <input
+                  id="name"
+                  type="text"
+                  value={params.name}
+                  onChange={(e) => set("name", e.target.value)}
+                  placeholder="pGS-EntA"
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="sequence">Sequence (A/C/G/T)</label>
+                <textarea
+                  id="sequence"
+                  value={params.sequence}
+                  onChange={(e) => set("sequence", e.target.value)}
+                  rows={6}
+                  className="mono"
+                  style={{ fontSize: "0.8rem" }}
+                />
+                <span className="label">
+                  {params.sequence.replace(/[^ACGTacgt]/g, "").length} nt entered
+                </span>
+              </div>
+
+              <div className="row-2">
+                <div className="field">
+                  <label htmlFor="left">5' enzyme</label>
+                  <select id="left" value={params.left_enzyme} onChange={(e) => set("left_enzyme", e.target.value)}>
+                    {catalogue?.enzymes.map((e) => (
+                      <option key={e.name} value={e.name}>{e.name} · {e.recognition}</option>
+                    ))}
+                  </select>
+                  {enzymeInfo.left && (
+                    <span className="label">
+                      {enzymeInfo.left.overhang
+                        ? `${enzymeInfo.left.overhang_type} ${enzymeInfo.left.overhang}`
+                        : "blunt"}
+                      {enzymeInfo.left.supplies_start_codon && " · supplies ATG"}
+                    </span>
+                  )}
+                </div>
+                <div className="field">
+                  <label htmlFor="right">3' enzyme</label>
+                  <select id="right" value={params.right_enzyme} onChange={(e) => set("right_enzyme", e.target.value)}>
+                    {catalogue?.enzymes.map((e) => (
+                      <option key={e.name} value={e.name}>{e.name} · {e.recognition}</option>
+                    ))}
+                  </select>
+                  {enzymeInfo.right && (
+                    <span className="label">
+                      {enzymeInfo.right.overhang
+                        ? `${enzymeInfo.right.overhang_type} ${enzymeInfo.right.overhang}`
+                        : "blunt"}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="cleavage">Protease site</label>
+                <select
+                  id="cleavage"
+                  value={params.cleavage_site ?? ""}
+                  onChange={(e) => set("cleavage_site", e.target.value || null)}
+                >
+                  <option value="">None</option>
+                  {catalogue?.cleavage_sites.map((c) => (
+                    <option key={c.name} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="checks">
+                <label>
+                  <input type="checkbox" checked={params.include_his_tag}
+                         onChange={(e) => set("include_his_tag", e.target.checked)} />
+                  6×His tag
+                </label>
+                <label>
+                  <input type="checkbox" checked={params.include_linkers}
+                         onChange={(e) => set("include_linkers", e.target.checked)} />
+                  Flexible linkers
+                </label>
+                <label>
+                  <input type="checkbox" checked={params.is_coding}
+                         onChange={(e) => set("is_coding", e.target.checked)} />
+                  Insert already has its own ATG
+                </label>
+                {params.is_coding && (
+                  <label>
+                    <input type="checkbox" checked={params.remove_stop}
+                           onChange={(e) => set("remove_stop", e.target.checked)} />
+                    Remove the stop codon
+                  </label>
+                )}
+              </div>
+
+              <div className="row-2">
+                <div className="field">
+                  <label htmlFor="oligo">Oligo length (nt)</label>
+                  <input id="oligo" type="number" min={20} max={300}
+                         value={params.target_oligo_length}
+                         onChange={(e) => set("target_oligo_length", Number(e.target.value))} />
+                </div>
+                <div className="field">
+                  <label htmlFor="overhang">Junction overhang (nt)</label>
+                  <input id="overhang" type="number" min={4} max={8}
+                         value={params.overhang_length}
+                         onChange={(e) => set("overhang_length", Number(e.target.value))} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Results ────────────────────────────────────────────────── */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+            {!result ? (
+              <div className="card">
+                <div className="empty">
+                  <div className="glyph">🧬</div>
+                  <strong>No design yet</strong>
+                  <span>Set the insert and its ends, then press Design.</span>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className={`notice ${verified ? "notice-ok" : "notice-error"}`}>
+                  {verified ? (
+                    <>
+                      <strong>Verified.</strong> Annealing these oligo pairs and
+                      ligating them in order reproduces the construct exactly, on
+                      both strands.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Do not order.</strong> {result.verification.join(" ")}
+                    </>
+                  )}
+                </div>
+
+                <div className="card">
+                  <div className="card-body stat-row">
+                    <div className="stat">
+                      <div className="k">Construct</div>
+                      <div className="v">{result.construct_length}<small>bp</small></div>
+                    </div>
+                    <div className="stat">
+                      <div className="k">GC</div>
+                      <div className="v">{result.construct_gc}<small>%</small></div>
+                    </div>
+                    <div className="stat">
+                      <div className="k">Fragments</div>
+                      <div className="v">{result.fragment_count}</div>
+                    </div>
+                    <div className="stat">
+                      <div className="k">Oligos</div>
+                      <div className="v">{result.oligo_count}</div>
+                    </div>
+                    <div className="stat">
+                      <div className="k">Longest oligo</div>
+                      <div className="v">{result.longest_oligo}<small>nt</small></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-head">
+                    <h2 style={{ flex: 1 }}>Construct map</h2>
+                    <span className="label">
+                      5'-{result.ssd.left_overhang} … {result.ssd.right_overhang}-3'
+                    </span>
+                  </div>
+                  <div className="card-body">
+                    <div className="track">
+                      {result.ssd.segments.map((segment, index) => (
+                        <div
+                          key={`${segment.name}-${index}`}
+                          className="track-part"
+                          style={{
+                            flexGrow: segment.sequence.length,
+                            background: segmentColour(segment.name),
+                          }}
+                          title={`${segment.name} · ${segment.start + 1}–${segment.end} (${segment.sequence.length} nt)`}
+                        >
+                          {segment.sequence.length > 12 ? segment.name : ""}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="track junctions" aria-label="fragment boundaries">
+                      {result.fragments.map((fragment) => (
+                        <div
+                          key={fragment.index}
+                          className="track-part frag"
+                          style={{ flexGrow: fragment.forward_length }}
+                          title={`${fragment.name}: ${fragment.top_start + 1}–${fragment.top_end}`}
+                        >
+                          {fragment.name}
+                        </div>
+                      ))}
+                    </div>
+                    {result.junction_overhangs.length > 0 && (
+                      <p className="label" style={{ marginTop: "0.6rem" }}>
+                        Junctions: {result.junction_overhangs.map((o) => `5'-${o}`).join(" · ")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-head">
+                    <h2 style={{ flex: 1 }}>Oligos to order</h2>
+                    <button className="btn btn-outline" onClick={() => download("order-sheet")}
+                            disabled={!verified}>
+                      Download CSV
+                    </button>
+                    <button className="btn btn-outline" onClick={() => download("protocol")}
+                            disabled={!verified}>
+                      Download protocol
+                    </button>
+                    <button className="btn btn-primary" onClick={() => design(true)} disabled={busy}>
+                      Save project
+                    </button>
+                  </div>
+                  <div className="table-scroll">
+                    <table className="data">
+                      <thead>
+                        <tr>
+                          <th>Name</th><th>Sequence (5'→3')</th>
+                          <th>Length</th><th>Tm</th><th>Scale</th><th>Purification</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.oligos.map((oligo) => (
+                          <tr key={String(oligo.Name)}>
+                            <td className="mono">{oligo.Name}</td>
+                            <td className="mono seq-cell">{oligo["Sequence (5'->3')"]}</td>
+                            <td className="num">{oligo["Length (nt)"]}</td>
+                            <td className="num">{oligo["Tm (°C)"]}</td>
+                            <td>{oligo.Scale}</td>
+                            <td>{oligo.Purification}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {(result.warnings.length > 0 || result.ssd.warnings.length > 0) && (
+                  <div className="card">
+                    <div className="card-head"><h2>Notes</h2></div>
+                    <div className="card-body">
+                      <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--ink-soft)" }}>
+                        {[...new Set([...result.ssd.warnings, ...result.warnings])].map((note) => (
+                          <li key={note} style={{ marginBottom: "0.3rem" }}>{note}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
