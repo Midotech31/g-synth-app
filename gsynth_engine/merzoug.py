@@ -66,6 +66,26 @@ class OligoPair:
     right_overhang: str        # 5' overhang on the right, top-strand sense
     is_first: bool
     is_last: bool
+    bottom_offset: int = 0     # how far right the bottom strand's left end sits
+
+    @property
+    def left_overhang_strand(self) -> str:
+        """Which strand carries the left overhang: 'top', 'bottom' or 'blunt'.
+
+        Internal junctions are always 5' overhangs on the top strand. The
+        outer end follows the enzyme — ApaI, KpnI, PstI and SacI leave a 3'
+        overhang, which sits on the bottom strand instead.
+        """
+        if self.bottom_offset > 0:
+            return "top"
+        return "bottom" if self.bottom_offset < 0 else "blunt"
+
+    @property
+    def right_overhang_strand(self) -> str:
+        end_offset = (self.bottom_offset + len(self.reverse)) - len(self.forward)
+        if end_offset > 0:
+            return "bottom"
+        return "top" if end_offset < 0 else "blunt"
 
     @property
     def forward_length(self) -> int:
@@ -402,6 +422,7 @@ def design_merzoug_assembly(
                 right_overhang=right_overhang,
                 is_first=is_first,
                 is_last=is_last,
+                bottom_offset=b0 - t0,
             )
         )
 
