@@ -68,23 +68,14 @@ def longest_homopolymer(sequence: str) -> int:
     return best
 
 
-def melting_temperature(sequence: str, *, na_mM: float = 50.0) -> float:
-    """Tm in °C.
+def melting_temperature(sequence: str, **kwargs) -> float:
+    """Tm in °C — delegates to the nearest-neighbour model.
 
-    Wallace rule below 14 nt, where nearest-neighbour models are unreliable;
-    the salt-adjusted GC formula above it. Good enough to compare oligos in
-    the same design — order-critical work should use a dedicated tool.
+    Kept here so existing callers keep working, but the calculation lives in
+    `gsynth_engine.thermo`: composition formulas cannot distinguish sequences
+    with the same GC content and different stacking, which is exactly what
+    oligo design needs to see. Imported lazily to avoid a circular import.
     """
-    seq = clean_dna(sequence)
-    if not seq:
-        return 0.0
-    a, t = seq.count("A"), seq.count("T")
-    g, c = seq.count("G"), seq.count("C")
-    if len(seq) < 14:
-        return 2.0 * (a + t) + 4.0 * (g + c)
-    return (
-        81.5
-        + 16.6 * math.log10(max(na_mM, 1e-6) / 1000.0)
-        + 0.41 * gc_content(seq)
-        - 675.0 / len(seq)
-    )
+    from gsynth_engine.thermo import melting_temperature as _nn
+
+    return _nn(sequence, **kwargs)

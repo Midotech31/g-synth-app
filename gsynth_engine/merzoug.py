@@ -171,6 +171,21 @@ class AssemblyPlan:
         return problems
 
 
+def _cross_ligates(overhang: str, other: str) -> bool:
+    """True when two overhangs are close enough for T4 ligase to confuse them.
+
+    NEB's ligase-fidelity work shows that overhangs differing at a single
+    position still join at a measurable rate. Either strand can present the
+    end, so both orientations are compared.
+    """
+    for candidate in (overhang, reverse_complement(overhang)):
+        if len(candidate) != len(other):
+            continue
+        if sum(1 for a, b in zip(candidate, other) if a != b) <= 1:
+            return True
+    return False
+
+
 def _overhang_problem(
     overhang: str, used: set[str], forbidden: set[str],
 ) -> str | None:
@@ -179,8 +194,14 @@ def _overhang_problem(
         return "palindromic — it would anneal to itself"
     if overhang in used or reverse_complement(overhang) in used:
         return "already used at another junction"
+    # A mispaired junction is a silent failure: the ligation works, the gel
+    # looks right, and the error only appears at sequencing.
+    if any(_cross_ligates(overhang, taken) for taken in used):
+        return "within one base of another junction — they could cross-ligate"
     if overhang in forbidden or reverse_complement(overhang) in forbidden:
         return "matches a terminal restriction overhang"
+    if any(_cross_ligates(overhang, end) for end in forbidden):
+        return "within one base of a terminal overhang — it could ligate into the vector"
     if longest_homopolymer(overhang) >= len(overhang):
         return "a homopolymer run"
     gc = sum(1 for base in overhang if base in "GC")
