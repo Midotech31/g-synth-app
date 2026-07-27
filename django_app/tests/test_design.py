@@ -256,3 +256,153 @@ class TestDownloads:
     def test_downloads_require_authentication(self, api_client):
         for name in ("design-order-sheet", "design-protocol"):
             assert api_client.post(reverse(name), {"sequence": LONG_INSERT}).status_code == 401
+
+
+# ── Cloning ─────────────────────────────────────────────────────────────────
+
+
+def build_vector(left: str = "NdeI", right: str = "XhoI") -> str:
+    """A circular vector with exactly one site for each enzyme.
+
+    Built from the enzyme table rather than hand-written, so a filler that
+    happens to carry a second site cannot turn a cloning test into a test of
+    luck.
+    """
+    from gsynth_engine.cloning import find_sites
+    from gsynth_engine.tests.test_cloning import build_vector as engine_build
+
+    vector = engine_build(left, right)
+    assert len(find_sites(vector, left)) == 1
+    return vector
+
+
+@pytest.mark.django_db
+class TestCloneEndpoint:
+    url_name = "design-clone"
+
+    def test_requires_authentication(self, api_client):
+        response = api_client.post(reverse(self.url_name), {
+            "sequence": GOLDEN_INSERT, "vector": build_vector(),
+        })
+        assert response.status_code == 401
+
+    def test_returns_the_recombinant_plasmid(self, auth_client):
+        vector = build_vector()
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector": vector, "name": "pGS-EntA",
+        })
+        assert response.status_code == 200, response.data
+        assert response.data["is_clonable"], response.data["problems"]
+
+        plasmid = response.data["plasmid"]
+        assert len(plasmid) == response.data["length"]
+        assert response.data["topology"] == "circular"
+        assert response.data["backbone_length"] < len(vector)
+
+    def test_the_insert_sits_where_the_response_says(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector": build_vector(),
+        })
+        data = response.data
+        placed = data["plasmid"][data["insert_start"]:data["insert_end"]]
+        assert placed == data["assembly"]["construct_forward"]
+
+    def test_reports_both_junctions_with_their_enzymes(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector": build_vector(),
+        })
+        junctions = response.data["junctions"]
+        assert [j["enzyme"] for j in junctions] == ["NdeI", "XhoI"]
+        assert all(j["site_regenerated"] for j in junctions)
+
+    def test_translates_the_protein_that_will_be_expressed(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector": build_vector(),
+        })
+        assert response.data["protein"].startswith("MGSSHHHHHHSSG")
+        assert response.data["protein_length"] == len(response.data["protein"])
+
+    def test_the_insert_comes_back_as_a_drawable_annotation(self, auth_client):
+        """So the client draws the whole map from one list."""
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector": build_vector(), "name": "EntA",
+        })
+        data = response.data
+        insert = [a for a in data["annotations"] if a["name"] == "EntA"]
+        assert len(insert) == 1
+        assert insert[0]["start"] == data["insert_start"]
+        assert insert[0]["end"] == data["insert_end"]
+
+    def test_vector_annotations_are_carried_over(self, auth_client):
+        vector = build_vector()
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT,
+            "vector": vector,
+            "vector_annotations": [
+                {"name": "ori", "type": "rep_origin", "start": 5, "end": 80,
+                 "direction": 1, "color": "#6A4C93"},
+            ],
+        }, format="json")
+        assert response.status_code == 200, response.data
+        names = [a["name"] for a in response.data["annotations"]]
+        assert "ori" in names
+
+    def test_a_vector_cut_twice_is_refused_with_a_reason(self, auth_client):
+        vector = build_vector()
+        doubled = vector[:100] + "CATATG" + vector[100:]
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector": doubled,
+        })
+        assert response.status_code == 400
+        assert "NdeI cuts it 2 times" in response.data["detail"]
+
+    def test_an_unclonable_design_returns_200_with_problems(self, auth_client):
+        """The user needs to see what does not fit, not an error page."""
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": "GGCTAAATCGTGGAACAGTGCTGCACCAGCTGCAGCCTGTACCAGCTGGAA",
+            "vector": build_vector(),
+        })
+        assert response.status_code == 200, response.data
+        assert not response.data["is_clonable"]
+        assert response.data["problems"]
+
+    def test_cloning_without_fragmenting_skips_the_assembly(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": GOLDEN_INSERT, "vector": build_vector(), "fragment": False,
+        })
+        assert response.status_code == 200, response.data
+        assert response.data["assembly"] is None
+        assert response.data["insert"]["forward"] == GOLDEN_FORWARD
+
+    def test_saves_as_a_project_when_asked(self, auth_client, user):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector": build_vector(),
+            "name": "pGS-EntA", "save_as_project": True,
+        })
+        assert response.data["project_id"]
+        project = Project.objects.get(pk=response.data["project_id"])
+        assert project.user == user
+        assert project.module == "cloning"
+        assert project.sequence == response.data["plasmid"]
+
+    def test_does_not_save_by_default(self, auth_client):
+        auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector": build_vector(),
+        })
+        assert not Project.objects.filter(module="cloning").exists()
+
+    def test_matches_the_engine_exactly(self, auth_client):
+        """The HTTP layer must not reinterpret the biology."""
+        from gsynth_engine.cloning import clone
+
+        vector = build_vector()
+        plan = design_merzoug_assembly(LONG_INSERT)
+        expected = clone(
+            vector, plan.construct_forward, insert_reverse=plan.construct_reverse,
+            left_enzyme="NdeI", right_enzyme="XhoI", orf_start=plan.ssd.orf_start,
+        )
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector": vector,
+        })
+        assert response.data["plasmid"] == expected.plasmid
+        assert response.data["protein"] == expected.protein

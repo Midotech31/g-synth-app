@@ -14,6 +14,7 @@ from gsynth_engine.constants import (
     RESTRICTION_ENZYMES,
     overhang,
 )
+from gsynth_engine.cloning import CloningResult, clone, open_reading_frames
 from gsynth_engine.duplex import DuplexView, construct_duplex
 from gsynth_engine.merzoug import AssemblyPlan, design_merzoug_assembly
 from gsynth_engine.protocol import bench_protocol, order_sheet, order_sheet_csv
@@ -27,6 +28,7 @@ from rest_framework.views import APIView
 
 from apps.design.serializers import (
     CLEAVAGE_NAMES,
+    CloneRequestSerializer,
     SaveableAssemblyRequestSerializer,
     SSDRequestSerializer,
 )
@@ -146,6 +148,60 @@ def _assembly_payload(plan: AssemblyPlan, construct_name: str) -> dict:
     }
 
 
+def _clone_payload(result: CloningResult, ssd: SSDResult, plan) -> dict:
+    """The recombinant plasmid, shaped for a map viewer.
+
+    The insert is sent as one more annotation so the client can draw the
+    whole plasmid from a single list, rather than special-casing it.
+    """
+    annotations = list(result.annotations)
+    annotations.append({
+        "name": result.name,
+        "type": "CDS" if result.protein else "misc_feature",
+        "start": result.insert_start,
+        "end": result.insert_end,
+        "direction": 1,
+        "color": "#0E6E77",
+    })
+
+    return {
+        "plasmid": result.plasmid,
+        "name": result.name,
+        "length": result.length,
+        "gc": result.gc,
+        "topology": "circular",
+        "insert_start": result.insert_start,
+        "insert_end": result.insert_end,
+        "insert_length": result.insert_length,
+        "backbone_length": result.backbone_length,
+        "removed_length": result.removed_length,
+        "left_enzyme": result.left_enzyme,
+        "right_enzyme": result.right_enzyme,
+        "protein": result.protein,
+        "protein_length": len(result.protein),
+        "annotations": annotations,
+        "junctions": [
+            {
+                "name": junction.name,
+                "enzyme": junction.enzyme,
+                "overhang": junction.overhang,
+                "kind": junction.kind,
+                "position": junction.position,
+                "context": junction.context,
+                "site_regenerated": junction.site_regenerated,
+            }
+            for junction in result.junctions
+        ],
+        "orfs": open_reading_frames(result.plasmid, minimum_codons=40)[:5],
+        "warnings": result.warnings,
+        # Empty means these two molecules really do join.
+        "problems": result.problems,
+        "is_clonable": result.is_clonable,
+        "insert": _ssd_payload(ssd),
+        "assembly": _assembly_payload(plan, result.name) if plan else None,
+    }
+
+
 class EnzymeCatalogueView(APIView):
     """GET /api/design/enzymes/ — what the UI needs to build its dropdowns.
 
@@ -231,6 +287,72 @@ class MerzougAssemblyView(APIView):
                 notes=f"{plan.fragment_count} fragments · "
                       f"{plan.oligo_count} oligos · "
                       f"{plan.overhang_length} nt overhangs",
+                data=payload,
+            )
+            payload["project_id"] = project.id
+        return Response(payload)
+
+
+class CloneView(APIView):
+    """POST /api/design/clone/ — design an insert and put it in a vector.
+
+    Returns the recombinant plasmid: sequence, junctions, the protein that
+    will be expressed, and the vector's annotations at their new coordinates.
+    A design that cannot be cloned comes back with `problems` filled in and
+    HTTP 200 — the user needs to see what does not fit, not an error page.
+    """
+
+    def post(self, request):
+        serializer = CloneRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        name = data["name"]
+
+        try:
+            if data["fragment"]:
+                plan = design_merzoug_assembly(
+                    data["sequence"], **serializer.engine_kwargs
+                )
+                ssd = plan.ssd
+                insert_forward = plan.construct_forward
+                insert_reverse = plan.construct_reverse
+            else:
+                plan = None
+                ssd = design_small_sequence(
+                    data["sequence"],
+                    **{k: v for k, v in serializer.engine_kwargs.items()
+                       if k not in ("target_oligo_length", "overhang_length")},
+                )
+                insert_forward = ssd.forward
+                insert_reverse = ssd.reverse
+
+            result = clone(
+                data["vector"],
+                insert_forward,
+                insert_reverse=insert_reverse,
+                left_enzyme=data["left_enzyme"],
+                right_enzyme=data["right_enzyme"],
+                circular=data["vector_is_circular"],
+                name=name,
+                vector_annotations=[
+                    dict(feature) for feature in data.get("vector_annotations") or []
+                ],
+                orf_start=ssd.orf_start,
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        payload = _clone_payload(result, ssd, plan)
+        payload["vector_name"] = data["vector_name"]
+
+        if data["save_as_project"] and result.is_clonable:
+            project = Project.objects.create(
+                user=request.user,
+                name=name,
+                module="cloning",
+                sequence=result.plasmid,
+                notes=f"{result.length} bp in {data['vector_name']} · "
+                      f"{result.left_enzyme}/{result.right_enzyme}",
                 data=payload,
             )
             payload["project_id"] = project.id

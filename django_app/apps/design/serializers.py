@@ -100,3 +100,51 @@ class SSDRequestSerializer(DesignRequestSerializer, SaveMixin):
 
 class SaveableAssemblyRequestSerializer(AssemblyRequestSerializer, SaveMixin):
     pass
+
+
+class VectorAnnotationSerializer(serializers.Serializer):
+    """A feature carried over from a parsed vector file.
+
+    Deliberately permissive about extra keys: the client sends back whatever
+    the parser gave it, and dropping fields here would quietly lose colours
+    and types on the way to the recombinant map.
+    """
+
+    name = serializers.CharField(max_length=200, required=False, default="")
+    type = serializers.CharField(max_length=60, required=False, default="misc_feature")
+    start = serializers.IntegerField(min_value=0)
+    end = serializers.IntegerField(min_value=0)
+    direction = serializers.IntegerField(required=False, default=0)
+    color = serializers.CharField(max_length=32, required=False, default="")
+
+    def validate(self, attrs):
+        if attrs["end"] < attrs["start"]:
+            raise serializers.ValidationError(
+                {"end": "A feature cannot end before it starts."}
+            )
+        return attrs
+
+
+class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
+    """Design an insert and clone it into a vector, in one call.
+
+    The insert is designed from the same inputs as /assembly/, so the two
+    endpoints cannot disagree about what is being cloned.
+    """
+
+    vector = serializers.CharField(
+        max_length=2_000_000,
+        help_text="The vector's full sequence. Circular; the origin can be anywhere.",
+    )
+    vector_name = serializers.CharField(max_length=200, required=False, default="vector")
+    vector_annotations = VectorAnnotationSerializer(many=True, required=False)
+    vector_is_circular = serializers.BooleanField(
+        default=True,
+        help_text="Only circular vectors can be cloned into — a linear one "
+                  "cut twice leaves the backbone in two pieces.",
+    )
+    #: Design the full Merzoug assembly, or just the SSD duplex.
+    fragment = serializers.BooleanField(
+        default=True,
+        help_text="False clones the SSD duplex directly, without fragmenting it.",
+    )
