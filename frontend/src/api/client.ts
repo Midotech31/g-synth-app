@@ -133,6 +133,62 @@ export type AssemblyResult = {
   project_id?: number;
 };
 
+export type Junction = {
+  name: string;
+  enzyme: string;
+  overhang: string;
+  kind: string;
+  position: number;
+  context: string;
+  site_regenerated: boolean;
+};
+
+export type Orf = {
+  start: number;
+  end: number;
+  frame: number;
+  codons: number;
+  wraps: boolean;
+  protein: string;
+};
+
+/** The recombinant plasmid: what you actually end up with. */
+export type CloneResult = {
+  plasmid: string;
+  name: string;
+  vector_name: string;
+  length: number;
+  gc: number;
+  topology: string;
+  insert_start: number;
+  insert_end: number;
+  insert_length: number;
+  backbone_length: number;
+  removed_length: number;
+  left_enzyme: string;
+  right_enzyme: string;
+  protein: string;
+  protein_length: number;
+  annotations: Annotation[];
+  junctions: Junction[];
+  orfs: Orf[];
+  warnings: string[];
+  /** Empty means these two molecules really do join. */
+  problems: string[];
+  is_clonable: boolean;
+  insert: SSDResult;
+  assembly: AssemblyResult | null;
+  project_id?: number;
+};
+
+export type CloneParams = DesignParams & {
+  vector: string;
+  vector_name?: string;
+  vector_annotations?: Annotation[];
+  vector_is_circular?: boolean;
+  fragment?: boolean;
+};
+
 export type Enzyme = {
   name: string;
   recognition: string;
@@ -341,6 +397,9 @@ export const api = {
 
   designAssembly: (params: DesignParams) =>
     request<AssemblyResult>("/api/design/assembly/", { method: "POST", body: params }),
+
+  clone: (params: CloneParams) =>
+    request<CloneResult>("/api/design/clone/", { method: "POST", body: params }),
 
   /** Downloads stream as files, so they bypass the JSON request helper. */
   download: async (path: string, params: DesignParams, filename: string) => {

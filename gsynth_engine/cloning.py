@@ -82,13 +82,26 @@ class End:
 
     sequence: str
     strand: str        #: "top", "bottom" or "blunt"
+    side: str = "left"  #: which end of the fragment this is
 
     @property
     def kind(self) -> str:
-        """The polarity a catalogue would quote: 5', 3' or blunt."""
+        """The polarity a catalogue would quote: 5', 3' or blunt.
+
+        Which strand carries the overhang does not settle this on its own,
+        because the two strands run in opposite directions. A protruding top
+        strand is a 5' overhang at the fragment's left end and a 3' overhang
+        at its right end; for the bottom strand it is the other way round.
+        Deriving polarity from the strand alone reports NdeI — a textbook 5'
+        cutter — as leaving a 3' overhang on the vector side of the junction.
+        """
         if self.strand == "blunt":
             return "blunt"
-        return "5'" if self.strand == "top" else "3'"
+        protrudes_at_its_own_five_prime = (
+            (self.side == "left" and self.strand == "top")
+            or (self.side == "right" and self.strand == "bottom")
+        )
+        return "5'" if protrudes_at_its_own_five_prime else "3'"
 
     def anneals_to(self, other: "End") -> bool:
         """True when these two ends can be ligated together.
@@ -172,8 +185,12 @@ def _end_at(sequence: str, top_cut: int, bottom_cut: int, *, side: str) -> End:
     `side` is "downstream" for the fragment that begins at the cut and
     "upstream" for the one that ends there.
     """
+    # The downstream fragment begins at the cut, so this is its left end;
+    # the upstream one ends there, so it is its right end.
+    fragment_side = "left" if side == "downstream" else "right"
+
     if top_cut == bottom_cut:
-        return End("", "blunt")
+        return End("", "blunt", fragment_side)
 
     lo, hi = min(top_cut, bottom_cut), max(top_cut, bottom_cut)
     # Read base by base: on a circular vector the overhang can straddle
@@ -183,8 +200,8 @@ def _end_at(sequence: str, top_cut: int, bottom_cut: int, *, side: str) -> End:
     # A 5' overhang (top cut before bottom cut) sits on the top strand of the
     # downstream fragment and on the bottom strand of the upstream one.
     if top_cut < bottom_cut:
-        return End(overhang, "top" if side == "downstream" else "bottom")
-    return End(overhang, "bottom" if side == "downstream" else "top")
+        return End(overhang, "top" if side == "downstream" else "bottom", fragment_side)
+    return End(overhang, "bottom" if side == "downstream" else "top", fragment_side)
 
 
 def linearise(
@@ -565,13 +582,13 @@ def _expected_insert_end(enzyme: str, *, side: str) -> End:
     """
     sequence, kind = enzyme_overhang(enzyme)
     if kind == "blunt":
-        return End("", "blunt")
+        return End("", "blunt", side)
 
     # The insert is the downstream piece of the left-hand cut and the
     # upstream piece of the right-hand one.
     if side == "left":
-        return End(sequence, "top" if kind == "5'" else "bottom")
-    return End(sequence, "bottom" if kind == "5'" else "top")
+        return End(sequence, "top" if kind == "5'" else "bottom", "left")
+    return End(sequence, "bottom" if kind == "5'" else "top", "right")
 
 
 def _observed_insert_ends(
@@ -592,19 +609,19 @@ def _observed_insert_ends(
     bottom = reverse_complement(clean_dna(reverse))
 
     if offset > 0:
-        left = End(top[:offset], "top")
+        left = End(top[:offset], "top", "left")
     elif offset < 0:
-        left = End(bottom[:-offset], "bottom")
+        left = End(bottom[:-offset], "bottom", "left")
     else:
-        left = End("", "blunt")
+        left = End("", "blunt", "left")
 
     tail = (offset + len(bottom)) - len(top)
     if tail > 0:
-        right = End(bottom[-tail:], "bottom")
+        right = End(bottom[-tail:], "bottom", "right")
     elif tail < 0:
-        right = End(top[tail:], "top")
+        right = End(top[tail:], "top", "right")
     else:
-        right = End("", "blunt")
+        right = End("", "blunt", "right")
 
     return left, right
 

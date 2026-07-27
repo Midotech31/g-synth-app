@@ -437,3 +437,28 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .dx-gap { color: transparent; }
 
 .duplex-foot { margin: 0; max-width: 78ch; }
+
+/* ── Cloning ──────────────────────────────────────────────────────────── */
+.junction { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.7rem 0.8rem; }
+.junction-head { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.junction-head .grow { flex: 1; }
+
+/* The seam is drawn, not described: the two halves of the context sit either
+   side of a rule at the exact base where vector becomes insert. */
+.junction-seq {
+  display: flex; align-items: center;
+  font-family: var(--mono); font-size: 0.8rem;
+  background: #fbfaf7; border-radius: 3px; padding: 0.4rem 0.5rem;
+  overflow-x: auto; white-space: pre;
+}
+.junction-seq .seam {
+  display: inline-block; width: 2px; align-self: stretch;
+  background: var(--navy); margin: -0.2rem 0.25rem;
+}
+
+.pill {
+  font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 0.15rem 0.45rem; border-radius: 999px;
+  border: 1px solid var(--line-strong); color: var(--muted);
+}
+.pill-ok { border-color: #b9d3c1; background: #eef5f0; color: #2c5c3d; }

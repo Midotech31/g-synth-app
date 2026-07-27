@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   ApiError,
@@ -8,6 +8,7 @@ import {
   type DesignParams,
 } from "../api/client";
 import DuplexView from "../components/DuplexView";
+import InsertForm from "../components/InsertForm";
 import { segmentColour } from "../components/segmentColour";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
@@ -48,14 +49,6 @@ export default function Design() {
     },
     [],
   );
-
-  const enzymeInfo = useMemo(() => {
-    const byName = new Map((catalogue?.enzymes ?? []).map((e) => [e.name, e]));
-    return {
-      left: byName.get(params.left_enzyme),
-      right: byName.get(params.right_enzyme),
-    };
-  }, [catalogue, params.left_enzyme, params.right_enzyme]);
 
   async function design(saveAsProject = false) {
     setBusy(true);
@@ -112,120 +105,8 @@ export default function Design() {
           {/* ── Inputs ─────────────────────────────────────────────────── */}
           <div className="card">
             <div className="card-head"><h2>Insert</h2></div>
-            <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-              <div className="field">
-                <label htmlFor="name">Construct name</label>
-                <input
-                  id="name"
-                  type="text"
-                  value={params.name}
-                  onChange={(e) => set("name", e.target.value)}
-                  placeholder="pGS-EntA"
-                />
-              </div>
-
-              <div className="field">
-                <label htmlFor="sequence">Sequence (A/C/G/T)</label>
-                <textarea
-                  id="sequence"
-                  value={params.sequence}
-                  onChange={(e) => set("sequence", e.target.value)}
-                  rows={6}
-                  className="mono"
-                  style={{ fontSize: "0.8rem" }}
-                />
-                <span className="label">
-                  {params.sequence.replace(/[^ACGTacgt]/g, "").length} nt entered
-                </span>
-              </div>
-
-              <div className="row-2">
-                <div className="field">
-                  <label htmlFor="left">5' enzyme</label>
-                  <select id="left" value={params.left_enzyme} onChange={(e) => set("left_enzyme", e.target.value)}>
-                    {catalogue?.enzymes.map((e) => (
-                      <option key={e.name} value={e.name}>{e.name} · {e.recognition}</option>
-                    ))}
-                  </select>
-                  {enzymeInfo.left && (
-                    <span className="label">
-                      {enzymeInfo.left.overhang
-                        ? `${enzymeInfo.left.overhang_type} ${enzymeInfo.left.overhang}`
-                        : "blunt"}
-                      {enzymeInfo.left.supplies_start_codon && " · supplies ATG"}
-                    </span>
-                  )}
-                </div>
-                <div className="field">
-                  <label htmlFor="right">3' enzyme</label>
-                  <select id="right" value={params.right_enzyme} onChange={(e) => set("right_enzyme", e.target.value)}>
-                    {catalogue?.enzymes.map((e) => (
-                      <option key={e.name} value={e.name}>{e.name} · {e.recognition}</option>
-                    ))}
-                  </select>
-                  {enzymeInfo.right && (
-                    <span className="label">
-                      {enzymeInfo.right.overhang
-                        ? `${enzymeInfo.right.overhang_type} ${enzymeInfo.right.overhang}`
-                        : "blunt"}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="field">
-                <label htmlFor="cleavage">Protease site</label>
-                <select
-                  id="cleavage"
-                  value={params.cleavage_site ?? ""}
-                  onChange={(e) => set("cleavage_site", e.target.value || null)}
-                >
-                  <option value="">None</option>
-                  {catalogue?.cleavage_sites.map((c) => (
-                    <option key={c.name} value={c.name}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="checks">
-                <label>
-                  <input type="checkbox" checked={params.include_his_tag}
-                         onChange={(e) => set("include_his_tag", e.target.checked)} />
-                  6×His tag
-                </label>
-                <label>
-                  <input type="checkbox" checked={params.include_linkers}
-                         onChange={(e) => set("include_linkers", e.target.checked)} />
-                  Flexible linkers
-                </label>
-                <label>
-                  <input type="checkbox" checked={params.is_coding}
-                         onChange={(e) => set("is_coding", e.target.checked)} />
-                  Insert already has its own ATG
-                </label>
-                {params.is_coding && (
-                  <label>
-                    <input type="checkbox" checked={params.remove_stop}
-                           onChange={(e) => set("remove_stop", e.target.checked)} />
-                    Remove the stop codon
-                  </label>
-                )}
-              </div>
-
-              <div className="row-2">
-                <div className="field">
-                  <label htmlFor="oligo">Oligo length (nt)</label>
-                  <input id="oligo" type="number" min={20} max={300}
-                         value={params.target_oligo_length}
-                         onChange={(e) => set("target_oligo_length", Number(e.target.value))} />
-                </div>
-                <div className="field">
-                  <label htmlFor="overhang">Junction overhang (nt)</label>
-                  <input id="overhang" type="number" min={4} max={8}
-                         value={params.overhang_length}
-                         onChange={(e) => set("overhang_length", Number(e.target.value))} />
-                </div>
-              </div>
+            <div className="card-body">
+              <InsertForm params={params} catalogue={catalogue} onChange={set} />
             </div>
           </div>
 

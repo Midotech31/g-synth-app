@@ -118,9 +118,17 @@ class TestEnds:
         assert End("", "blunt").anneals_to(End("", "blunt"))
         assert not End("", "blunt").anneals_to(End("TCGA", "top"))
 
-    def test_polarity_is_named_the_way_a_catalogue_names_it(self):
-        assert End("TCGA", "top").kind == "5'"
-        assert End("GTAC", "bottom").kind == "3'"
+    def test_polarity_depends_on_the_end_as_well_as_the_strand(self):
+        """The two strands run in opposite directions, so the side matters.
+
+        A protruding top strand is a 5' overhang at a fragment's left end and
+        a 3' overhang at its right end. Reading polarity off the strand alone
+        reports NdeI — a textbook 5' cutter — as leaving a 3' overhang.
+        """
+        assert End("TCGA", "top", "left").kind == "5'"
+        assert End("TCGA", "top", "right").kind == "3'"
+        assert End("GTAC", "bottom", "left").kind == "3'"
+        assert End("GTAC", "bottom", "right").kind == "5'"
         assert End("", "blunt").kind == "blunt"
 
 
@@ -244,6 +252,31 @@ class TestClone:
 
         assert end.name == "insert → vector"
         assert end.enzyme == "XhoI"
+
+    def test_junction_polarity_matches_the_enzyme_catalogue(self):
+        """What the junction reports must be what the supplier's table says.
+
+        Telling someone NdeI leaves a 3' overhang is wrong in a way that
+        looks authoritative on a printed protocol.
+        """
+        for left, right in [
+            ("NdeI", "XhoI"),      # both 5'
+            ("KpnI", "SacI"),      # both 3'
+            ("NdeI", "KpnI"),      # one of each
+            ("EcoRV", "SmaI"),     # both blunt
+        ]:
+            design = design_small_sequence(
+                clean_filler(60, seed=11), enzyme_pair=f"{left} / {right}"
+            )
+            result = clone(
+                build_vector(left, right), design.forward,
+                insert_reverse=design.reverse,
+                left_enzyme=left, right_enzyme=right,
+            )
+            reported = {j.enzyme: (j.kind, j.overhang) for j in result.junctions}
+            for enzyme in (left, right):
+                expected_sequence, expected_kind = enzyme_overhang(enzyme)
+                assert reported[enzyme] == (expected_kind, expected_sequence), enzyme
 
     def test_both_sites_are_regenerated(self, vector, ssd):
         """How the clone gets verified: cut it back out and run a gel."""
