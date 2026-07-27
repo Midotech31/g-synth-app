@@ -15,6 +15,7 @@ import csv
 import io
 from dataclasses import dataclass
 
+from gsynth_engine.duplex import construct_duplex
 from gsynth_engine.merzoug import AssemblyPlan
 from gsynth_engine.sequence import gc_content
 from gsynth_engine.thermo import ANNEALING, melting_temperature
@@ -173,6 +174,22 @@ def bench_protocol(
                 f"{' (vector)' if fragment.is_last else ''}")
         add(f"       {fragment.name}: {len(fragment.forward)} + "
             f"{len(fragment.reverse)} nt — {ends}")
+    add("")
+
+    # The molecule itself, not a summary of it. Check this before ordering:
+    # it is the only place a wrong overhang shows as a wrong overhang.
+    add("   HYBRIDISATION — check this before the oligos are ordered")
+    add("   " + "-" * 68)
+    view = construct_duplex(plan)
+    if view.mismatches():
+        add(f"   !! {len(view.mismatches())} positions do not pair. Do not order.")
+        add("")
+    for line in view.to_text(60).rstrip().splitlines():
+        add(f"   {line}" if line else "")
+    add("")
+    add("   Unpaired bases are single-stranded: the sticky ends at the two")
+    add("   outer ends, and the junction overhangs where each strand is cut")
+    add(f"   at a different position ({plan.overhang_length} nt apart).")
     add("")
 
     add("4. PHOSPHORYLATION")

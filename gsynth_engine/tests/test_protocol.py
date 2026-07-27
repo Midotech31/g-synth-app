@@ -89,6 +89,32 @@ class TestBenchProtocol:
         )
         assert plan.construct_forward[:40] in stripped
 
+    def test_shows_the_duplex_before_the_ordering_step(self, plan):
+        """The protocol is what reaches the bench, so the check goes in it."""
+        text = bench_protocol(plan)
+        assert "HYBRIDISATION" in text
+
+        lines = text.splitlines()
+        strands = [ln for ln in lines if "5'" in ln and "3'" not in ln]
+        assert any("|" in ln for ln in lines), "the pairing rungs should be drawn"
+        assert strands, "both strands should be labelled"
+
+    def test_duplex_in_the_protocol_matches_the_design(self, plan):
+        text = bench_protocol(plan)
+        start = text.index("HYBRIDISATION")
+        stop = text.index("PHOSPHORYLATION")
+        drawn = "".join(
+            ch for ch in text[start:stop] if ch in "ACGT"
+        )
+        # The top strand, read straight out of the drawing.
+        assert plan.construct_forward[:40] in drawn
+
+    def test_states_the_tm_model_and_its_conditions(self, plan):
+        """A Tm on an order sheet with no conditions is not actionable."""
+        text = bench_protocol(plan)
+        assert "SantaLucia" in text
+        assert "Na" in text
+
     def test_single_fragment_skips_the_ligation_chain(self):
         plan = design_merzoug_assembly("GGCATCGTGGAACAGTGCTGCACCAGCTAA")
         text = bench_protocol(plan)
