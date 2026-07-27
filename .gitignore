@@ -26,3 +26,7 @@ gsynth.db
 
 # Streamlit secrets — never commit DATABASE_URL or credentials
 .streamlit/secrets.toml
+
+# Frontend
+node_modules/
+frontend/dist/
