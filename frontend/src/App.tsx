@@ -5,6 +5,7 @@ import Clone from "./pages/Clone";
 import Dashboard from "./pages/Dashboard";
 import Design from "./pages/Design";
 import Optimise from "./pages/Optimise";
+import Verify from "./pages/Verify";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Viewer from "./pages/Viewer";
@@ -31,6 +32,9 @@ function Rail() {
         </NavLink>
         <NavLink to="/clone" className={({ isActive }) => (isActive ? "active" : "")}>
           Clone
+        </NavLink>
+        <NavLink to="/verify" className={({ isActive }) => (isActive ? "active" : "")}>
+          Check
         </NavLink>
         <NavLink to="/projects" className={({ isActive }) => (isActive ? "active" : "")}>
           Projects
@@ -109,6 +113,7 @@ export default function App() {
             <Route path="/" element={<Design />} />
             <Route path="/optimise" element={<Optimise />} />
             <Route path="/clone" element={<Clone />} />
+            <Route path="/verify" element={<Verify />} />
             <Route path="/projects" element={<Dashboard />} />
             <Route path="/projects/:id" element={<Viewer />} />
           </Route>

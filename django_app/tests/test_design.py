@@ -737,3 +737,230 @@ class TestExport:
         })
         assert response.status_code == 400
         assert "not A, C, G or T" in response.data["detail"]
+
+
+@pytest.mark.django_db
+class TestLigationEndpoint:
+    url_name = "design-ligation"
+
+    def test_requires_authentication(self, api_client):
+        assert api_client.post(reverse(self.url_name), {
+            "vector_length": 5443, "insert_length": 150,
+        }).status_code == 401
+
+    def test_equal_mass_is_nowhere_near_equal_moles(self, auth_client):
+        """The mistake the module exists to prevent, over HTTP."""
+        response = auth_client.post(reverse(self.url_name), {
+            "vector_length": 5443, "insert_length": 150, "vector_ng": 50, "ratio": 3,
+        })
+        assert response.status_code == 200, response.data
+        reaction = response.data["reactions"][0]
+        assert reaction["insert_ng"] < 5      # not 50
+        assert reaction["insert_fmol"] == pytest.approx(
+            reaction["vector_fmol"] * 3, rel=1e-2
+        )
+
+    def test_a_series_comes_back_when_ratios_are_given(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "vector_length": 5443, "insert_length": 150, "ratios": [1, 3, 5],
+        }, format="json")
+        assert [r["ratio"] for r in response.data["reactions"]] == [1.0, 3.0, 5.0]
+
+    def test_blunt_ends_carry_their_advice(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "vector_length": 5000, "insert_length": 500, "ends": "blunt",
+        })
+        notes = " ".join(response.data["reactions"][0]["warnings"])
+        assert "dephosphorylate" in notes
+
+    def test_a_zero_length_is_refused(self, auth_client):
+        assert auth_client.post(reverse(self.url_name), {
+            "vector_length": 0, "insert_length": 150,
+        }).status_code == 400
+
+
+@pytest.mark.django_db
+class TestPrimerEndpoint:
+    url_name = "design-primers"
+
+    def clone_something(self, auth_client, insert=None):
+        return auth_client.post(reverse("design-clone"), {
+            "sequence": insert or LONG_INSERT, "vector_key": "pET-21a", "name": "EntA",
+        }).data
+
+    def test_requires_authentication(self, api_client):
+        assert api_client.post(reverse(self.url_name), {
+            "template": "ACGT" * 100, "target_start": 10, "target_end": 50,
+        }).status_code == 401
+
+    def test_it_designs_primers_that_read_the_insert(self, auth_client):
+        cloned = self.clone_something(auth_client)
+        response = auth_client.post(reverse(self.url_name), {
+            "template": cloned["plasmid"],
+            "target_start": cloned["insert_start"],
+            "target_end": cloned["insert_end"],
+            "name": "EntA",
+        })
+        assert response.status_code == 200, response.data
+        assert response.data["covers_target"], response.data["gaps"]
+        assert {p["direction"] for p in response.data["primers"]} == {1, -1}
+
+    def test_every_primer_is_unique_in_the_plasmid(self, auth_client):
+        """One that binds twice gives a superimposed trace and no data."""
+        from gsynth_engine.sequence import reverse_complement
+
+        cloned = self.clone_something(auth_client)
+        response = auth_client.post(reverse(self.url_name), {
+            "template": cloned["plasmid"],
+            "target_start": cloned["insert_start"],
+            "target_end": cloned["insert_end"],
+        })
+        plasmid = cloned["plasmid"]
+        for primer in response.data["primers"]:
+            hits = plasmid.count(primer["sequence"]) + plasmid.count(
+                reverse_complement(primer["sequence"])
+            )
+            assert hits == 1, primer["name"]
+
+    def test_the_rows_carry_what_a_supplier_needs(self, auth_client):
+        cloned = self.clone_something(auth_client)
+        response = auth_client.post(reverse(self.url_name), {
+            "template": cloned["plasmid"],
+            "target_start": cloned["insert_start"],
+            "target_end": cloned["insert_end"],
+        })
+        row = response.data["rows"][0]
+        assert set(row) >= {"Name", "Sequence (5'->3')", "Tm (°C)"}
+
+    def test_a_margin_inside_the_dead_zone_is_refused(self, auth_client):
+        cloned = self.clone_something(auth_client)
+        response = auth_client.post(reverse(self.url_name), {
+            "template": cloned["plasmid"],
+            "target_start": cloned["insert_start"],
+            "target_end": cloned["insert_end"],
+            "margin": 50,
+        })
+        # 50 is the floor the serializer allows and the engine's dead zone,
+        # so this is the boundary rather than an error.
+        assert response.status_code == 200
+
+    def test_an_inverted_region_is_refused(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "template": "ACGT" * 100, "target_start": 90, "target_end": 20,
+        })
+        assert response.status_code == 400
+        assert "end after it starts" in str(response.data)
+
+
+@pytest.mark.django_db
+class TestVerifyEndpoint:
+    url_name = "design-verify"
+
+    def build(self, auth_client):
+        return auth_client.post(reverse("design-clone"), {
+            "sequence": LONG_INSERT, "vector_key": "pET-21a", "name": "EntA",
+        }).data
+
+    def read_of(self, plasmid, start, end, noise=30):
+        length = len(plasmid)
+        body = "".join(plasmid[i % length] for i in range(start, end))
+        return "A" * noise + body + "T" * noise
+
+    def test_requires_authentication(self, api_client):
+        assert api_client.post(reverse(self.url_name), {
+            "design": "ACGT" * 100, "reads": {"a": "ACGT" * 20},
+        }, format="json").status_code == 401
+
+    def test_a_matching_read_verifies_the_construct(self, auth_client):
+        cloned = self.build(auth_client)
+        response = auth_client.post(reverse(self.url_name), {
+            "design": cloned["plasmid"],
+            "reads": {
+                "T7-F": self.read_of(
+                    cloned["plasmid"],
+                    cloned["insert_start"] - 200, cloned["insert_end"] + 200,
+                ),
+            },
+            "region_start": cloned["insert_start"],
+            "region_end": cloned["insert_end"],
+        }, format="json")
+        assert response.status_code == 200, response.data
+        assert response.data["is_verified"]
+        assert response.data["coverage"] == 100.0
+        assert response.data["differences"] == []
+
+    def test_a_reversed_read_is_handled(self, auth_client):
+        """Half of all Sanger reads come back on the other strand."""
+        from gsynth_engine.sequence import reverse_complement
+
+        cloned = self.build(auth_client)
+        forward = self.read_of(
+            cloned["plasmid"], cloned["insert_start"] - 200, cloned["insert_end"] + 200,
+        )
+        response = auth_client.post(reverse(self.url_name), {
+            "design": cloned["plasmid"],
+            "reads": {"T7-R": reverse_complement(forward)},
+        }, format="json")
+        assert response.data["reads"][0]["reverse_complemented"] is True
+        assert response.data["is_verified"]
+
+    def test_a_point_mutation_is_reported_with_its_effect(self, auth_client):
+        cloned = self.build(auth_client)
+        plasmid = cloned["plasmid"]
+        at = cloned["insert_start"] + 60
+        replacement = "G" if plasmid[at] != "G" else "C"
+        mutated = plasmid[:at] + replacement + plasmid[at + 1:]
+
+        response = auth_client.post(reverse(self.url_name), {
+            "design": plasmid,
+            "reads": {"T7-F": self.read_of(
+                mutated, cloned["insert_start"] - 200, cloned["insert_end"],
+            )},
+            "coding_start": cloned["insert_start"] + cloned["insert"]["orf_start"],
+            "coding_end": cloned["insert_end"],
+        }, format="json")
+        assert not response.data["is_verified"]
+
+        difference = response.data["differences"][0]
+        assert difference["kind"] == "substitution"
+        assert difference["position"] == at
+        assert difference["found"] == replacement
+        assert difference["silent"] in (True, False)
+        assert "position" in difference["description"]
+
+    def test_a_gap_in_coverage_is_reported(self, auth_client):
+        """Half the insert read is not the insert verified."""
+        cloned = self.build(auth_client)
+        response = auth_client.post(reverse(self.url_name), {
+            "design": cloned["plasmid"],
+            "reads": {"short": self.read_of(
+                cloned["plasmid"],
+                cloned["insert_start"] - 100, cloned["insert_start"] + 60,
+            )},
+            "region_start": cloned["insert_start"],
+            "region_end": cloned["insert_end"],
+        }, format="json")
+        assert not response.data["fully_covered"]
+        assert response.data["coverage"] < 100
+
+    def test_one_unplaceable_read_does_not_sink_the_rest(self, auth_client):
+        cloned = self.build(auth_client)
+        response = auth_client.post(reverse(self.url_name), {
+            "design": cloned["plasmid"],
+            "reads": {
+                "good": self.read_of(
+                    cloned["plasmid"],
+                    cloned["insert_start"] - 200, cloned["insert_end"],
+                ),
+                "junk": "ACGTACGTGGCCTTAA" * 25,
+            },
+        }, format="json")
+        assert len(response.data["reads"]) == 1
+        assert response.data["warnings"]
+
+    def test_no_reads_is_refused(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "design": "ACGT" * 100, "reads": {},
+        }, format="json")
+        assert response.status_code == 400
+        assert "at least one read" in str(response.data)

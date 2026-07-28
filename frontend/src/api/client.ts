@@ -221,6 +221,75 @@ export type OptimiseResult = {
   is_clean: boolean;
 };
 
+export type LigationReaction = {
+  ratio: number;
+  vector_ng: number;
+  insert_ng: number;
+  vector_fmol: number;
+  insert_fmol: number;
+  total_ng: number;
+  rows: Record<string, string>[];
+  warnings: string[];
+};
+
+export type SeqPrimer = {
+  name: string;
+  sequence: string;
+  length: number;
+  start: number;
+  direction: number;
+  tm: number;
+  gc: number;
+  reads_from: number;
+  reads_to: number;
+};
+
+export type PrimerSet = {
+  primers: SeqPrimer[];
+  rows: Record<string, string | number>[];
+  target_start: number;
+  target_end: number;
+  gaps: [number, number][];
+  covers_target: boolean;
+  warnings: string[];
+};
+
+export type Difference = {
+  kind: string;
+  position: number;
+  expected: string;
+  found: string;
+  residue: number | null;
+  from_residue: string;
+  to_residue: string;
+  silent: boolean | null;
+  description: string;
+};
+
+export type VerifyReport = {
+  design_length: number;
+  coverage: number;
+  gaps: [number, number][];
+  fully_covered: boolean;
+  /** Empty differences with at least one read means it is the design. */
+  is_verified: boolean;
+  differences: Difference[];
+  reads: {
+    name: string;
+    length: number;
+    start: number;
+    end: number;
+    covered: number;
+    reverse_complemented: boolean;
+    identity: number;
+    matched: number;
+    difference_count: number;
+    is_clean: boolean;
+    warnings: string[];
+  }[];
+  warnings: string[];
+};
+
 export type VectorTag = { name: string; end: string; note: string };
 
 /** A backbone G-Synth knows about. `has_sequence` means it ships with one. */
@@ -493,6 +562,36 @@ export const api = {
 
   optimise: (params: OptimiseParams) =>
     request<OptimiseResult>("/api/design/optimise/", { method: "POST", body: params }),
+
+  ligation: (params: {
+    vector_length: number;
+    insert_length: number;
+    vector_ng?: number;
+    ends?: string;
+    ratios?: number[];
+  }) =>
+    request<{ reactions: LigationReaction[]; ends: string }>(
+      "/api/design/ligation/", { method: "POST", body: params },
+    ),
+
+  primers: (params: {
+    template: string;
+    target_start: number;
+    target_end: number;
+    circular?: boolean;
+    name?: string;
+  }) => request<PrimerSet>("/api/design/primers/", { method: "POST", body: params }),
+
+  verify: (params: {
+    design: string;
+    reads: Record<string, string>;
+    circular?: boolean;
+    trim?: number;
+    coding_start?: number | null;
+    coding_end?: number | null;
+    region_start?: number | null;
+    region_end?: number | null;
+  }) => request<VerifyReport>("/api/design/verify/", { method: "POST", body: params }),
 
   clone: (params: CloneParams) =>
     request<CloneResult>("/api/design/clone/", { method: "POST", body: params }),

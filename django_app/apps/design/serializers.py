@@ -235,3 +235,69 @@ class OptimiseRequestSerializer(serializers.Serializer):
                 "gc_max": "The upper GC bound must be above the lower one.",
             })
         return attrs
+
+
+class LigationRequestSerializer(serializers.Serializer):
+    """How much of each thing goes in the tube."""
+
+    vector_length = serializers.IntegerField(min_value=1, max_value=1_000_000)
+    insert_length = serializers.IntegerField(min_value=1, max_value=1_000_000)
+    vector_ng = serializers.FloatField(min_value=0.01, max_value=100_000, default=50.0)
+    ends = serializers.ChoiceField(choices=["5'", "3'", "blunt"], default="5'")
+    total_volume_uL = serializers.FloatField(min_value=1, max_value=1000, default=20.0)
+    #: Left empty, the recommendation for the kind of ends is used.
+    ratios = serializers.ListField(
+        child=serializers.FloatField(min_value=0.01, max_value=100),
+        required=False, default=list, max_length=8,
+    )
+
+
+class PrimerRequestSerializer(serializers.Serializer):
+    """Sequencing primers that read across a region."""
+
+    template = serializers.CharField(max_length=2_000_000)
+    target_start = serializers.IntegerField(min_value=0)
+    target_end = serializers.IntegerField(min_value=1)
+    circular = serializers.BooleanField(default=True)
+    name = serializers.CharField(max_length=60, required=False, default="seq")
+    tm_min = serializers.FloatField(min_value=30, max_value=85, default=50.0)
+    tm_max = serializers.FloatField(min_value=30, max_value=90, default=65.0)
+    margin = serializers.IntegerField(min_value=50, max_value=2000, default=80)
+    read_length = serializers.IntegerField(min_value=100, max_value=1500, default=700)
+
+    def validate(self, attrs):
+        if attrs["target_end"] <= attrs["target_start"]:
+            raise serializers.ValidationError(
+                {"target_end": "The region must end after it starts."}
+            )
+        if attrs["tm_max"] <= attrs["tm_min"]:
+            raise serializers.ValidationError(
+                {"tm_max": "The upper Tm bound must be above the lower one."}
+            )
+        return attrs
+
+
+class VerifyRequestSerializer(serializers.Serializer):
+    """Compare sequencing reads to the design."""
+
+    design = serializers.CharField(max_length=2_000_000)
+    #: Named so a report can say which trace disagreed.
+    reads = serializers.DictField(child=serializers.CharField(max_length=100_000))
+    circular = serializers.BooleanField(default=True)
+    trim = serializers.IntegerField(min_value=0, max_value=200, default=30)
+    coding_start = serializers.IntegerField(min_value=0, required=False, allow_null=True)
+    coding_end = serializers.IntegerField(min_value=0, required=False, allow_null=True)
+    region_start = serializers.IntegerField(min_value=0, required=False, allow_null=True)
+    region_end = serializers.IntegerField(min_value=0, required=False, allow_null=True)
+
+    #: DictField has no max_length, so the cap is enforced here.
+    MAX_READS = 64
+
+    def validate(self, attrs):
+        if not attrs["reads"]:
+            raise serializers.ValidationError({"reads": "Send at least one read."})
+        if len(attrs["reads"]) > self.MAX_READS:
+            raise serializers.ValidationError(
+                {"reads": f"At most {self.MAX_READS} reads at a time."}
+            )
+        return attrs

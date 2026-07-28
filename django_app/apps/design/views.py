@@ -24,6 +24,9 @@ from gsynth_engine.codon import (
 )
 from gsynth_engine.duplex import DuplexView, construct_duplex
 from gsynth_engine.genbank import oligos_to_fasta, to_fasta, to_genbank
+from gsynth_engine.ligation import ligation_series, plan_ligation
+from gsynth_engine.primers import design_sequencing_primers
+from gsynth_engine.verify import verify
 from gsynth_engine.merzoug import AssemblyPlan, design_merzoug_assembly
 from gsynth_engine.protocol import bench_protocol, order_sheet, order_sheet_csv
 from gsynth_engine.sequence import SequenceError, gc_content
@@ -38,7 +41,10 @@ from rest_framework.views import APIView
 from apps.design.serializers import (
     CLEAVAGE_NAMES,
     CloneRequestSerializer,
+    LigationRequestSerializer,
     OptimiseRequestSerializer,
+    PrimerRequestSerializer,
+    VerifyRequestSerializer,
     resolve_vector,
     SaveableAssemblyRequestSerializer,
     SSDRequestSerializer,
@@ -379,6 +385,163 @@ class OptimiseView(APIView):
         payload = _optimisation_payload(result)
         payload["table_source"] = table.source
         return Response(payload)
+
+
+class LigationView(APIView):
+    """POST /api/design/ligation/ — masses to pipette, at several ratios.
+
+    Nobody runs one ligation, so the response is the whole series.
+    """
+
+    def post(self, request):
+        serializer = LigationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        common = {
+            "vector_length": data["vector_length"],
+            "insert_length": data["insert_length"],
+            "vector_ng": data["vector_ng"],
+            "ends": data["ends"],
+        }
+        try:
+            plans = (
+                ligation_series(**common, ratios=tuple(data["ratios"]))
+                if data["ratios"]
+                else [plan_ligation(**common, total_volume_uL=data["total_volume_uL"])]
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        return Response({
+            "reactions": [
+                {
+                    "ratio": plan.ratio,
+                    "vector_ng": plan.vector_ng,
+                    "insert_ng": plan.insert_ng,
+                    "vector_fmol": plan.vector_fmol,
+                    "insert_fmol": plan.insert_fmol,
+                    "total_ng": plan.total_ng,
+                    "rows": plan.as_rows(),
+                    "warnings": plan.warnings,
+                }
+                for plan in plans
+            ],
+            "vector_length": data["vector_length"],
+            "insert_length": data["insert_length"],
+            "ends": data["ends"],
+            "total_volume_uL": data["total_volume_uL"],
+        })
+
+
+class SequencingPrimerView(APIView):
+    """POST /api/design/primers/ — primers that read across a region."""
+
+    def post(self, request):
+        serializer = PrimerRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result = design_sequencing_primers(
+                data["template"],
+                target_start=data["target_start"],
+                target_end=data["target_end"],
+                circular=data["circular"],
+                name=data["name"],
+                tm_min=data["tm_min"],
+                tm_max=data["tm_max"],
+                margin=data["margin"],
+                read_length=data["read_length"],
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        return Response({
+            "primers": [
+                {
+                    "name": p.name,
+                    "sequence": p.sequence,
+                    "length": p.length,
+                    "start": p.start,
+                    "direction": p.direction,
+                    "tm": p.tm,
+                    "gc": p.gc,
+                    "reads_from": p.reads_from,
+                    "reads_to": p.reads_to,
+                }
+                for p in result.primers
+            ],
+            "rows": result.as_rows,
+            "target_start": result.target_start,
+            "target_end": result.target_end,
+            "gaps": result.gaps,
+            "covers_target": result.covers_target,
+            "warnings": result.warnings,
+        })
+
+
+class VerifyView(APIView):
+    """POST /api/design/verify/ — do the reads say you built the design?"""
+
+    def post(self, request):
+        serializer = VerifyRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        region = None
+        if data.get("region_start") is not None and data.get("region_end") is not None:
+            region = (data["region_start"], data["region_end"])
+
+        try:
+            report = verify(
+                data["design"], data["reads"],
+                circular=data["circular"], trim=data["trim"],
+                coding_start=data.get("coding_start"),
+                coding_end=data.get("coding_end"),
+                region=region,
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        return Response({
+            "design_length": report.design_length,
+            "coverage": report.coverage,
+            "gaps": report.gaps,
+            "fully_covered": report.fully_covered,
+            # Empty differences with at least one read means it is the design.
+            "is_verified": report.is_verified,
+            "differences": [
+                {
+                    "kind": d.kind,
+                    "position": d.position,
+                    "expected": d.expected,
+                    "found": d.found,
+                    "residue": d.residue,
+                    "from_residue": d.from_residue,
+                    "to_residue": d.to_residue,
+                    "silent": d.silent,
+                    "description": d.description,
+                }
+                for d in report.differences
+            ],
+            "reads": [
+                {
+                    "name": r.name,
+                    "length": r.length,
+                    "start": r.start,
+                    "end": r.end,
+                    "covered": r.covered,
+                    "reverse_complemented": r.reverse_complemented,
+                    "identity": r.identity,
+                    "matched": r.matched,
+                    "difference_count": len(r.differences),
+                    "is_clean": r.is_clean,
+                    "warnings": r.warnings,
+                }
+                for r in report.reads
+            ],
+            "warnings": report.warnings,
+        })
 
 
 class EnzymeCatalogueView(APIView):
