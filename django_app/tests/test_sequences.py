@@ -1,7 +1,9 @@
-"""Tests for FASTA/GenBank upload parsing."""
+"""Tests for FASTA, GenBank and SnapGene upload parsing."""
 import io
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
 
 from apps.sequences.parsing import ParseError, detect_format, parse_sequence_file
 
@@ -145,3 +147,63 @@ class TestParseEndpoint:
         r = auth_client.post(self.url, {"file": upload}, format="multipart")
         assert r.status_code == 400
         assert "FASTA" in r.data["detail"]
+
+
+@pytest.mark.django_db
+class TestSnapGeneImport:
+    """A vector arrives from the supplier as .dna. Asking someone to convert
+    it first is asking them to use another program to use this one."""
+
+    PET21A = "/root/.claude/uploads/7c8c4b0e-e761-5671-9d9c-44f3743c8a03/dbd85f04-pET21a.dna"
+
+    def payload(self, name="pET-21a.dna"):
+        import pathlib
+
+        raw = pathlib.Path(self.PET21A).read_bytes()
+        return SimpleUploadedFile(name, raw, content_type="application/octet-stream")
+
+    def test_a_snapgene_file_is_recognised_by_its_bytes(self):
+        """These arrive renamed as often as not."""
+        import pathlib
+
+        from apps.sequences.parsing import detect_format
+
+        raw = pathlib.Path(self.PET21A).read_bytes()
+        assert detect_format(raw, "pET-21a.dna") == "snapgene"
+        assert detect_format(raw, "whatever.txt") == "snapgene"
+
+    def test_it_parses_with_its_features(self, auth_client):
+        """The reason to accept the format at all: GenBank-grade annotation."""
+        response = auth_client.post(
+            reverse("sequence-parse"), {"file": self.payload()}, format="multipart",
+        )
+        assert response.status_code == 200, response.data
+        assert response.data["length"] == 5443
+        assert response.data["topology"] == "circular"
+
+        names = {a["name"] for a in response.data["annotations"]}
+        assert {"AmpR", "lacI", "T7 promoter", "6xHis"} <= names
+
+    def test_features_survive_for_every_format_that_has_them(self, auth_client):
+        """The guard used to test the format name rather than the record, so
+        a SnapGene file came back with its features silently dropped."""
+        response = auth_client.post(
+            reverse("sequence-parse"), {"file": self.payload()}, format="multipart",
+        )
+        assert len(response.data["annotations"]) == 14
+
+    def test_fasta_still_has_none_and_still_parses(self, auth_client):
+        upload = SimpleUploadedFile("x.fasta", b">x desc\nACGTACGTAA\n", content_type="text/plain")
+        response = auth_client.post(
+            reverse("sequence-parse"), {"file": upload}, format="multipart",
+        )
+        assert response.status_code == 200
+        assert response.data["annotations"] == []
+
+    def test_a_binary_file_that_is_not_snapgene_is_refused_clearly(self, auth_client):
+        upload = SimpleUploadedFile("junk.bin", bytes(range(200)), content_type="application/octet-stream")
+        response = auth_client.post(
+            reverse("sequence-parse"), {"file": upload}, format="multipart",
+        )
+        assert response.status_code == 400
+        assert "not a SnapGene file" in response.data["detail"]

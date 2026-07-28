@@ -106,7 +106,7 @@ export default function Dashboard() {
         <input
           ref={fileInput}
           type="file"
-          accept=".fa,.fasta,.fna,.seq,.gb,.gbk,.genbank,.ape"
+          accept=".dna,.gb,.gbk,.genbank,.ape,.fa,.fasta,.fna,.seq"
           style={{ display: "none" }}
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -131,9 +131,9 @@ export default function Dashboard() {
             if (file) void importFile(file);
           }}
         >
-          <strong>Drop a FASTA or GenBank file here</strong>
+          <strong>Drop a SnapGene, GenBank or FASTA file here</strong>
           <span className="hint">
-            .fasta · .fa · .gb · .gbk — features and topology are read automatically
+            .dna · .gb · .gbk · .fasta — features and topology are read automatically
           </span>
         </div>
 

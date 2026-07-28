@@ -36,6 +36,7 @@ from gsynth_engine.thermo import ANNEALING
 from gsynth_engine import vectors as vector_catalogue
 from rest_framework import status
 from rest_framework.permissions import AllowAny
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -347,6 +348,8 @@ class OptimiseView(APIView):
     make the construct impossible to cut.
     """
 
+    throttle_scope = "design"
+
     def post(self, request):
         serializer = OptimiseRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -397,6 +400,8 @@ class AlignView(APIView):
     strains, a design against what a supplier returned, a protein against
     its homologue.
     """
+
+    throttle_scope = "design"
 
     def post(self, request):
         serializer = AlignRequestSerializer(data=request.data)
@@ -449,6 +454,8 @@ class PrimerExportView(APIView):
     A primer set is ordered, not read on screen. CSV goes into a supplier's
     spreadsheet; FASTA into the ones that take an upload.
     """
+
+    throttle_scope = "design"
 
     def post(self, request):
         serializer = PrimerRequestSerializer(data=request.data)
@@ -534,6 +541,8 @@ class LigationView(APIView):
 class SequencingPrimerView(APIView):
     """POST /api/design/primers/ — primers that read across a region."""
 
+    throttle_scope = "design"
+
     def post(self, request):
         serializer = PrimerRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -579,6 +588,8 @@ class SequencingPrimerView(APIView):
 
 class VerifyView(APIView):
     """POST /api/design/verify/ — do the reads say you built the design?"""
+
+    throttle_scope = "design"
 
     def post(self, request):
         serializer = VerifyRequestSerializer(data=request.data)
@@ -675,6 +686,8 @@ class EnzymeCatalogueView(APIView):
 class SSDDesignView(APIView):
     """POST /api/design/ssd/ — one insert, two oligos."""
 
+    throttle_scope = "design"
+
     def post(self, request):
         serializer = SSDRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -703,6 +716,8 @@ class SSDDesignView(APIView):
 
 class MerzougAssemblyView(APIView):
     """POST /api/design/assembly/ — one insert, an ordered set of oligo pairs."""
+
+    throttle_scope = "design"
 
     def post(self, request):
         serializer = SaveableAssemblyRequestSerializer(data=request.data)
@@ -740,6 +755,8 @@ class CloneView(APIView):
     A design that cannot be cloned comes back with `problems` filled in and
     HTTP 200 — the user needs to see what does not fit, not an error page.
     """
+
+    throttle_scope = "design"
 
     def post(self, request):
         serializer = CloneRequestSerializer(data=request.data)
@@ -821,6 +838,8 @@ class CloneExportView(APIView):
     not finished.
     """
 
+    throttle_scope = "design"
+
     def post(self, request):
         serializer = CloneRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -885,6 +904,8 @@ class ConstructExportView(APIView):
     where transcription errors come from.
     """
 
+    throttle_scope = "design"
+
     def post(self, request):
         serializer = SaveableAssemblyRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -935,6 +956,8 @@ class ConstructExportView(APIView):
 class OrderSheetView(APIView):
     """POST /api/design/assembly/order-sheet/ — the oligo list as CSV."""
 
+    throttle_scope = "design"
+
     def post(self, request):
         serializer = SaveableAssemblyRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -955,6 +978,8 @@ class OrderSheetView(APIView):
 
 class ProtocolView(APIView):
     """POST /api/design/assembly/protocol/ — the bench protocol as text."""
+
+    throttle_scope = "design"
 
     def post(self, request):
         serializer = SaveableAssemblyRequestSerializer(data=request.data)

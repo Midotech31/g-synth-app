@@ -250,6 +250,45 @@ class TestThrottling:
         cache.clear()
         assert 429 in codes, f"registration never throttled: {codes}"
 
+    def test_the_expensive_design_endpoints_are_throttled(
+        self, auth_client, monkeypatch,
+    ):
+        """Optimisation, alignment and verification each cost real CPU.
+
+        Left on the default user rate, one signed-in person can ask for more
+        compute than the worker has — which on a single-process deployment
+        means the app stops answering anyone, without anything malicious
+        happening.
+        """
+        self._tighten(monkeypatch, design="3/hour")
+        gene = "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGG"
+        codes = [
+            auth_client.post(reverse("design-optimise"), {"sequence": gene}).status_code
+            for _ in range(6)
+        ]
+        assert 429 in codes, f"never throttled: {codes}"
+
+    def test_the_scope_is_shared_across_the_design_endpoints(
+        self, auth_client, monkeypatch,
+    ):
+        """One budget for all of them, or the limit is trivially sidestepped
+        by spreading the load over four routes."""
+        self._tighten(monkeypatch, design="3/hour")
+        gene = "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGG"
+
+        for _ in range(3):
+            auth_client.post(reverse("design-optimise"), {"sequence": gene})
+        spent = auth_client.post(reverse("design-align"), {
+            "first": gene, "second": gene,
+        })
+        assert spent.status_code == 429
+
+    def test_reference_lookups_are_not_throttled_with_them(self, api_client):
+        """The enzyme and vector tables are lookups, not work."""
+        for _ in range(6):
+            assert api_client.get(reverse("design-enzymes")).status_code == 200
+            assert api_client.get(reverse("design-vectors")).status_code == 200
+
     def test_login_is_throttled(self, api_client, monkeypatch, user):
         self._tighten(monkeypatch, login="3/min")
         codes = [

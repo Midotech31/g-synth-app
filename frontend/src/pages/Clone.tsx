@@ -303,12 +303,12 @@ export default function Clone() {
                     onClick={() => fileInput.current?.click()}
                     style={{ width: "100%" }}
                   >
-                    {vector.bundled ? "Use my own copy instead…" : "Import GenBank or FASTA…"}
+                    {vector.bundled ? "Use my own copy instead…" : "Import SnapGene, GenBank or FASTA…"}
                   </button>
                   <input
                     ref={fileInput}
                     type="file"
-                    accept=".gb,.gbk,.genbank,.fa,.fasta,.fna,.txt"
+                    accept=".dna,.gb,.gbk,.genbank,.fa,.fasta,.fna,.txt"
                     style={{ display: "none" }}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
@@ -319,7 +319,7 @@ export default function Clone() {
                   <p className="note" style={{ marginTop: "0.4rem" }}>
                     {vector.bundled
                       ? "Using the sequence that ships with G-Synth. Import your lab's own copy if it differs — it will be checked against this entry."
-                      : "GenBank keeps the vector's features, so they carry over onto the recombinant map. FASTA gives sequence only."}
+                      : "SnapGene .dna and GenBank both keep the vector's features, so they carry over onto the recombinant map. FASTA gives sequence only."}
                   </p>
                 </div>
 

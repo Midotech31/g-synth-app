@@ -169,59 +169,85 @@ def _align(design: str, read: str, offset: int) -> tuple[list[tuple[int, str, st
     Returns the edit operations as (design position, expected, found) and how
     many positions matched. `expected` empty means an insertion in the read;
     `found` empty means a deletion.
+
+    **Everything here is sized by the band, not by the read.** Two rolling
+    buffers, and a traceback row of the band's width indexed relative to its
+    own start. Allocating a full row per base is what turns a linear
+    algorithm back into a quadratic one: at 20,000 bases it was minutes of
+    CPU and hundreds of megabytes for an answer the band computes in a
+    fraction of a second.
     """
     n, m = len(read), len(read) + 2 * BAND
     window_start = offset - BAND
-    window = "".join(design[(window_start + i) % len(design)] for i in range(m))
+    length = len(design)
+    window = "".join(design[(window_start + i) % length] for i in range(m))
 
     MATCH, MISMATCH, GAP = 1, -1, -2
-    # Only cells within the band are ever reached, but a full row is cheaper
-    # to index than a sparse one at these sizes.
+    OUTSIDE = -(1 << 30)
+    WIDTH = 2 * BAND + 4          # band, plus the cells its neighbours read
+
     previous = [j * GAP for j in range(m + 1)]
-    trace: list[list[str]] = []
+    current = [OUTSIDE] * (m + 1)
+    trace: list[bytearray] = []
+    bands: list[int] = []
 
     for i in range(1, n + 1):
-        current = [i * GAP] + [0] * m
-        row = [""] * (m + 1)
         low = max(1, i - 1)
         high = min(m, i + 2 * BAND + 1)
-        for j in range(1, m + 1):
-            if not low <= j <= high:
-                current[j] = -10**6
-                row[j] = "d"
-                continue
+
+        # Clear only what this row will write plus the cells the next row
+        # reads past its end, so no value from an older row leaks in.
+        current[0] = i * GAP
+        for j in range(max(1, low - 1), min(m, high + 2) + 1):
+            current[j] = OUTSIDE
+
+        row = bytearray(WIDTH)
+        residue = read[i - 1]
+
+        for j in range(low, high + 1):
             diagonal = previous[j - 1] + (
-                MATCH if read[i - 1] == window[j - 1] else MISMATCH
+                MATCH if residue == window[j - 1] else MISMATCH
             )
             up = previous[j] + GAP
             left = current[j - 1] + GAP
-            best = max(diagonal, up, left)
+            best, step = diagonal, 0                   # 0 = match, 1 = ins, 2 = del
+            if up > best:
+                best, step = up, 1
+            if left > best:
+                best, step = left, 2
             current[j] = best
-            row[j] = "m" if best == diagonal else ("i" if best == up else "d")
+            row[j - low] = step
+
         trace.append(row)
-        previous = current
+        bands.append(low)
+        previous, current = current, previous
 
     # Walk back from the best cell in the last row: the read is contained in
     # the window, so the design may extend past it on the right.
-    j = max(range(1, m + 1), key=lambda x: previous[x])
+    last_low = bands[-1] if bands else 1
+    last_high = min(m, n + 2 * BAND + 1)
+    j = max(range(last_low, last_high + 1), key=lambda x: previous[x]) if n else 0
     i = n
     operations: list[tuple[int, str, str]] = []
     matched = 0
 
     while i > 0:
-        step = trace[i - 1][j]
-        if step == "m":
+        low = bands[i - 1]
+        if not low <= j < low + WIDTH:
+            break                                      # fell out of the band
+        step = trace[i - 1][j - low]
+        if step == 0:
             expected, found = window[j - 1], read[i - 1]
             if expected == found:
                 matched += 1
             else:
-                operations.append(((window_start + j - 1) % len(design), expected, found))
+                operations.append(((window_start + j - 1) % length, expected, found))
             i, j = i - 1, j - 1
-        elif step == "i":
-            operations.append(((window_start + j) % len(design), "", read[i - 1]))
+        elif step == 1:
+            operations.append(((window_start + j) % length, "", read[i - 1]))
             i -= 1
         else:
-            operations.append(((window_start + j - 1) % len(design), window[j - 1], ""))
+            operations.append(((window_start + j - 1) % length, window[j - 1], ""))
             j -= 1
 
     operations.reverse()

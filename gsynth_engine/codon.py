@@ -309,7 +309,14 @@ def _repeats(sequence: str, minimum: int) -> list[tuple[int, int, str]]:
     return found
 
 
-def _cost(sequence: str, constraints: Constraints, table: CodonTable) -> float:
+def _cost(
+    sequence: str,
+    constraints: Constraints,
+    table: CodonTable,
+    *,
+    window: tuple[int, int] | None = None,
+    with_repeats: bool = True,
+) -> float:
     """How badly a sequence breaks the constraints, as one number.
 
     A plain count of breaches makes a poor objective: widening a GC window
@@ -321,33 +328,55 @@ def _cost(sequence: str, constraints: Constraints, table: CodonTable) -> float:
     The weights are a priority order, not a measurement. A forbidden site
     makes the construct unclonable, so it outranks everything; a rare codon
     only slows translation, so it yields to all of them.
+
+    `window` restricts the sum to a stretch of the sequence. Swapping one
+    codon changes three bases, so every term except repeats is unaffected
+    outside a short neighbourhood — and scoring the whole gene for each
+    candidate is what made a 3 kb optimisation take seven seconds of CPU,
+    which is a denial of service anyone can trigger by pasting an operon.
     """
+    if window is None:
+        start, stop = 0, len(sequence)
+    else:
+        start, stop = max(0, window[0]), min(len(sequence), window[1])
+    if stop <= start:
+        return 0.0
+
+    region = sequence[start:stop]
     total = 0.0
 
     for motif in constraints.motifs():
-        total += 1000.0 * sequence.count(motif)
+        total += 1000.0 * region.count(motif)
 
     run = 1
-    for i in range(1, len(sequence)):
-        run = run + 1 if sequence[i] == sequence[i - 1] else 1
+    for i in range(1, len(region)):
+        run = run + 1 if region[i] == region[i - 1] else 1
         if run > constraints.max_homopolymer:
             total += 50.0
 
-    window = constraints.gc_window
-    if len(sequence) >= window:
-        for start in range(0, len(sequence) - window + 1, 3):
-            local = gc_content(sequence[start : start + window])
-            if local < constraints.gc_min:
-                total += (constraints.gc_min - local)
-            elif local > constraints.gc_max:
-                total += (local - constraints.gc_max)
+    # GC windows are enumerated on absolute positions that are multiples of
+    # three, exactly as the global pass does. Stepping from the region's own
+    # start instead enumerates a *different* set of windows, so a window that
+    # is out of range can fall between the two and never be repaired.
+    width = constraints.gc_window
+    first_window = -(-start // 3) * 3
+    for at in range(first_window, stop - width + 1, 3):
+        local = gc_content(sequence[at : at + width])
+        if local < constraints.gc_min:
+            total += (constraints.gc_min - local)
+        elif local > constraints.gc_max:
+            total += (local - constraints.gc_max)
 
-    total += 20.0 * len(_repeats(sequence, constraints.max_repeat))
+    if with_repeats:
+        total += 20.0 * len(_repeats(sequence, constraints.max_repeat))
 
     if constraints.avoid_rare:
         rare = table.rare(constraints.rare_threshold)
+        # Codon boundaries are absolute, so step from the frame rather than
+        # from the window's own start.
+        first_codon = -(-start // 3) * 3
         total += sum(
-            1.0 for i in range(0, len(sequence) - 2, 3)
+            1.0 for i in range(first_codon, stop - 2, 3)
             if sequence[i : i + 3] in rare
         )
     return total
@@ -360,6 +389,8 @@ def _fix_near(
     protein: str,
     table: CodonTable,
     constraints: Constraints,
+    *,
+    local: bool = True,
 ) -> bool:
     """Swap one codon in or beside the breach. True when the cost dropped.
 
@@ -367,11 +398,29 @@ def _fix_near(
     synonymous alternatives are tried best-first, so the sequence gives up as
     little adaptiveness as it has to. Two codons of slack either side catch
     sites that straddle the edge of the region.
+
+    Candidates are compared on a *window* of the sequence rather than the
+    whole of it. Every candidate differs from the others in the same three
+    bases, so the terms outside that neighbourhood are identical and cancel —
+    comparing them is the same decision at a fraction of the cost. Repeats
+    are the exception, since a repeat's partner can be anywhere, so a breach
+    of that kind falls back to scoring the whole sequence.
     """
     first = max(0, position // 3 - 2)
     last = min(len(codons) - 1, (position + width) // 3 + 2)
 
-    baseline = _cost("".join(codons), constraints, table)
+    # Wide enough that every GC window and every motif touching the edited
+    # codons lies inside it.
+    radius = constraints.gc_window + max(
+        (len(m) for m in constraints.motifs()), default=0
+    ) + constraints.max_homopolymer + 6
+    span = (
+        (first * 3 - radius, (last + 1) * 3 + radius) if local else None
+    )
+    kwargs = {"window": span, "with_repeats": not local}
+
+    sequence = "".join(codons)
+    baseline = _cost(sequence, constraints, table, **kwargs)
     best_cost, best_at, best_codon = baseline, -1, ""
 
     for index in range(first, last + 1):
@@ -380,7 +429,7 @@ def _fix_near(
             if candidate == current:
                 continue
             codons[index] = candidate
-            cost = _cost("".join(codons), constraints, table)
+            cost = _cost("".join(codons), constraints, table, **kwargs)
             if cost < best_cost:
                 best_cost, best_at, best_codon = cost, index, candidate
         codons[index] = current
@@ -484,7 +533,12 @@ def optimise(
         if not breaches:
             break
         position, width, reason = breaches[0]
-        if _fix_near(codons, position, width, protein, table, constraints):
+        # A repeat's partner can be anywhere, so that one breach is the one
+        # kind a local comparison cannot judge.
+        locally = not reason.startswith("repeat")
+        if _fix_near(
+            codons, position, width, protein, table, constraints, local=locally,
+        ):
             stalled = 0
             continue
         stalled += 1
