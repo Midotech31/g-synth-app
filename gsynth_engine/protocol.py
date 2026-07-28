@@ -15,8 +15,10 @@ import csv
 import io
 from dataclasses import dataclass
 
+from gsynth_engine.duplex import construct_duplex
 from gsynth_engine.merzoug import AssemblyPlan
-from gsynth_engine.sequence import gc_content, melting_temperature
+from gsynth_engine.sequence import gc_content
+from gsynth_engine.thermo import ANNEALING, melting_temperature
 
 
 @dataclass(frozen=True)
@@ -75,7 +77,7 @@ def order_sheet(plan: AssemblyPlan, *, construct_name: str = "construct") -> lis
                     sequence=sequence,
                     length=len(sequence),
                     gc_percent=round(gc_content(sequence), 1),
-                    tm=round(melting_temperature(sequence), 1),
+                    tm=round(melting_temperature(sequence, conditions=ANNEALING), 1),
                     scale=scale,
                     purification=purification,
                     role=role,
@@ -141,6 +143,9 @@ def bench_protocol(
         add(f"   {order.name:<{width}}  {order.length:>3} nt  "
             f"Tm {order.tm:>5.1f}°C  {order.scale:>9}  {order.purification}")
     add("")
+    add("   Tm: nearest-neighbour model (SantaLucia 1998) under the annealing")
+    add(f"   conditions of step 3 — {ANNEALING.summary}.")
+    add("")
 
     add("2. RESUSPENSION")
     add("-" * 72)
@@ -169,6 +174,22 @@ def bench_protocol(
                 f"{' (vector)' if fragment.is_last else ''}")
         add(f"       {fragment.name}: {len(fragment.forward)} + "
             f"{len(fragment.reverse)} nt — {ends}")
+    add("")
+
+    # The molecule itself, not a summary of it. Check this before ordering:
+    # it is the only place a wrong overhang shows as a wrong overhang.
+    add("   HYBRIDISATION — check this before the oligos are ordered")
+    add("   " + "-" * 68)
+    view = construct_duplex(plan)
+    if view.mismatches():
+        add(f"   !! {len(view.mismatches())} positions do not pair. Do not order.")
+        add("")
+    for line in view.to_text(60).rstrip().splitlines():
+        add(f"   {line}" if line else "")
+    add("")
+    add("   Unpaired bases are single-stranded: the sticky ends at the two")
+    add("   outer ends, and the junction overhangs where each strand is cut")
+    add(f"   at a different position ({plan.overhang_length} nt apart).")
     add("")
 
     add("4. PHOSPHORYLATION")

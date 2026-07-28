@@ -14,6 +14,7 @@ REST_FRAMEWORK = {
         "user": "10000/hour",
         "register": "10000/hour",
         "login": "10000/min",
+        "design": "10000/hour",
     },
 }
 

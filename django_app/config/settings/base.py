@@ -140,15 +140,23 @@ REST_FRAMEWORK = {
     # Rate limiting. `register` and `login` are unauthenticated and therefore
     # the two endpoints an attacker can hammer for free — they get their own
     # tighter scopes, applied per-view via ScopedRateThrottle.
+    #
+    # `design` covers the endpoints that do real work: optimisation, alignment
+    # and verification are each hundreds of milliseconds to a second or two of
+    # CPU. The default user rate of 2,000/hour would let one signed-in person
+    # ask for more compute than the worker has, which on a single-process
+    # deployment means the app stops answering anyone.
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
     ),
     "DEFAULT_THROTTLE_RATES": {
         "anon": "120/hour",
         "user": "2000/hour",
         "register": "5/hour",
         "login": "10/min",
+        "design": "300/hour",
     },
 }
 

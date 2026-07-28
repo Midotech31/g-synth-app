@@ -118,6 +118,39 @@ class TestJunctions:
             gc = sum(1 for base in junction if base in "GC")
             assert 0 < gc < len(junction), junction
 
+    def test_no_two_junctions_differ_by_a_single_base(self):
+        """T4 ligase cross-ligates near-identical overhangs.
+
+        NEB's ligase-fidelity data show that overhangs differing at one
+        position join at a measurable rate. Two such junctions in the same
+        reaction produce a misassembled construct that looks fine on a gel
+        and only shows up at sequencing, so they are kept apart by design.
+        """
+        plan = design_merzoug_assembly(LONG_INSERT, target_oligo_length=60)
+        junctions = plan.junction_overhangs
+        assert len(junctions) >= 2, "need several junctions for this to mean anything"
+
+        for i, first in enumerate(junctions):
+            for second in junctions[i + 1 :]:
+                for candidate in (second, reverse_complement(second)):
+                    mismatches = sum(1 for a, b in zip(first, candidate) if a != b)
+                    assert mismatches >= 2, (
+                        f"{first} and {second} differ by {mismatches} base(s)"
+                    )
+
+    def test_fidelity_rule_also_covers_the_terminal_overhangs(self):
+        """A junction one base from the vector's sticky end can ligate into it."""
+        plan = design_merzoug_assembly(LONG_INSERT, target_oligo_length=60)
+        terminal = [plan.ssd.left_overhang, plan.ssd.right_overhang]
+
+        for junction in plan.junction_overhangs:
+            for end in terminal:
+                if len(end) != len(junction):
+                    continue
+                for candidate in (end, reverse_complement(end)):
+                    mismatches = sum(1 for a, b in zip(junction, candidate) if a != b)
+                    assert mismatches >= 2, f"{junction} too close to terminal {end}"
+
 
 class TestTerminalEnds:
     """The two ends must match the vector, not each other."""

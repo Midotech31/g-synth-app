@@ -72,21 +72,44 @@ class ParsedRecord:
                 "annotations": [asdict(a) for a in self.annotations]}
 
 
-def detect_format(text: str, filename: str = "") -> str:
-    """Sniff the format from the content first, filename second."""
+#: A SnapGene file opens with a length-prefixed block whose first byte is 9.
+#: Sniffing the bytes rather than the extension matters because these arrive
+#: renamed as often as not.
+SNAPGENE_MAGIC = b"\x09\x00\x00\x00\x0e"
+
+
+def detect_format(text: str | bytes, filename: str = "") -> str:
+    """Sniff the format from the content first, filename second.
+
+    Content wins because files get renamed, and a GenBank record saved as
+    `.txt` is still a GenBank record. SnapGene's own format is binary, so it
+    is checked before anything tries to decode the bytes as text.
+    """
+    lower = filename.lower()
+
+    if isinstance(text, bytes):
+        if text.startswith(SNAPGENE_MAGIC) or lower.endswith((".dna", ".prot")):
+            return "snapgene"
+        try:
+            text = text.decode("utf-8", errors="strict")
+        except UnicodeDecodeError as error:
+            raise ParseError(
+                "This file is not text and is not a SnapGene file. Expected "
+                "FASTA, GenBank, or SnapGene's own .dna format."
+            ) from error
+
     head = text.lstrip()[:200].upper()
     if head.startswith("LOCUS"):
         return "genbank"
     if head.startswith(">"):
         return "fasta"
-    lower = filename.lower()
     if lower.endswith((".gb", ".gbk", ".genbank", ".ape")):
         return "genbank"
     if lower.endswith((".fa", ".fasta", ".fna", ".ffn", ".faa", ".seq")):
         return "fasta"
     raise ParseError(
-        "Unrecognised file. Expected FASTA (starting with '>') or "
-        "GenBank (starting with 'LOCUS')."
+        "Unrecognised file. Expected FASTA (starting with '>'), GenBank "
+        "(starting with 'LOCUS'), or a SnapGene .dna file."
     )
 
 
@@ -148,29 +171,47 @@ def _topology(record, source_format: str) -> str:
 
 
 def parse_sequence_file(content: bytes | str, filename: str = "") -> ParsedRecord:
-    """Parse the first record of a FASTA or GenBank file.
+    """Parse the first record of a FASTA, GenBank or SnapGene file.
+
+    SnapGene's `.dna` is binary and is read as bytes; the text formats are
+    decoded first. Supporting it matters because it is what a lab actually
+    has: a vector arrives from the supplier as `.dna`, and asking someone to
+    convert it first is asking them to use another program to use this one.
 
     Raises ParseError with a message meant for an end user, not a stack trace.
     """
-    if isinstance(content, bytes):
-        if len(content) > MAX_UPLOAD_BYTES:
-            raise ParseError(
-                f"File is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB."
-            )
-        try:
-            text = content.decode("utf-8")
-        except UnicodeDecodeError:
-            text = content.decode("latin-1", errors="replace")
-    else:
-        text = content
-
-    if not text.strip():
+    if isinstance(content, bytes) and len(content) > MAX_UPLOAD_BYTES:
+        raise ParseError(
+            f"File is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB."
+        )
+    # Emptiness is checked before sniffing: a file of whitespace is empty,
+    # not unrecognised, and saying the wrong one sends the user looking for
+    # a format problem that is not there.
+    if not content or not (
+        content.strip() if isinstance(content, str) else content.strip()
+    ):
         raise ParseError("The file is empty.")
 
-    source_format = detect_format(text, filename)
+    source_format = detect_format(content, filename)
+
+    if source_format == "snapgene":
+        if isinstance(content, str):
+            raise ParseError("A SnapGene file must be uploaded as a file, not text.")
+        handle: io.IOBase = io.BytesIO(content)
+    else:
+        if isinstance(content, bytes):
+            try:
+                text = content.decode("utf-8")
+            except UnicodeDecodeError:
+                text = content.decode("latin-1", errors="replace")
+        else:
+            text = content
+        if not text.strip():
+            raise ParseError("The file is empty.")
+        handle = io.StringIO(text)
 
     try:
-        records = list(SeqIO.parse(io.StringIO(text), source_format))
+        records = list(SeqIO.parse(handle, source_format))
     except Exception as exc:                       # noqa: BLE001
         raise ParseError(f"Could not read this {source_format} file: {exc}") from exc
 
@@ -198,5 +239,9 @@ def parse_sequence_file(content: bytes | str, filename: str = "") -> ParsedRecor
         topology=_topology(record, source_format),
         gc_content=_gc_content(sequence),
         source_format=source_format,
-        annotations=_annotations_from(record) if source_format == "genbank" else [],
+        # Asked of the record, not of the format name. The old test for
+        # "genbank" was a correct shortcut when FASTA was the only other
+        # option; a SnapGene file carries features too, and the condition
+        # dropped every one of them without a word.
+        annotations=_annotations_from(record),
     )

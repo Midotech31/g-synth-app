@@ -81,11 +81,36 @@ export type Fragment = {
   top_end: number;
   left_overhang: string;
   right_overhang: string;
+  /** Which strand the overhang sits on: "top", "bottom" or "blunt". */
+  left_overhang_strand: string;
+  right_overhang_strand: string;
+  /** How far right the bottom strand's left end sits, in bases. */
+  bottom_offset: number;
   is_first: boolean;
   is_last: boolean;
 };
 
 export type Oligo = Record<string, string | number>;
+
+export type DuplexSpan = { name: string; start: number; end: number };
+
+/**
+ * Both strands in one coordinate frame. A space means that strand is absent
+ * from the column — which is what a single-stranded overhang looks like.
+ */
+export type Duplex = {
+  top: string;
+  bottom: string;
+  pairs: string;
+  width: number;
+  left_overhang: string;
+  right_overhang: string;
+  junctions: number[];
+  mismatches: number[];
+  segments: DuplexSpan[];
+  top_fragments: DuplexSpan[];
+  bottom_fragments: DuplexSpan[];
+};
 
 export type AssemblyResult = {
   construct_forward: string;
@@ -100,10 +125,283 @@ export type AssemblyResult = {
   fragments: Fragment[];
   oligos: Oligo[];
   ssd: SSDResult;
+  duplex: Duplex;
+  tm_conditions: { name: string; summary: string; model: string };
   warnings: string[];
   /** Empty means the oligos re-ligate to the design. Non-empty blocks ordering. */
   verification: string[];
   project_id?: number;
+};
+
+export type Junction = {
+  name: string;
+  enzyme: string;
+  overhang: string;
+  kind: string;
+  position: number;
+  context: string;
+  site_regenerated: boolean;
+};
+
+export type JunctionView = {
+  name: string;
+  enzyme: string;
+  overhang: string;
+  kind: string;
+  compatible: boolean;
+  reason: string;
+  left_top: string;
+  left_bottom: string;
+  right_top: string;
+  right_bottom: string;
+  joined_top: string;
+  joined_bottom: string;
+  joined_pairs: string;
+  seam: number;
+  overhang_span: [number, number];
+};
+
+export type RestrictionSite = Annotation & {
+  cuts: number;
+  used: boolean;
+  recognition: string;
+  wraps: boolean;
+};
+
+export type ValidationCheck = { check: string; passed: boolean; detail: string };
+
+export type Orf = {
+  start: number;
+  end: number;
+  frame: number;
+  codons: number;
+  wraps: boolean;
+  protein: string;
+};
+
+/** The recombinant plasmid: what you actually end up with. */
+export type CloneResult = {
+  plasmid: string;
+  name: string;
+  vector_name: string;
+  length: number;
+  gc: number;
+  topology: string;
+  insert_start: number;
+  insert_end: number;
+  insert_length: number;
+  backbone_length: number;
+  removed_length: number;
+  left_enzyme: string;
+  right_enzyme: string;
+  protein: string;
+  protein_length: number;
+  /** True when the insert reads on the minus strand of the vector's numbering. */
+  reversed_insert: boolean;
+  tags: { name: string; end: string; present: boolean; position: number | null; note: string }[];
+  vector: { recognised: boolean; spec: VectorSpec | null; check: VectorCheck | null };
+  annotations: Annotation[];
+  junctions: Junction[];
+  orfs: Orf[];
+  junction_views: JunctionView[];
+  restriction_sites: RestrictionSite[];
+  validation: ValidationCheck[];
+  warnings: string[];
+  /** Empty means these two molecules really do join. */
+  problems: string[];
+  is_clonable: boolean;
+  insert: SSDResult;
+  assembly: AssemblyResult | null;
+  project_id?: number;
+};
+
+export type OptimiseParams = {
+  sequence: string;
+  is_protein?: boolean;
+  keep_stop?: boolean;
+  avoid_enzymes?: string[];
+  avoid_motifs?: string[];
+  max_homopolymer?: number;
+  gc_min?: number;
+  gc_max?: number;
+  gc_window?: number;
+  max_repeat?: number;
+  avoid_rare?: boolean;
+  reference_genes?: string[];
+};
+
+export type OptimiseResult = {
+  sequence: string;
+  protein: string;
+  length: number;
+  table: string;
+  table_source: string;
+  /** Null when the input was a protein: there was no gene to measure. */
+  cai_before: number | null;
+  cai_after: number;
+  gc_before: number | null;
+  gc_after: number;
+  sites_removed: string[];
+  rare_codons_before: number;
+  rare_codons_after: number;
+  changed_codons: number;
+  /** Empty means the gene can be built and cut as asked. */
+  problems: string[];
+  warnings: string[];
+  is_clean: boolean;
+};
+
+export type LigationReaction = {
+  ratio: number;
+  vector_ng: number;
+  insert_ng: number;
+  vector_fmol: number;
+  insert_fmol: number;
+  total_ng: number;
+  rows: Record<string, string>[];
+  warnings: string[];
+};
+
+export type SeqPrimer = {
+  name: string;
+  sequence: string;
+  length: number;
+  start: number;
+  direction: number;
+  tm: number;
+  gc: number;
+  reads_from: number;
+  reads_to: number;
+};
+
+export type PrimerSet = {
+  primers: SeqPrimer[];
+  rows: Record<string, string | number>[];
+  target_start: number;
+  target_end: number;
+  gaps: [number, number][];
+  covers_target: boolean;
+  warnings: string[];
+};
+
+export type Difference = {
+  kind: string;
+  position: number;
+  expected: string;
+  found: string;
+  residue: number | null;
+  from_residue: string;
+  to_residue: string;
+  silent: boolean | null;
+  description: string;
+};
+
+export type VerifyReport = {
+  design_length: number;
+  coverage: number;
+  gaps: [number, number][];
+  fully_covered: boolean;
+  /** Empty differences with at least one read means it is the design. */
+  is_verified: boolean;
+  differences: Difference[];
+  reads: {
+    name: string;
+    length: number;
+    start: number;
+    end: number;
+    covered: number;
+    reverse_complemented: boolean;
+    identity: number;
+    matched: number;
+    difference_count: number;
+    is_clean: boolean;
+    warnings: string[];
+  }[];
+  warnings: string[];
+};
+
+export type AlignRow = {
+  top: string;
+  marks: string;
+  bottom: string;
+  top_start: number | null;
+  top_end: number;
+  bottom_start: number | null;
+  bottom_end: number;
+};
+
+export type AlignResult = {
+  top: string;
+  marks: string;
+  bottom: string;
+  rows: AlignRow[];
+  text: string;
+  score: number;
+  mode: string;
+  length: number;
+  identity: number;
+  similarity: number;
+  identities: number;
+  similarities: number;
+  gaps: number;
+  start_a: number;
+  end_a: number;
+  start_b: number;
+  end_b: number;
+  reverse_complemented: boolean;
+  is_protein: boolean;
+  warnings: string[];
+};
+
+export type VectorTag = { name: string; end: string; note: string };
+
+/** A backbone G-Synth knows about. `has_sequence` means it ships with one. */
+export type VectorSpec = {
+  key: string;
+  name: string;
+  length: number;
+  resistance: string;
+  promoter: string;
+  host: string;
+  supplier: string;
+  summary: string;
+  unique_sites: string[];
+  recommended_pairs: string[];
+  tags: VectorTag[];
+  notes: string[];
+  reference: string;
+  has_sequence: boolean;
+  supplies_translation_start: boolean;
+  tag_summary: string;
+};
+
+export type VectorRecord = {
+  key: string;
+  name: string;
+  length: number;
+  topology: string;
+  source: string;
+  sequence: string;
+  annotations: Annotation[];
+  spec: VectorSpec;
+};
+
+export type VectorCheck = {
+  matches: boolean;
+  length: number;
+  problems: string[];
+  notes: string[];
+  found_motifs: string[];
+  missing_motifs: string[];
+};
+
+export type CloneParams = DesignParams & {
+  vector_key?: string;
+  vector?: string;
+  vector_name?: string;
+  vector_annotations?: Annotation[];
+  vector_is_circular?: boolean;
+  fragment?: boolean;
 };
 
 export type Enzyme = {
@@ -199,6 +497,16 @@ function describe(status: number, body: unknown): ApiError {
   if (status === 401) return new ApiError(status, "Your session has expired. Please sign in again.");
   if (status === 429) return new ApiError(status, "Too many attempts. Please wait a minute and try again.");
   return new ApiError(status, `Request failed (${status}).`);
+}
+
+/** Hand a blob to the browser as a download. */
+function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 let refreshInFlight: Promise<string | null> | null = null;
@@ -315,8 +623,71 @@ export const api = {
   designAssembly: (params: DesignParams) =>
     request<AssemblyResult>("/api/design/assembly/", { method: "POST", body: params }),
 
+  optimise: (params: OptimiseParams) =>
+    request<OptimiseResult>("/api/design/optimise/", { method: "POST", body: params }),
+
+  ligation: (params: {
+    vector_length: number;
+    insert_length: number;
+    vector_ng?: number;
+    ends?: string;
+    ratios?: number[];
+  }) =>
+    request<{ reactions: LigationReaction[]; ends: string }>(
+      "/api/design/ligation/", { method: "POST", body: params },
+    ),
+
+  primers: (params: {
+    template: string;
+    target_start: number;
+    target_end: number;
+    circular?: boolean;
+    name?: string;
+  }) => request<PrimerSet>("/api/design/primers/", { method: "POST", body: params }),
+
+  verify: (params: {
+    design: string;
+    reads: Record<string, string>;
+    circular?: boolean;
+    trim?: number;
+    coding_start?: number | null;
+    coding_end?: number | null;
+    region_start?: number | null;
+    region_end?: number | null;
+  }) => request<VerifyReport>("/api/design/verify/", { method: "POST", body: params }),
+
+  align: (params: {
+    first: string;
+    second: string;
+    mode?: string;
+    is_protein?: boolean;
+    try_reverse?: boolean;
+  }) => request<AlignResult>("/api/design/align/", { method: "POST", body: params }),
+
+  clone: (params: CloneParams) =>
+    request<CloneResult>("/api/design/clone/", { method: "POST", body: params }),
+
+  vectors: () =>
+    request<{ vectors: VectorSpec[]; default: string }>("/api/design/vectors/", {
+      auth: false,
+    }),
+
+  vectorSequence: (key: string) =>
+    request<VectorRecord>(`/api/design/vectors/${encodeURIComponent(key)}/`, {
+      auth: false,
+    }),
+
+  /** GET a file the browser saves — for endpoints that need no body. */
+  downloadUrl: async (path: string, filename: string) => {
+    const response = await fetch(path, {
+      headers: { Authorization: `Bearer ${tokenStore.access ?? ""}` },
+    });
+    if (!response.ok) throw new ApiError(response.status, "Download failed.");
+    saveBlob(await response.blob(), filename);
+  },
+
   /** Downloads stream as files, so they bypass the JSON request helper. */
-  download: async (path: string, params: DesignParams, filename: string) => {
+  download: async (path: string, params: DesignParams | CloneParams, filename: string) => {
     const response = await fetch(path, {
       method: "POST",
       headers: {
@@ -326,13 +697,7 @@ export const api = {
       body: JSON.stringify(params),
     });
     if (!response.ok) throw new ApiError(response.status, "Download failed.");
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    saveBlob(await response.blob(), filename);
   },
 
   parseFile: (file: File) => {

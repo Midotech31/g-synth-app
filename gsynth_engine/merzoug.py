@@ -40,9 +40,9 @@ from gsynth_engine.sequence import (
     gc_content,
     is_palindrome,
     longest_homopolymer,
-    melting_temperature,
     reverse_complement,
 )
+from gsynth_engine.thermo import ANNEALING, melting_temperature
 from gsynth_engine.ssd import SSDResult, design_small_sequence
 
 #: Overhang lengths the method allows. 4 nt is the practical minimum for a
@@ -66,6 +66,26 @@ class OligoPair:
     right_overhang: str        # 5' overhang on the right, top-strand sense
     is_first: bool
     is_last: bool
+    bottom_offset: int = 0     # how far right the bottom strand's left end sits
+
+    @property
+    def left_overhang_strand(self) -> str:
+        """Which strand carries the left overhang: 'top', 'bottom' or 'blunt'.
+
+        Internal junctions are always 5' overhangs on the top strand. The
+        outer end follows the enzyme — ApaI, KpnI, PstI and SacI leave a 3'
+        overhang, which sits on the bottom strand instead.
+        """
+        if self.bottom_offset > 0:
+            return "top"
+        return "bottom" if self.bottom_offset < 0 else "blunt"
+
+    @property
+    def right_overhang_strand(self) -> str:
+        end_offset = (self.bottom_offset + len(self.reverse)) - len(self.forward)
+        if end_offset > 0:
+            return "bottom"
+        return "top" if end_offset < 0 else "blunt"
 
     @property
     def forward_length(self) -> int:
@@ -77,11 +97,12 @@ class OligoPair:
 
     @property
     def forward_tm(self) -> float:
-        return round(melting_temperature(self.forward), 1)
+        """Tm under the annealing reaction, not a generic primer dilution."""
+        return round(melting_temperature(self.forward, conditions=ANNEALING), 1)
 
     @property
     def reverse_tm(self) -> float:
-        return round(melting_temperature(self.reverse), 1)
+        return round(melting_temperature(self.reverse, conditions=ANNEALING), 1)
 
     @property
     def duplex_gc(self) -> float:
@@ -171,6 +192,21 @@ class AssemblyPlan:
         return problems
 
 
+def _cross_ligates(overhang: str, other: str) -> bool:
+    """True when two overhangs are close enough for T4 ligase to confuse them.
+
+    NEB's ligase-fidelity work shows that overhangs differing at a single
+    position still join at a measurable rate. Either strand can present the
+    end, so both orientations are compared.
+    """
+    for candidate in (overhang, reverse_complement(overhang)):
+        if len(candidate) != len(other):
+            continue
+        if sum(1 for a, b in zip(candidate, other) if a != b) <= 1:
+            return True
+    return False
+
+
 def _overhang_problem(
     overhang: str, used: set[str], forbidden: set[str],
 ) -> str | None:
@@ -179,8 +215,14 @@ def _overhang_problem(
         return "palindromic — it would anneal to itself"
     if overhang in used or reverse_complement(overhang) in used:
         return "already used at another junction"
+    # A mispaired junction is a silent failure: the ligation works, the gel
+    # looks right, and the error only appears at sequencing.
+    if any(_cross_ligates(overhang, taken) for taken in used):
+        return "within one base of another junction — they could cross-ligate"
     if overhang in forbidden or reverse_complement(overhang) in forbidden:
         return "matches a terminal restriction overhang"
+    if any(_cross_ligates(overhang, end) for end in forbidden):
+        return "within one base of a terminal overhang — it could ligate into the vector"
     if longest_homopolymer(overhang) >= len(overhang):
         return "a homopolymer run"
     gc = sum(1 for base in overhang if base in "GC")
@@ -380,6 +422,7 @@ def design_merzoug_assembly(
                 right_overhang=right_overhang,
                 is_first=is_first,
                 is_last=is_last,
+                bottom_offset=b0 - t0,
             )
         )
 

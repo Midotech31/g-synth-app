@@ -30,3 +30,5 @@ gsynth.db
 # Frontend
 node_modules/
 frontend/dist/
+frontend/*.tsbuildinfo
+db.sqlite3

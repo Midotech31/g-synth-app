@@ -62,6 +62,17 @@ export default function Dashboard() {
     [navigate],
   );
 
+  async function exportProject(project: ProjectSummary) {
+    try {
+      await api.downloadUrl(
+        `/api/projects/${project.id}/export/`,
+        `${project.name.replace(/\s+/g, "_")}.gb`,
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not export that.");
+    }
+  }
+
   async function remove(id: number, name: string) {
     if (!confirm(`Delete “${name}”? This cannot be undone.`)) return;
     try {
@@ -77,7 +88,9 @@ export default function Dashboard() {
       <div className="topbar">
         <div className="grow">
           <h1>Projects</h1>
-          <p className="sub">Sequences you have imported. Only you can see them.</p>
+          <p className="sub">
+            Designs, plasmids and imported sequences. Only you can see them.
+          </p>
         </div>
         <button
           className="btn btn-primary"
@@ -93,7 +106,7 @@ export default function Dashboard() {
         <input
           ref={fileInput}
           type="file"
-          accept=".fa,.fasta,.fna,.seq,.gb,.gbk,.genbank,.ape"
+          accept=".dna,.gb,.gbk,.genbank,.ape,.fa,.fasta,.fna,.seq"
           style={{ display: "none" }}
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -118,9 +131,9 @@ export default function Dashboard() {
             if (file) void importFile(file);
           }}
         >
-          <strong>Drop a FASTA or GenBank file here</strong>
+          <strong>Drop a SnapGene, GenBank or FASTA file here</strong>
           <span className="hint">
-            .fasta · .fa · .gb · .gbk — features and topology are read automatically
+            .dna · .gb · .gbk · .fasta — features and topology are read automatically
           </span>
         </div>
 
@@ -133,8 +146,11 @@ export default function Dashboard() {
           <div className="card">
             <div className="empty">
               <div className="glyph">🧫</div>
-              <strong>No sequences yet</strong>
-              <span>Import a plasmid to see its map.</span>
+              <strong>Nothing saved yet</strong>
+              <span>
+                Save a design or a plasmid from the workspace, or import a
+                sequence here.
+              </span>
             </div>
           </div>
         ) : (
@@ -151,8 +167,15 @@ export default function Dashboard() {
                 </Link>
                 <div className="foot">
                   <Link to={`/projects/${project.id}`} className="btn btn-ghost">
-                    Open map
+                    Open
                   </Link>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => void exportProject(project)}
+                    title="GenBank, with its features"
+                  >
+                    Export
+                  </button>
                   <button className="btn btn-danger" onClick={() => remove(project.id, project.name)}>
                     Delete
                   </button>

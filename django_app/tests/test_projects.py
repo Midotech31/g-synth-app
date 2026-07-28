@@ -1,5 +1,6 @@
 """Project CRUD, and — crucially — user isolation."""
 import pytest
+from django.urls import reverse
 
 from apps.projects.models import Project
 
@@ -16,7 +17,7 @@ class TestProjectCrud:
 
     def test_create_and_retrieve(self, auth_client, user):
         r = auth_client.post("/api/projects/", {
-            "name": "Insulin v1", "module": "crispr_designer",
+            "name": "Insulin v1", "module": "merzoug_assembly",
             "sequence": "ATGAAACGT",
             "notes": "first test",
             "data": {"guides": []},
@@ -64,3 +65,63 @@ class TestUserIsolation:
         r = auth_client.delete(f"/api/projects/{theirs.id}/")
         assert r.status_code == 404
         assert Project.objects.filter(id=theirs.id).exists()
+
+
+@pytest.mark.django_db
+class TestProjectExport:
+    """Saved work that cannot be taken out is not really saved."""
+
+    def test_a_project_exports_as_genbank(self, auth_client, user):
+        project = Project.objects.create(
+            user=user, name="pGS EntA", module="cloning",
+            sequence="ATGGGTTCTTCTCACCACCACCACCACCACTAA",
+            notes="EntA in pET-21a(+)",
+            data={
+                "topology": "circular",
+                "annotations": [
+                    {"name": "6xHis", "type": "CDS", "start": 12, "end": 30,
+                     "direction": 1},
+                ],
+            },
+        )
+        response = auth_client.get(reverse("project-export", args=[project.id]))
+        assert response.status_code == 200
+        assert 'filename="pGS_EntA.gb"' in response["Content-Disposition"]
+
+        import io
+        from Bio import SeqIO
+
+        record = SeqIO.read(io.StringIO(response.content.decode()), "genbank")
+        assert str(record.seq).upper() == project.sequence
+        assert record.annotations["topology"] == "circular"
+        labels = [
+            f.qualifiers.get("label", [""])[0]
+            for f in record.features if f.type != "source"
+        ]
+        assert labels == ["6xHis"]
+
+    def test_it_can_export_as_fasta(self, auth_client, user):
+        project = Project.objects.create(
+            user=user, name="insert", module="ssd", sequence="ATGAAATAA",
+        )
+        response = auth_client.get(
+            reverse("project-export", args=[project.id]) + "?filetype=fasta"
+        )
+        assert response.status_code == 200
+        assert response.content.decode().startswith(">insert")
+
+    def test_export_is_scoped_to_the_owner(self, auth_client, other_user):
+        """The same rule as every other project endpoint."""
+        theirs = Project.objects.create(
+            user=other_user, name="theirs", module="ssd", sequence="ATG",
+        )
+        response = auth_client.get(reverse("project-export", args=[theirs.id]))
+        assert response.status_code == 404
+
+    def test_export_requires_authentication(self, api_client, user):
+        mine = Project.objects.create(
+            user=user, name="mine", module="ssd", sequence="ATG",
+        )
+        assert api_client.get(
+            reverse("project-export", args=[mine.id])
+        ).status_code == 401

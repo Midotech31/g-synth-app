@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import {
   ApiError,
@@ -7,6 +8,9 @@ import {
   type Catalogue,
   type DesignParams,
 } from "../api/client";
+import DuplexView from "../components/DuplexView";
+import InsertForm from "../components/InsertForm";
+import { segmentColour } from "../components/segmentColour";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
 
@@ -24,21 +28,6 @@ const DEFAULTS: DesignParams = {
   overhang_length: 4,
 };
 
-/** Colour each labelled part of the construct so the cassette reads at a glance. */
-const SEGMENT_COLOURS: Record<string, string> = {
-  overhang: "#c97634",
-  "start codon": "#9e3d3d",
-  linker: "#78889b",
-  "6×His tag": "#0e6e77",
-  site: "#6a4c93",
-  insert: "#3f7a52",
-};
-
-function segmentColour(name: string): string {
-  const key = Object.keys(SEGMENT_COLOURS).find((k) => name.toLowerCase().includes(k.toLowerCase()));
-  return key ? SEGMENT_COLOURS[key] : "#78889b";
-}
-
 export default function Design() {
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [params, setParams] = useState<DesignParams>(DEFAULTS);
@@ -46,6 +35,16 @@ export default function Design() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState("");
+  const location = useLocation();
+
+  // The optimiser hands its gene over rather than making the user copy it.
+  useEffect(() => {
+    const handed = (location.state as { sequence?: string } | null)?.sequence;
+    if (handed) {
+      setParams((current) => ({ ...current, sequence: handed }));
+      setResult(null);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     api.catalogue().then(setCatalogue).catch(() => {
@@ -61,14 +60,6 @@ export default function Design() {
     },
     [],
   );
-
-  const enzymeInfo = useMemo(() => {
-    const byName = new Map((catalogue?.enzymes ?? []).map((e) => [e.name, e]));
-    return {
-      left: byName.get(params.left_enzyme),
-      right: byName.get(params.right_enzyme),
-    };
-  }, [catalogue, params.left_enzyme, params.right_enzyme]);
 
   async function design(saveAsProject = false) {
     setBusy(true);
@@ -93,6 +84,20 @@ export default function Design() {
         `/api/design/assembly/${kind}/`,
         params,
         `${(params.name || "construct").replace(/\s+/g, "_")}_${suffix}`,
+      );
+    } catch {
+      setError("The download failed. Try designing again first.");
+    }
+  }
+
+  /** Take the construct out: GenBank for a viewer, FASTA for a supplier. */
+  async function exportConstruct(filetype: "genbank" | "fasta" | "oligos") {
+    const safe = (params.name || "construct").replace(/\s+/g, "_");
+    const names = { genbank: `${safe}.gb`, fasta: `${safe}.fasta`,
+                    oligos: `${safe}_oligos.fasta` };
+    try {
+      await api.download(
+        `/api/design/assembly/export/?filetype=${filetype}`, params, names[filetype],
       );
     } catch {
       setError("The download failed. Try designing again first.");
@@ -125,120 +130,8 @@ export default function Design() {
           {/* ── Inputs ─────────────────────────────────────────────────── */}
           <div className="card">
             <div className="card-head"><h2>Insert</h2></div>
-            <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-              <div className="field">
-                <label htmlFor="name">Construct name</label>
-                <input
-                  id="name"
-                  type="text"
-                  value={params.name}
-                  onChange={(e) => set("name", e.target.value)}
-                  placeholder="pGS-EntA"
-                />
-              </div>
-
-              <div className="field">
-                <label htmlFor="sequence">Sequence (A/C/G/T)</label>
-                <textarea
-                  id="sequence"
-                  value={params.sequence}
-                  onChange={(e) => set("sequence", e.target.value)}
-                  rows={6}
-                  className="mono"
-                  style={{ fontSize: "0.8rem" }}
-                />
-                <span className="label">
-                  {params.sequence.replace(/[^ACGTacgt]/g, "").length} nt entered
-                </span>
-              </div>
-
-              <div className="row-2">
-                <div className="field">
-                  <label htmlFor="left">5' enzyme</label>
-                  <select id="left" value={params.left_enzyme} onChange={(e) => set("left_enzyme", e.target.value)}>
-                    {catalogue?.enzymes.map((e) => (
-                      <option key={e.name} value={e.name}>{e.name} · {e.recognition}</option>
-                    ))}
-                  </select>
-                  {enzymeInfo.left && (
-                    <span className="label">
-                      {enzymeInfo.left.overhang
-                        ? `${enzymeInfo.left.overhang_type} ${enzymeInfo.left.overhang}`
-                        : "blunt"}
-                      {enzymeInfo.left.supplies_start_codon && " · supplies ATG"}
-                    </span>
-                  )}
-                </div>
-                <div className="field">
-                  <label htmlFor="right">3' enzyme</label>
-                  <select id="right" value={params.right_enzyme} onChange={(e) => set("right_enzyme", e.target.value)}>
-                    {catalogue?.enzymes.map((e) => (
-                      <option key={e.name} value={e.name}>{e.name} · {e.recognition}</option>
-                    ))}
-                  </select>
-                  {enzymeInfo.right && (
-                    <span className="label">
-                      {enzymeInfo.right.overhang
-                        ? `${enzymeInfo.right.overhang_type} ${enzymeInfo.right.overhang}`
-                        : "blunt"}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="field">
-                <label htmlFor="cleavage">Protease site</label>
-                <select
-                  id="cleavage"
-                  value={params.cleavage_site ?? ""}
-                  onChange={(e) => set("cleavage_site", e.target.value || null)}
-                >
-                  <option value="">None</option>
-                  {catalogue?.cleavage_sites.map((c) => (
-                    <option key={c.name} value={c.name}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="checks">
-                <label>
-                  <input type="checkbox" checked={params.include_his_tag}
-                         onChange={(e) => set("include_his_tag", e.target.checked)} />
-                  6×His tag
-                </label>
-                <label>
-                  <input type="checkbox" checked={params.include_linkers}
-                         onChange={(e) => set("include_linkers", e.target.checked)} />
-                  Flexible linkers
-                </label>
-                <label>
-                  <input type="checkbox" checked={params.is_coding}
-                         onChange={(e) => set("is_coding", e.target.checked)} />
-                  Insert already has its own ATG
-                </label>
-                {params.is_coding && (
-                  <label>
-                    <input type="checkbox" checked={params.remove_stop}
-                           onChange={(e) => set("remove_stop", e.target.checked)} />
-                    Remove the stop codon
-                  </label>
-                )}
-              </div>
-
-              <div className="row-2">
-                <div className="field">
-                  <label htmlFor="oligo">Oligo length (nt)</label>
-                  <input id="oligo" type="number" min={20} max={300}
-                         value={params.target_oligo_length}
-                         onChange={(e) => set("target_oligo_length", Number(e.target.value))} />
-                </div>
-                <div className="field">
-                  <label htmlFor="overhang">Junction overhang (nt)</label>
-                  <input id="overhang" type="number" min={4} max={8}
-                         value={params.overhang_length}
-                         onChange={(e) => set("overhang_length", Number(e.target.value))} />
-                </div>
-              </div>
+            <div className="card-body">
+              <InsertForm params={params} catalogue={catalogue} onChange={set} />
             </div>
           </div>
 
@@ -338,14 +231,40 @@ export default function Design() {
 
                 <div className="card">
                   <div className="card-head">
+                    <h2 style={{ flex: 1 }}>Hybridisation</h2>
+                    <span className="label">
+                      {result.duplex.mismatches.length === 0
+                        ? "no mismatches"
+                        : `${result.duplex.mismatches.length} mismatches`}
+                    </span>
+                  </div>
+                  <div className="card-body">
+                    <DuplexView duplex={result.duplex} />
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-head">
                     <h2 style={{ flex: 1 }}>Oligos to order</h2>
                     <button className="btn btn-outline" onClick={() => download("order-sheet")}
-                            disabled={!verified}>
-                      Download CSV
+                            disabled={!verified} title="The order sheet as a spreadsheet">
+                      CSV
+                    </button>
+                    <button className="btn btn-outline"
+                            onClick={() => void exportConstruct("oligos")}
+                            disabled={!verified}
+                            title="One FASTA entry per oligo — most suppliers take an upload">
+                      Oligo FASTA
                     </button>
                     <button className="btn btn-outline" onClick={() => download("protocol")}
                             disabled={!verified}>
-                      Download protocol
+                      Protocol
+                    </button>
+                    <button className="btn btn-outline"
+                            onClick={() => void exportConstruct("genbank")}
+                            disabled={!verified}
+                            title="The construct with its cassette labelled">
+                      GenBank
                     </button>
                     <button className="btn btn-primary" onClick={() => design(true)} disabled={busy}>
                       Save project
@@ -356,7 +275,11 @@ export default function Design() {
                       <thead>
                         <tr>
                           <th>Name</th><th>Sequence (5'→3')</th>
-                          <th>Length</th><th>Tm</th><th>Scale</th><th>Purification</th>
+                          <th>Length</th>
+                          <th title={`${result.tm_conditions.model} · ${result.tm_conditions.summary}`}>
+                            Tm
+                          </th>
+                          <th>Scale</th><th>Purification</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -372,6 +295,12 @@ export default function Design() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="card-body" style={{ paddingTop: 0 }}>
+                    <p className="note" style={{ margin: 0 }}>
+                      Tm from the {result.tm_conditions.model} model, under the
+                      conditions of the annealing step — {result.tm_conditions.summary}.
+                    </p>
                   </div>
                 </div>
 
