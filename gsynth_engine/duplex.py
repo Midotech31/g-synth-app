@@ -32,7 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from gsynth_engine.merzoug import AssemblyPlan, OligoPair
-from gsynth_engine.sequence import complement, reverse_complement
+from gsynth_engine.sequence import SequenceError, complement, reverse_complement
 
 #: A column with no strand present.
 GAP = " "
@@ -278,4 +278,121 @@ def fragment_duplex(fragment: OligoPair) -> DuplexView:
         ],
         left_overhang=fragment.left_overhang,
         right_overhang=fragment.right_overhang,
+    )
+
+
+# ── Junctions ───────────────────────────────────────────────────────────────
+
+
+@dataclass
+class JunctionView:
+    """One ligation seam, drawn twice: before the join and after it.
+
+    A banner saying "the overhangs match" asks to be believed. Showing the
+    two ends about to anneal, base against base, can be checked — and it is
+    the only rendering in which an overhang that is one base short, or the
+    right sequence on the wrong strand, looks obviously wrong instead of
+    looking like a passing test.
+    """
+
+    name: str
+    enzyme: str
+    overhang: str
+    kind: str                 #: 5', 3' or blunt
+    compatible: bool
+    reason: str = ""
+
+    #: The two ends as they exist before ligation, in one frame each.
+    left_top: str = ""
+    left_bottom: str = ""
+    right_top: str = ""
+    right_bottom: str = ""
+
+    #: The same region after ligation, and where the seam falls in it.
+    joined_top: str = ""
+    joined_bottom: str = ""
+    joined_pairs: str = ""
+    seam: int = 0
+    #: Columns the overhang occupies in the joined frame, for highlighting.
+    overhang_span: tuple[int, int] = (0, 0)
+
+    @property
+    def width(self) -> int:
+        return len(self.joined_top)
+
+
+def junction_view(
+    plasmid: str,
+    *,
+    name: str,
+    enzyme: str,
+    position: int,
+    overhang: str,
+    kind: str,
+    strand: str,
+    flank: int = 18,
+) -> JunctionView:
+    """Draw one seam of a finished plasmid as the two ends that made it.
+
+    `position` is where the upstream piece's top strand ends. `strand` says
+    which strand carried the overhang on the *upstream* side, which is what
+    decides how the two ends are staggered before they meet.
+
+    The ends are reconstructed from the ligated molecule rather than kept
+    from the design, so what is drawn is what the plasmid actually contains.
+    A drawing taken from the plan would agree with the plan by construction
+    and could not catch anything.
+    """
+    length = len(plasmid)
+    if length == 0:
+        raise SequenceError("The plasmid is empty.")
+
+    def at(index: int) -> str:
+        return plasmid[index % length]
+
+    width = len(overhang)
+    joined_top = "".join(at(position + i) for i in range(-flank, flank))
+    joined_bottom = complement(joined_top)
+    seam = flank
+
+    # Where each strand was cut, in this frame. The top cut is the seam; the
+    # bottom cut sits `width` away, on whichever side the polarity puts it.
+    top_cut = seam
+    if kind == "blunt":
+        bottom_cut = seam
+    elif kind == "5'":
+        bottom_cut = seam + width
+    else:
+        bottom_cut = seam - width
+
+    low, high = min(top_cut, bottom_cut), max(top_cut, bottom_cut)
+
+    # Before ligation, *both* pieces carry the overhang — on opposite strands.
+    # That is what lets them anneal, and a drawing that gives it to only one
+    # of them shows a join that could not happen.
+    left_top = joined_top[:top_cut].ljust(high, GAP)
+    left_bottom = joined_bottom[:bottom_cut].ljust(high, GAP)
+    right_top = (GAP * (top_cut - low)) + joined_top[top_cut:]
+    right_bottom = (GAP * (bottom_cut - low)) + joined_bottom[bottom_cut:]
+
+    pairs = "".join(
+        "|" if a != GAP and b != GAP and complement(a) == b else GAP
+        for a, b in zip(joined_top, joined_bottom)
+    )
+
+    span = (low, high)
+    found = joined_top[low:high]
+    compatible = kind == "blunt" or found == overhang
+    reason = "" if compatible else (
+        f"The plasmid reads {found} across the seam where {enzyme} leaves "
+        f"{overhang}."
+    )
+
+    return JunctionView(
+        name=name, enzyme=enzyme, overhang=overhang, kind=kind,
+        compatible=compatible, reason=reason,
+        left_top=left_top, left_bottom=left_bottom,
+        right_top=right_top, right_bottom=right_bottom,
+        joined_top=joined_top, joined_bottom=joined_bottom, joined_pairs=pairs,
+        seam=seam, overhang_span=span,
     )

@@ -14,7 +14,12 @@ from gsynth_engine.constants import (
     RESTRICTION_ENZYMES,
     overhang,
 )
-from gsynth_engine.cloning import CloningResult, clone, open_reading_frames
+from gsynth_engine.cloning import (
+    CloningResult,
+    clone,
+    find_sites,
+    open_reading_frames,
+)
 from gsynth_engine.codon import (
     ECOLI,
     Constraints,
@@ -22,7 +27,7 @@ from gsynth_engine.codon import (
     build_table,
     optimise,
 )
-from gsynth_engine.duplex import DuplexView, construct_duplex
+from gsynth_engine.duplex import DuplexView, construct_duplex, junction_view
 from gsynth_engine.align import PROTEIN_SCORING, Scoring, align, blosum62
 from gsynth_engine.genbank import oligos_to_fasta, to_fasta, to_genbank
 from gsynth_engine.ligation import ligation_series, plan_ligation
@@ -168,6 +173,107 @@ def _assembly_payload(plan: AssemblyPlan, construct_name: str) -> dict:
     }
 
 
+#: Enzymes worth marking on a recombinant map. Every one G-Synth knows,
+#: because "does anything else cut here" is the question that decides
+#: whether a diagnostic digest will work.
+def _restriction_annotations(plasmid: str, highlight: tuple[str, ...]) -> list[dict]:
+    """Every single-cutter, plus the pair used, as drawable features.
+
+    Single cutters only: a site that appears eleven times is noise on a map
+    and useless for a diagnostic digest. The two cloning enzymes are marked
+    even when they cut more than once, because that is exactly the case the
+    user needs to see.
+    """
+    out: list[dict] = []
+    for enzyme in sorted(RESTRICTION_ENZYMES):
+        sites = find_sites(plasmid, enzyme, circular=True)
+        if not sites:
+            continue
+        used = enzyme in highlight
+        if len(sites) > 1 and not used:
+            continue
+        site = str(RESTRICTION_ENZYMES[enzyme]["recognition"])
+        for position in sites:
+            end = position + len(site)
+            out.append({
+                "name": enzyme,
+                "type": "restriction_site",
+                "start": position,
+                "end": end,
+                "direction": 1,
+                "color": "#9E3D3D" if used else "#78889B",
+                "cuts": len(sites),
+                "used": used,
+                "recognition": site,
+                # A circular molecule has no beginning, so a site can straddle
+                # position 0. The coordinates stay honest and say so, rather
+                # than being clamped into a feature that is not the site.
+                "wraps": end > len(plasmid),
+            })
+    return out
+
+
+def _validation(result: CloningResult, duplex_mismatches: list[int]) -> list[dict]:
+    """The checks, each stated as a claim that passed or did not.
+
+    One banner collapses a dozen distinct questions into a colour. Listing
+    them separately means a design that fails on orientation and a design
+    that fails on a duplicated site do not look alike.
+    """
+    junctions_ok = all(j.site_regenerated for j in result.junctions)
+    ends_ok = not any("does not match" in p for p in result.problems)
+    frame_ok = not any("truncated" in p for p in result.problems)
+
+    return [
+        {
+            "check": "Overhangs are compatible",
+            "passed": ends_ok,
+            "detail": " ".join(p for p in result.problems if "does not match" in p)
+            or f"{result.left_enzyme} and {result.right_enzyme} ends match the vector.",
+        },
+        {
+            "check": "Both strands pair everywhere",
+            "passed": not duplex_mismatches,
+            "detail": (
+                f"{len(duplex_mismatches)} positions do not pair."
+                if duplex_mismatches else "No mismatch in the insert duplex."
+            ),
+        },
+        {
+            "check": "Each enzyme cuts the vector once",
+            "passed": True,          # a second site raises before we get here
+            "detail": "Checked when the vector was cut; a second site is refused.",
+        },
+        {
+            "check": "Orientation is forced",
+            "passed": result.left_enzyme != result.right_enzyme,
+            "detail": (
+                "The insert reads on the minus strand of the vector's own "
+                "numbering, as every pET cassette does."
+                if result.reversed_insert
+                else "The insert reads with the vector's numbering."
+            ),
+        },
+        {
+            "check": "Sites are regenerated at both seams",
+            "passed": junctions_ok,
+            "detail": (
+                "The insert can be cut back out — which is how the clone gets "
+                "verified on a gel."
+                if junctions_ok else
+                "At least one site is lost, so the insert cannot be excised."
+            ),
+        },
+        {
+            "check": "Reading frame survives the junction",
+            "passed": frame_ok,
+            "detail": " ".join(p for p in result.problems if "truncated" in p)
+            or (f"{len(result.protein)} residues translated."
+                if result.protein else "No reading frame was given."),
+        },
+    ]
+
+
 def _clone_payload(result: CloningResult, ssd: SSDResult, plan) -> dict:
     """The recombinant plasmid, shaped for a map viewer.
 
@@ -226,6 +332,42 @@ def _clone_payload(result: CloningResult, ssd: SSDResult, plan) -> dict:
             for junction in result.junctions
         ],
         "orfs": open_reading_frames(result.plasmid, minimum_codons=40)[:5],
+        # Each seam drawn as the two ends that made it, so "the overhangs
+        # match" can be checked rather than believed.
+        "junction_views": [
+            {
+                "name": view.name,
+                "enzyme": view.enzyme,
+                "overhang": view.overhang,
+                "kind": view.kind,
+                "compatible": view.compatible,
+                "reason": view.reason,
+                "left_top": view.left_top,
+                "left_bottom": view.left_bottom,
+                "right_top": view.right_top,
+                "right_bottom": view.right_bottom,
+                "joined_top": view.joined_top,
+                "joined_bottom": view.joined_bottom,
+                "joined_pairs": view.joined_pairs,
+                "seam": view.seam,
+                "overhang_span": list(view.overhang_span),
+            }
+            for view in (
+                junction_view(
+                    result.plasmid, name=j.name, enzyme=j.enzyme,
+                    position=j.position, overhang=j.overhang, kind=j.kind,
+                    strand="", flank=18,
+                )
+                for j in result.junctions
+            )
+        ],
+        "restriction_sites": _restriction_annotations(
+            result.plasmid, (result.left_enzyme, result.right_enzyme),
+        ),
+        "validation": _validation(
+            result,
+            construct_duplex(plan).mismatches() if plan else [],
+        ),
         "warnings": result.warnings,
         # Empty means these two molecules really do join.
         "problems": result.problems,

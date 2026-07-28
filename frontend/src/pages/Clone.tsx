@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SeqViz } from "seqviz";
 
 import {
@@ -11,6 +11,7 @@ import {
   type VectorSpec,
 } from "../api/client";
 import InsertForm from "../components/InsertForm";
+import JunctionDuplex from "../components/JunctionDuplex";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
 
@@ -53,6 +54,11 @@ export default function Clone() {
   const [vectors, setVectors] = useState<VectorSpec[]>([]);
   const [vector, setVector] = useState<Vector>(EMPTY_VECTOR);
   const [result, setResult] = useState<CloneResult | null>(null);
+  const [fragment, setFragment] = useState(true);
+  const [mapView, setMapView] = useState<"circular" | "linear" | "both">("circular");
+  const [showSites, setShowSites] = useState(true);
+  const [onlyUsedSites, setOnlyUsedSites] = useState(false);
+  const [showEnds, setShowEnds] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState("");
@@ -177,6 +183,7 @@ export default function Clone() {
         vector_name: vector.name,
         vector_annotations: vector.bundled ? undefined : vector.annotations,
         vector_is_circular: vector.circular,
+        fragment,
         save_as_project: saveAsProject,
       });
       setResult(data);
@@ -202,6 +209,7 @@ export default function Clone() {
           vector_name: vector.name,
           vector_annotations: vector.bundled ? undefined : vector.annotations,
           vector_is_circular: vector.circular,
+          fragment,
         },
         `${safe}.${filetype === "fasta" ? "fasta" : "gb"}`,
       );
@@ -209,6 +217,43 @@ export default function Clone() {
       setError("The download failed. Try cloning again first.");
     }
   }
+
+  /** What the map draws: the features, plus restriction sites when asked.
+   *
+   * A site that straddles the origin has an end past the sequence length,
+   * which the viewer cannot place — it stays in the count but is not drawn.
+   */
+  /** Sites the filters keep, and of those the ones the viewer can place. */
+  const chosenSites = useMemo(
+    () => (result?.restriction_sites ?? []).filter(
+      (site) => (onlyUsedSites ? site.used : true),
+    ),
+    [result, onlyUsedSites],
+  );
+  const visibleSites = useMemo(
+    () => chosenSites.filter((site) => !site.wraps),
+    [chosenSites],
+  );
+
+  const mapAnnotations = useMemo(() => {
+    const base = (result?.annotations ?? []).map((a) => ({
+      name: a.name,
+      start: a.start,
+      end: a.end,
+      direction: (a.direction === -1 ? -1 : 1) as 1 | -1,
+      color: a.color,
+    }));
+    if (!result || !showSites) return base;
+
+    const sites = visibleSites.map((site) => ({
+        name: site.name,
+        start: site.start,
+        end: site.end,
+        direction: 1 as 1,
+        color: site.color,
+      }));
+    return [...base, ...sites];
+  }, [result, showSites, visibleSites]);
 
   const vectorLength = vector.sequence.replace(/[^ACGTacgt]/g, "").length;
   const ready = vectorLength > 0 && params.sequence.trim().length > 0;
@@ -356,8 +401,16 @@ export default function Clone() {
                   params={params}
                   catalogue={catalogue}
                   onChange={set}
+                  showFragmentation={fragment}
                   idPrefix="clone-"
                 />
+                <div className="checks">
+                  <label>
+                    <input type="checkbox" checked={!fragment}
+                           onChange={(e) => { setFragment(!e.target.checked); setResult(null); }} />
+                    Clone the SSD duplex as it is, without fragmenting it
+                  </label>
+                </div>
               </div>
             </div>
           </div>
@@ -429,26 +482,89 @@ export default function Clone() {
                   </div>
                 </div>
 
-                <div className="card seq-stage" style={{ minHeight: 460 }}>
-                  <SeqViz
-                    name={result.name}
-                    seq={result.plasmid}
-                    annotations={result.annotations.map((a) => ({
-                      name: a.name,
-                      start: a.start,
-                      end: a.end,
-                      direction: (a.direction === -1 ? -1 : 1) as 1 | -1,
-                      color: a.color,
-                    }))}
-                    viewer="circular"
-                    showIndex
-                    style={{ height: "100%", width: "100%" }}
-                  />
+                <div className="card">
+                  <div className="card-head">
+                    <h2 style={{ flex: 1 }}>Map</h2>
+                    <div className="seg-toggle">
+                      {(["circular", "linear", "both"] as const).map((option) => (
+                        <button key={option} type="button"
+                                className={mapView === option ? "on" : ""}
+                                onClick={() => setMapView(option)}>
+                          {option[0].toUpperCase() + option.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="card-body" style={{ paddingBottom: "0.5rem" }}>
+                    <div className="map-filters">
+                      <label>
+                        <input type="checkbox" checked={showSites}
+                               onChange={(e) => setShowSites(e.target.checked)} />
+                        Restriction sites
+                      </label>
+                      <label>
+                        <input type="checkbox" checked={onlyUsedSites}
+                               disabled={!showSites}
+                               onChange={(e) => setOnlyUsedSites(e.target.checked)} />
+                        Only the pair used for cloning
+                      </label>
+                      {showSites && (
+                        <span className="label">
+                          {visibleSites.length} of {chosenSites.length} sites drawn
+                          {chosenSites.length > visibleSites.length && (
+                            <>
+                              {" · "}
+                              {chosenSites.length - visibleSites.length} spans the
+                              origin
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="seq-stage" style={{ minHeight: 460 }}>
+                    <SeqViz
+                      name={result.name}
+                      seq={result.plasmid}
+                      annotations={mapAnnotations}
+                      viewer={mapView}
+                      showIndex
+                      style={{ height: "100%", width: "100%" }}
+                    />
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-head">
+                    <h2 style={{ flex: 1 }}>Checks</h2>
+                    <span className="label">
+                      {result.validation.filter((c) => c.passed).length}
+                      {" of "}{result.validation.length} passed
+                    </span>
+                  </div>
+                  <div className="card-body">
+                    <ul className="check-list">
+                      {result.validation.map((row) => (
+                        <li key={row.check} className={row.passed ? "ok" : "bad"}>
+                          <span className="mark">{row.passed ? "✓" : "✕"}</span>
+                          <span>
+                            <strong>{row.check}</strong>
+                            <span className="detail">{row.detail}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
 
                 <div className="card">
                   <div className="card-head">
                     <h2 style={{ flex: 1 }}>Junctions</h2>
+                    <label className="inline-check">
+                      <input type="checkbox" checked={showEnds}
+                             onChange={(e) => setShowEnds(e.target.checked)} />
+                      Show the ends before ligation
+                    </label>
                     <button className="btn btn-outline"
                             onClick={() => void exportPlasmid("genbank")}
                             disabled={!result.is_clonable}
@@ -468,29 +584,15 @@ export default function Clone() {
                       Save plasmid
                     </button>
                   </div>
-                  <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
-                    {result.junctions.map((junction) => (
-                      <div key={junction.name} className="junction">
-                        <div className="junction-head">
-                          <strong>{junction.name}</strong>
-                          <span className="label">
-                            {junction.enzyme} · {junction.kind} {junction.overhang || "blunt"}
-                          </span>
-                          <span className="grow" />
-                          <span className={junction.site_regenerated ? "pill pill-ok" : "pill"}>
-                            {junction.site_regenerated ? "site regenerated" : "site lost"}
-                          </span>
-                        </div>
-                        <div className="junction-seq">
-                          <span>{junction.context.slice(0, 12)}</span>
-                          <span className="seam" />
-                          <span>{junction.context.slice(12)}</span>
-                        </div>
-                      </div>
+                  <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+                    {result.junction_views.map((view) => (
+                      <JunctionDuplex key={view.name} view={view} showEnds={showEnds} />
                     ))}
                     <p className="note" style={{ margin: 0 }}>
-                      A regenerated site means the insert can be cut back out —
-                      which is how the clone gets verified on a gel.
+                      Coloured bases are the overhang. Both pieces carry it, on
+                      opposite strands — that is what lets them anneal, and a
+                      site that survives the join is how the clone gets
+                      verified on a gel.
                     </p>
                   </div>
                 </div>

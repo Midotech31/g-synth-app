@@ -143,6 +143,33 @@ export type Junction = {
   site_regenerated: boolean;
 };
 
+export type JunctionView = {
+  name: string;
+  enzyme: string;
+  overhang: string;
+  kind: string;
+  compatible: boolean;
+  reason: string;
+  left_top: string;
+  left_bottom: string;
+  right_top: string;
+  right_bottom: string;
+  joined_top: string;
+  joined_bottom: string;
+  joined_pairs: string;
+  seam: number;
+  overhang_span: [number, number];
+};
+
+export type RestrictionSite = Annotation & {
+  cuts: number;
+  used: boolean;
+  recognition: string;
+  wraps: boolean;
+};
+
+export type ValidationCheck = { check: string; passed: boolean; detail: string };
+
 export type Orf = {
   start: number;
   end: number;
@@ -176,6 +203,9 @@ export type CloneResult = {
   annotations: Annotation[];
   junctions: Junction[];
   orfs: Orf[];
+  junction_views: JunctionView[];
+  restriction_sites: RestrictionSite[];
+  validation: ValidationCheck[];
   warnings: string[];
   /** Empty means these two molecules really do join. */
   problems: string[];

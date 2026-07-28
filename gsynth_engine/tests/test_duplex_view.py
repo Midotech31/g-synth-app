@@ -13,9 +13,10 @@ from gsynth_engine.duplex import (
     GAP,
     construct_duplex,
     fragment_duplex,
+    junction_view,
 )
 from gsynth_engine.merzoug import design_merzoug_assembly
-from gsynth_engine.sequence import complement, reverse_complement
+from gsynth_engine.sequence import SequenceError, complement, reverse_complement
 
 INSERT = "ATG" + "GCTAGCAAAGGTTTCCGTGAAGATCTGGCAAAATTCCTGCAGGCTAACGGT" * 3
 
@@ -268,3 +269,124 @@ class TestFragmentView:
             plan.fragments, view.top_fragments, view.bottom_fragments
         ):
             assert bottom_span.start - top_span.start == fragment.bottom_offset
+
+
+# ── Junctions ───────────────────────────────────────────────────────────────
+
+
+class TestJunctionView:
+    """A banner saying "the overhangs match" asks to be believed. The two
+    ends drawn about to anneal can be checked."""
+
+    def build(self, pair: str = "NdeI / XhoI", insert_length: int = 60):
+        from gsynth_engine import vectors
+        from gsynth_engine.cloning import clone
+        from gsynth_engine.tests.test_cloning import build_vector, clean_filler
+
+        left, right = (p.strip() for p in pair.split("/"))
+        vector = (
+            vectors.sequence_of("pET-21a")["sequence"]
+            if pair == "NdeI / XhoI" else build_vector(left, right)
+        )
+        design = design_merzoug_assembly(
+            clean_filler(insert_length, 3), enzyme_pair=pair,
+            target_oligo_length=200,
+        )
+        return clone(
+            vector, design.construct_forward,
+            insert_reverse=design.construct_reverse,
+            left_enzyme=left, right_enzyme=right, name="X",
+        )
+
+    def view_of(self, result, index: int = 0):
+        junction = result.junctions[index]
+        return junction_view(
+            result.plasmid, name=junction.name, enzyme=junction.enzyme,
+            position=junction.position, overhang=junction.overhang,
+            kind=junction.kind, strand="", flank=14,
+        )
+
+    def test_the_joined_strands_pair_everywhere(self):
+        view = self.view_of(self.build())
+        assert view.joined_pairs.count("|") == len(view.joined_top)
+
+    def test_the_joined_top_is_really_the_plasmid(self):
+        """Drawn from the ligated molecule, not from the plan. A drawing
+        taken from the plan agrees with the plan by construction."""
+        result = self.build()
+        junction = result.junctions[0]
+        view = self.view_of(result)
+
+        expected = "".join(
+            result.plasmid[(junction.position + i) % len(result.plasmid)]
+            for i in range(-14, 14)
+        )
+        assert view.joined_top == expected
+
+    def test_both_pieces_carry_the_overhang_on_opposite_strands(self):
+        """That is what lets them anneal. A drawing that gives it to one
+        piece only shows a join that could not happen."""
+        view = self.view_of(self.build())
+        low, high = view.overhang_span
+
+        # One strand runs to the seam, the other past it, on each side.
+        left_top_bases = len(view.left_top.rstrip(GAP))
+        left_bottom_bases = len(view.left_bottom.rstrip(GAP))
+        assert left_top_bases != left_bottom_bases
+
+        right_top_gap = len(view.right_top) - len(view.right_top.lstrip(GAP))
+        right_bottom_gap = len(view.right_bottom) - len(view.right_bottom.lstrip(GAP))
+        assert right_top_gap != right_bottom_gap
+        assert high - low == len(view.overhang)
+
+    def test_the_overhang_span_holds_the_enzymes_overhang(self):
+        view = self.view_of(self.build())
+        low, high = view.overhang_span
+        assert view.joined_top[low:high] == view.overhang
+        assert view.compatible
+
+    def test_a_three_prime_overhang_staggers_the_other_way(self):
+        """KpnI leaves its overhang on the strand a 5' cutter does not."""
+        five = self.view_of(self.build("NdeI / XhoI"))
+        three = self.view_of(self.build("KpnI / SacI"))
+
+        assert five.kind == "5'" and three.kind == "3'"
+        # For a 5' cut the overhang lies after the seam; for a 3' cut, before.
+        assert five.overhang_span[0] >= five.seam
+        assert three.overhang_span[1] <= three.seam
+
+    def test_a_blunt_junction_has_no_overhang_to_show(self):
+        view = self.view_of(self.build("EcoRV / SmaI"))
+        assert view.kind == "blunt"
+        assert view.overhang_span[0] == view.overhang_span[1]
+        assert view.compatible
+
+    def test_both_junctions_of_a_construct_are_drawable(self):
+        result = self.build()
+        for index in range(len(result.junctions)):
+            view = self.view_of(result, index)
+            assert view.compatible, view.reason
+            assert view.width == 28
+
+    def test_a_corrupted_seam_is_reported_not_drawn_as_fine(self):
+        """One base changed at the junction must stop it reading as a match."""
+        result = self.build()
+        junction = result.junctions[0]
+        at = junction.position
+        broken = (
+            result.plasmid[:at]
+            + ("G" if result.plasmid[at] != "G" else "C")
+            + result.plasmid[at + 1:]
+        )
+        view = junction_view(
+            broken, name=junction.name, enzyme=junction.enzyme,
+            position=junction.position, overhang=junction.overhang,
+            kind=junction.kind, strand="", flank=14,
+        )
+        assert not view.compatible
+        assert junction.overhang in view.reason
+
+    def test_an_empty_plasmid_is_refused(self):
+        with pytest.raises(SequenceError, match="plasmid is empty"):
+            junction_view("", name="x", enzyme="NdeI", position=0,
+                          overhang="TA", kind="5'", strand="")

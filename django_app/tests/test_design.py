@@ -1121,3 +1121,90 @@ class TestPrimerExport:
         assert api_client.post(reverse(self.url_name), {
             "template": "ACGT" * 100, "target_start": 10, "target_end": 50,
         }).status_code == 401
+
+
+@pytest.mark.django_db
+class TestValidationAndJunctionViews:
+    """The checks the user asked to be able to *see* rather than infer."""
+
+    def cloned(self, auth_client, **extra):
+        payload = {
+            "sequence": LONG_INSERT, "vector_key": "pET-21a", "name": "EntA",
+        }
+        payload.update(extra)
+        return auth_client.post(reverse("design-clone"), payload).data
+
+    def test_each_seam_comes_back_as_a_drawable_duplex(self, auth_client):
+        data = self.cloned(auth_client)
+        views = data["junction_views"]
+        assert len(views) == 2
+
+        for view in views:
+            assert view["compatible"], view["reason"]
+            assert len(view["joined_top"]) == len(view["joined_bottom"])
+            assert view["joined_pairs"].count("|") == len(view["joined_top"])
+
+    def test_the_overhang_is_located_in_the_drawing(self, auth_client):
+        """So "the overhangs match" is checkable rather than asserted."""
+        data = self.cloned(auth_client)
+        for view in data["junction_views"]:
+            low, high = view["overhang_span"]
+            assert view["joined_top"][low:high] == view["overhang"]
+            assert high - low == len(view["overhang"])
+
+    def test_both_ends_carry_the_overhang_before_ligation(self, auth_client):
+        """On opposite strands — that is what lets them anneal."""
+        view = self.cloned(auth_client)["junction_views"][0]
+        assert view["left_top"].rstrip() != view["left_bottom"].rstrip()
+        assert view["right_top"].lstrip() != view["right_bottom"].lstrip()
+
+    def test_the_validation_list_states_each_check_separately(self, auth_client):
+        """One banner collapses a dozen questions into a colour."""
+        data = self.cloned(auth_client)
+        checks = {row["check"]: row for row in data["validation"]}
+
+        assert {"Overhangs are compatible", "Both strands pair everywhere",
+                "Each enzyme cuts the vector once", "Orientation is forced",
+                "Sites are regenerated at both seams",
+                "Reading frame survives the junction"} <= set(checks)
+        assert all(row["passed"] for row in data["validation"]), checks
+        assert all(row["detail"] for row in data["validation"])
+
+    def test_a_failing_check_says_which_one(self, auth_client):
+        """A design that fails on the frame must not look like one that
+        fails on the ends."""
+        data = self.cloned(
+            auth_client,
+            sequence="GGCTAAATCGTGGAACAGTGCTGCACCAGCTGCAGCCTGTACCAGCTGGAA",
+        )
+        failed = [row["check"] for row in data["validation"] if not row["passed"]]
+        assert failed == ["Reading frame survives the junction"]
+
+    def test_restriction_sites_are_annotated_on_the_map(self, auth_client):
+        data = self.cloned(auth_client)
+        sites = {s["name"]: s for s in data["restriction_sites"]}
+
+        assert "NdeI" in sites and "XhoI" in sites
+        assert sites["NdeI"]["used"] is True
+        assert all(s["cuts"] == 1 for s in data["restriction_sites"] if not s["used"])
+
+    def test_an_annotated_site_really_is_where_it_says(self, auth_client):
+        data = self.cloned(auth_client)
+        from gsynth_engine.sequence import reverse_complement
+
+        plasmid = data["plasmid"]
+        length = len(plasmid)
+        for site in data["restriction_sites"]:
+            # A circular molecule has no beginning: a site can straddle it.
+            found = "".join(
+                plasmid[i % length] for i in range(site["start"], site["end"])
+            )
+            assert found in (site["recognition"],
+                             reverse_complement(site["recognition"])), site["name"]
+            assert site["wraps"] == (site["end"] > length)
+
+    def test_multi_cutters_are_left_off_unless_they_are_the_pair(self, auth_client):
+        """A site appearing eleven times is noise on a map."""
+        data = self.cloned(auth_client)
+        for site in data["restriction_sites"]:
+            assert site["cuts"] == 1 or site["used"]
