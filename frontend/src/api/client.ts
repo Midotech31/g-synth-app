@@ -169,6 +169,10 @@ export type CloneResult = {
   right_enzyme: string;
   protein: string;
   protein_length: number;
+  /** True when the insert reads on the minus strand of the vector's numbering. */
+  reversed_insert: boolean;
+  tags: { name: string; end: string; present: boolean; position: number | null; note: string }[];
+  vector: { recognised: boolean; spec: VectorSpec | null; check: VectorCheck | null };
   annotations: Annotation[];
   junctions: Junction[];
   orfs: Orf[];
@@ -181,8 +185,51 @@ export type CloneResult = {
   project_id?: number;
 };
 
+export type VectorTag = { name: string; end: string; note: string };
+
+/** A backbone G-Synth knows about. `has_sequence` means it ships with one. */
+export type VectorSpec = {
+  key: string;
+  name: string;
+  length: number;
+  resistance: string;
+  promoter: string;
+  host: string;
+  supplier: string;
+  summary: string;
+  unique_sites: string[];
+  recommended_pairs: string[];
+  tags: VectorTag[];
+  notes: string[];
+  reference: string;
+  has_sequence: boolean;
+  supplies_translation_start: boolean;
+  tag_summary: string;
+};
+
+export type VectorRecord = {
+  key: string;
+  name: string;
+  length: number;
+  topology: string;
+  source: string;
+  sequence: string;
+  annotations: Annotation[];
+  spec: VectorSpec;
+};
+
+export type VectorCheck = {
+  matches: boolean;
+  length: number;
+  problems: string[];
+  notes: string[];
+  found_motifs: string[];
+  missing_motifs: string[];
+};
+
 export type CloneParams = DesignParams & {
-  vector: string;
+  vector_key?: string;
+  vector?: string;
   vector_name?: string;
   vector_annotations?: Annotation[];
   vector_is_circular?: boolean;
@@ -400,6 +447,16 @@ export const api = {
 
   clone: (params: CloneParams) =>
     request<CloneResult>("/api/design/clone/", { method: "POST", body: params }),
+
+  vectors: () =>
+    request<{ vectors: VectorSpec[]; default: string }>("/api/design/vectors/", {
+      auth: false,
+    }),
+
+  vectorSequence: (key: string) =>
+    request<VectorRecord>(`/api/design/vectors/${encodeURIComponent(key)}/`, {
+      auth: false,
+    }),
 
   /** Downloads stream as files, so they bypass the JSON request helper. */
   download: async (path: string, params: DesignParams, filename: string) => {

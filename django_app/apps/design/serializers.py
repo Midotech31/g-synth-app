@@ -12,10 +12,12 @@ from gsynth_engine.constants import (
     RESTRICTION_ENZYMES,
 )
 from gsynth_engine.merzoug import MAX_OVERHANG, MIN_OVERHANG
+from gsynth_engine.vectors import CATALOGUE, DEFAULT_VECTOR
 from rest_framework import serializers
 
 ENZYME_NAMES = sorted(RESTRICTION_ENZYMES)
 CLEAVAGE_NAMES = sorted(CLEAVAGE_SITES)
+VECTOR_KEYS = [spec.key for spec in CATALOGUE]
 
 
 class DesignRequestSerializer(serializers.Serializer):
@@ -132,11 +134,20 @@ class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
     endpoints cannot disagree about what is being cloned.
     """
 
-    vector = serializers.CharField(
-        max_length=2_000_000,
-        help_text="The vector's full sequence. Circular; the origin can be anywhere.",
+    #: Either name a catalogue vector, or supply a sequence — not neither.
+    vector_key = serializers.ChoiceField(
+        choices=VECTOR_KEYS, required=False, allow_blank=True,
+        default=DEFAULT_VECTOR.key,
+        help_text="A catalogue vector. Its bundled sequence is used unless one "
+                  "is supplied, and either way the supplied sequence is checked "
+                  "against the entry.",
     )
-    vector_name = serializers.CharField(max_length=200, required=False, default="vector")
+    vector = serializers.CharField(
+        max_length=2_000_000, required=False, allow_blank=True, default="",
+        help_text="The vector's full sequence. Circular; the origin can be "
+                  "anywhere. Optional when vector_key names a bundled vector.",
+    )
+    vector_name = serializers.CharField(max_length=200, required=False, default="")
     vector_annotations = VectorAnnotationSerializer(many=True, required=False)
     vector_is_circular = serializers.BooleanField(
         default=True,
@@ -148,3 +159,37 @@ class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
         default=True,
         help_text="False clones the SSD duplex directly, without fragmenting it.",
     )
+
+
+def resolve_vector(data: dict) -> tuple[str, str, list[dict], object]:
+    """Work out which vector to cut, from a key, a sequence, or both.
+
+    Returns (sequence, name, annotations, spec). A supplied sequence always
+    wins over the bundled one — a lab's own copy of a backbone is the one on
+    their bench — but it is still checked against the catalogue entry, so a
+    substitution is caught rather than silently cloned into.
+    """
+    from gsynth_engine import vectors as catalogue
+
+    key = data.get("vector_key") or ""
+    supplied = (data.get("vector") or "").strip()
+    spec = catalogue.get(key) if key else None
+
+    if supplied:
+        sequence = supplied
+        # An unnamed sequence may still be recognisable.
+        spec = spec or catalogue.identify(supplied)
+    else:
+        record = catalogue.sequence_of(spec.key) if spec else None
+        if record is None:
+            raise serializers.ValidationError({
+                "vector": "No vector sequence. Choose a vector whose sequence "
+                          "ships with G-Synth, or paste or import your own.",
+            })
+        sequence = record["sequence"]
+        if not data.get("vector_annotations"):
+            data["vector_annotations"] = record["annotations"]
+
+    name = data.get("vector_name") or (spec.name if spec else "vector")
+    annotations = [dict(f) for f in (data.get("vector_annotations") or [])]
+    return sequence, name, annotations, spec

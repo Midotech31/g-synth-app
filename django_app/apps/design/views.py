@@ -21,6 +21,7 @@ from gsynth_engine.protocol import bench_protocol, order_sheet, order_sheet_csv
 from gsynth_engine.sequence import SequenceError, gc_content
 from gsynth_engine.ssd import SSDResult, design_small_sequence
 from gsynth_engine.thermo import ANNEALING
+from gsynth_engine import vectors as vector_catalogue
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -29,6 +30,7 @@ from rest_framework.views import APIView
 from apps.design.serializers import (
     CLEAVAGE_NAMES,
     CloneRequestSerializer,
+    resolve_vector,
     SaveableAssemblyRequestSerializer,
     SSDRequestSerializer,
 )
@@ -179,6 +181,19 @@ def _clone_payload(result: CloningResult, ssd: SSDResult, plan) -> dict:
         "right_enzyme": result.right_enzyme,
         "protein": result.protein,
         "protein_length": len(result.protein),
+        # Every pET cassette reads on the minus strand of the supplier's
+        # numbering, so this is the normal case rather than a warning.
+        "reversed_insert": result.reversed_insert,
+        "tags": [
+            {
+                "name": tag.name,
+                "end": tag.end,
+                "present": tag.present,
+                "position": tag.position,
+                "note": tag.note,
+            }
+            for tag in result.tags
+        ],
         "annotations": annotations,
         "junctions": [
             {
@@ -200,6 +215,90 @@ def _clone_payload(result: CloningResult, ssd: SSDResult, plan) -> dict:
         "insert": _ssd_payload(ssd),
         "assembly": _assembly_payload(plan, result.name) if plan else None,
     }
+
+
+def _spec_payload(spec) -> dict:
+    """One catalogue entry, as the dropdown needs it."""
+    return {
+        "key": spec.key,
+        "name": spec.name,
+        "length": spec.length,
+        "resistance": spec.resistance,
+        "promoter": spec.promoter,
+        "host": spec.host,
+        "supplier": spec.supplier,
+        "summary": spec.summary,
+        "unique_sites": list(spec.unique_sites),
+        "recommended_pairs": list(spec.recommended_pairs),
+        "tags": [
+            {"name": tag.name, "end": tag.end, "note": tag.note}
+            for tag in spec.tags
+        ],
+        "notes": list(spec.notes),
+        "reference": spec.reference,
+        # Without a sequence the user has to import their own copy first.
+        "has_sequence": spec.has_sequence,
+        "supplies_translation_start": spec.supplies_translation_start,
+        "tag_summary": spec.tag_summary,
+    }
+
+
+def _vector_payload(spec, sequence: str) -> dict:
+    """Which vector was cut, and whether the sequence matches what it claims."""
+    if spec is None:
+        return {"recognised": False, "check": None, "spec": None}
+
+    check = vector_catalogue.validate(sequence, spec)
+    return {
+        "recognised": True,
+        "spec": _spec_payload(spec),
+        "check": {
+            "matches": check.matches,
+            "length": check.length,
+            "problems": check.problems,
+            "notes": check.notes,
+            "found_motifs": check.found_motifs,
+            "missing_motifs": check.missing_motifs,
+        },
+    }
+
+
+class VectorCatalogueView(APIView):
+    """GET /api/design/vectors/ — the backbones G-Synth knows about.
+
+    Public, like the enzyme table: it is reference data, and the cloning page
+    needs it to build its dropdown before anything has been designed.
+    """
+
+    permission_classes = (AllowAny,)
+
+    def get(self, request):
+        return Response({
+            "vectors": [_spec_payload(spec) for spec in vector_catalogue.CATALOGUE],
+            "default": vector_catalogue.DEFAULT_VECTOR.key,
+        })
+
+
+class VectorSequenceView(APIView):
+    """GET /api/design/vectors/<key>/ — a bundled sequence and its features."""
+
+    permission_classes = (AllowAny,)
+
+    def get(self, request, key: str):
+        spec = vector_catalogue.get(key)
+        if spec is None:
+            return Response(
+                {"detail": f"No vector called {key}."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        record = vector_catalogue.sequence_of(spec.key)
+        if record is None:
+            return Response(
+                {"detail": f"{spec.name} has no bundled sequence. Import your "
+                           f"own copy — G-Synth will check it against the entry."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response({**record, "spec": _spec_payload(spec)})
 
 
 class EnzymeCatalogueView(APIView):
@@ -326,24 +425,25 @@ class CloneView(APIView):
                 insert_forward = ssd.forward
                 insert_reverse = ssd.reverse
 
+            vector_sequence, vector_name, annotations, spec = resolve_vector(data)
             result = clone(
-                data["vector"],
+                vector_sequence,
                 insert_forward,
                 insert_reverse=insert_reverse,
                 left_enzyme=data["left_enzyme"],
                 right_enzyme=data["right_enzyme"],
                 circular=data["vector_is_circular"],
                 name=name,
-                vector_annotations=[
-                    dict(feature) for feature in data.get("vector_annotations") or []
-                ],
+                vector_annotations=annotations,
+                vector_spec=spec,
                 orf_start=ssd.orf_start,
             )
         except SequenceError as error:
             return _bad_request(error)
 
         payload = _clone_payload(result, ssd, plan)
-        payload["vector_name"] = data["vector_name"]
+        payload["vector_name"] = vector_name
+        payload["vector"] = _vector_payload(spec, vector_sequence)
 
         if data["save_as_project"] and result.is_clonable:
             project = Project.objects.create(
@@ -351,7 +451,7 @@ class CloneView(APIView):
                 name=name,
                 module="cloning",
                 sequence=result.plasmid,
-                notes=f"{result.length} bp in {data['vector_name']} · "
+                notes=f"{result.length} bp in {vector_name} · "
                       f"{result.left_enzyme}/{result.right_enzyme}",
                 data=payload,
             )

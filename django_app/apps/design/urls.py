@@ -8,6 +8,8 @@ from apps.design.views import (
     OrderSheetView,
     ProtocolView,
     SSDDesignView,
+    VectorCatalogueView,
+    VectorSequenceView,
 )
 
 urlpatterns = [
@@ -17,4 +19,6 @@ urlpatterns = [
     path("assembly/order-sheet/", OrderSheetView.as_view(), name="design-order-sheet"),
     path("assembly/protocol/", ProtocolView.as_view(), name="design-protocol"),
     path("clone/", CloneView.as_view(), name="design-clone"),
+    path("vectors/", VectorCatalogueView.as_view(), name="design-vectors"),
+    path("vectors/<str:key>/", VectorSequenceView.as_view(), name="design-vector"),
 ]

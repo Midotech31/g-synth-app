@@ -32,17 +32,27 @@ def clean_filler(length: int, seed: int = 7) -> str:
 
     Built rather than hand-written: a filler that accidentally carries a
     second BamHI site turns a test of cloning into a test of luck.
+
+    Grown one base at a time, rejecting a base that would complete a site,
+    rather than by resampling the whole string. Resampling works fine for a
+    200 bp stretch and never terminates for a 5 kb one — with ~38 patterns
+    to avoid, essentially every candidate of that length contains one.
     """
     rng = random.Random(seed)
-    sites = [
-        str(info["recognition"]) for info in RESTRICTION_ENZYMES.values()
-    ]
-    sites += [reverse_complement(s) for s in sites]
+    sites = [str(info["recognition"]) for info in RESTRICTION_ENZYMES.values()]
+    sites += [reverse_complement(site) for site in sites]
+    longest = max(len(site) for site in sites)
 
-    while True:
-        candidate = "".join(rng.choice("ACGT") for _ in range(length))
-        if not any(site in candidate for site in sites):
-            return candidate
+    out: list[str] = []
+    while len(out) < length:
+        for base in rng.sample("ACGT", 4):
+            tail = "".join(out[-(longest - 1):]) + base
+            if not any(tail.endswith(site) for site in sites):
+                out.append(base)
+                break
+        else:
+            out.pop()          # dead end: back up and try a different base
+    return "".join(out)
 
 
 def build_vector(left: str, right: str, *, seed: int = 7) -> str:
@@ -475,3 +485,86 @@ class TestAnnotations:
     def test_no_annotations_is_fine(self, vector, ssd):
         result = clone(vector, ssd.forward, left_enzyme="NdeI", right_enzyme="XhoI")
         assert result.annotations == []
+
+
+# ── Orientation ─────────────────────────────────────────────────────────────
+
+
+class TestOrientation:
+    """The insert's enzymes are named as they sit on the insert, not on the
+    vector. In a real pET the expression cassette reads on the minus strand.
+    """
+
+    def test_a_real_pet21a_keeps_its_backbone(self):
+        """The bug this class exists for: assuming the left enzyme cuts first
+        keeps the 80 bp cloning stuffer and throws away the origin, the
+        marker and everything else, while the arithmetic still adds up."""
+        from gsynth_engine import vectors
+
+        record = vectors.sequence_of("pET-21a")
+        backbone = linearise(
+            record["sequence"], left_enzyme="NdeI", right_enzyme="XhoI"
+        )
+
+        assert backbone.reversed_insert, "NdeI cuts after XhoI in pET-21a"
+        assert backbone.length > 5000, "the backbone is nearly the whole vector"
+        assert backbone.removed_length < 200, "only the stuffer comes out"
+        assert backbone.length + backbone.removed_length == record["length"]
+
+    def test_the_insert_lands_against_the_c_terminal_tag(self):
+        """Which is the whole point of cloning NdeI/XhoI into a pET-21."""
+        from gsynth_engine import vectors
+
+        backbone = linearise(
+            vectors.sequence_of("pET-21a")["sequence"],
+            left_enzyme="NdeI", right_enzyme="XhoI",
+        )
+        # XhoI leaves TCGAG, then the vector's six histidines and a stop.
+        assert backbone.top.startswith("TCGAGCACCACCACCACCACCACTGA")
+
+    def test_round_trip_holds_on_a_real_vector(self):
+        from gsynth_engine import vectors
+
+        record = vectors.sequence_of("pET-21a")
+        design = design_small_sequence(
+            clean_filler(90, 31), enzyme_pair="NdeI / XhoI"
+        )
+        result = clone(
+            record["sequence"], design.forward, insert_reverse=design.reverse,
+            left_enzyme="NdeI", right_enzyme="XhoI",
+        )
+        assert result.is_clonable, result.problems
+        assert result.length == record["length"] - result.removed_length + len(
+            design.forward
+        )
+
+        recut = linearise(result.plasmid, left_enzyme="NdeI", right_enzyme="XhoI")
+        assert recut.removed_length == len(design.forward)
+
+    def test_a_forward_oriented_vector_is_not_flipped(self):
+        """Flipping when it is not needed would be just as wrong."""
+        vector = build_vector("NdeI", "XhoI")
+        backbone = linearise(vector, left_enzyme="NdeI", right_enzyme="XhoI")
+        assert not backbone.reversed_insert
+
+    def test_vector_features_follow_the_flip(self):
+        """Otherwise every feature lands on the wrong side of the plasmid."""
+        from gsynth_engine import vectors
+
+        record = vectors.sequence_of("pET-21a")
+        design = design_small_sequence(clean_filler(60, 21), enzyme_pair="NdeI / XhoI")
+        result = clone(
+            record["sequence"], design.forward, insert_reverse=design.reverse,
+            left_enzyme="NdeI", right_enzyme="XhoI",
+            vector_annotations=record["annotations"],
+        )
+        by_name = {a["name"]: a for a in result.annotations}
+        assert "AmpR" in by_name and "ori" in by_name
+
+        amp = by_name["AmpR"]
+        original = [a for a in record["annotations"] if a["name"] == "AmpR"][0]
+        assert amp["end"] - amp["start"] == original["end"] - original["start"]
+        # The feature must still be the resistance gene where it now sits.
+        assert result.plasmid[amp["start"]:amp["end"]] == reverse_complement(
+            record["sequence"][original["start"]:original["end"]]
+        )

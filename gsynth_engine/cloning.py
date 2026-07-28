@@ -34,6 +34,8 @@ from dataclasses import dataclass, field
 
 from gsynth_engine.constants import RESTRICTION_ENZYMES, STOP_CODONS
 from gsynth_engine.constants import overhang as enzyme_overhang
+from typing import TYPE_CHECKING
+
 from gsynth_engine.sequence import (
     SequenceError,
     clean_dna,
@@ -41,6 +43,9 @@ from gsynth_engine.sequence import (
     reverse_complement,
     validate_dna,
 )
+
+if TYPE_CHECKING:                       # vectors imports us, so keep it lazy
+    from gsynth_engine.vectors import VectorSpec
 
 #: Genetic code, for the frame check. Only what this module needs.
 _CODONS: dict[str, str] = {
@@ -164,6 +169,10 @@ class Backbone:
     removed_end: int
     removed_length: int
     circular_source: bool
+    #: True when the vector had to be flipped for the insert's left enzyme to
+    #: precede its right one — the cassette reads on the minus strand of the
+    #: numbering the user supplied.
+    reversed_insert: bool = False
 
     @property
     def length(self) -> int:
@@ -217,6 +226,17 @@ def linearise(
     end is the one the right-hand enzyme leaves and vice versa — the piece
     between the two sites is what comes out.
 
+    **Orientation.** The two enzymes are named as they sit on the *insert*,
+    which says nothing about how they sit in the vector's own numbering. In
+    pET-21a(+) the expression cassette reads on the minus strand: NdeI is at
+    position 236 and XhoI at 157, so the left-hand enzyme cuts *after* the
+    right-hand one. Assuming otherwise picks the wrong arc of the circle and
+    keeps the 80 bp cloning stuffer while discarding the origin, the marker
+    and everything else — a plasmid that is arithmetically consistent and
+    biologically nonsense. When that happens the vector is flipped, and the
+    result records that the insert lands on the minus strand of the numbering
+    the user supplied.
+
     Raises:
         SequenceError: when either enzyme does not cut exactly once, with a
             message naming the count. Nothing downstream can rescue a vector
@@ -228,6 +248,13 @@ def linearise(
         raise SequenceError(
             "The two enzymes must differ — with one enzyme the insert could "
             "go in either orientation."
+        )
+
+    if not circular:
+        raise SequenceError(
+            "The vector must be circular. Cutting a linear vector twice leaves "
+            "the backbone in two separate pieces, which cannot receive an "
+            "insert as one molecule."
         )
 
     for enzyme in (left_enzyme, right_enzyme):
@@ -243,36 +270,42 @@ def linearise(
                 f"fragments and the ligation cannot be directed."
             )
 
-    left_site = find_sites(seq, left_enzyme, circular=circular)[0]
-    right_site = find_sites(seq, right_enzyme, circular=circular)[0]
+    length = len(seq)
 
+    def arc(sequence: str) -> int:
+        """How much of the circle the insert would replace, in this sense."""
+        left = _cut_positions(left_enzyme, find_sites(sequence, left_enzyme)[0])[0]
+        right = _cut_positions(right_enzyme, find_sites(sequence, right_enzyme)[0])[0]
+        return (right - left) % length
+
+    flipped = reverse_complement(seq)
+    # Both arcs are geometrically valid cuts; only one leaves a backbone that
+    # still carries the origin and the marker. That is the larger one.
+    reversed_insert = arc(flipped) < arc(seq)
+    working = flipped if reversed_insert else seq
+
+    left_site = find_sites(working, left_enzyme, circular=True)[0]
+    right_site = find_sites(working, right_enzyme, circular=True)[0]
     left_top, left_bottom = _cut_positions(left_enzyme, left_site)
     right_top, right_bottom = _cut_positions(right_enzyme, right_site)
 
-    if not circular:
-        raise SequenceError(
-            "The vector must be circular. Cutting a linear vector twice leaves "
-            "the backbone in two separate pieces, which cannot receive an "
-            "insert as one molecule."
-        )
-
-    length = len(seq)
     # The backbone runs from the right-hand enzyme's cut, around the origin,
     # back to the left-hand enzyme's cut.
     start = right_top % length
     stop = left_top % length
-    doubled = seq + seq
+    doubled = working + working
     span = (stop - start) % length or length
     top = doubled[start : start + span]
 
     return Backbone(
         top=top,
-        left_end=_end_at(seq, right_top, right_bottom, side="downstream"),
-        right_end=_end_at(seq, left_top, left_bottom, side="upstream"),
+        left_end=_end_at(working, right_top, right_bottom, side="downstream"),
+        right_end=_end_at(working, left_top, left_bottom, side="upstream"),
         vector_start=start,
         removed_start=stop,
         removed_end=start,
         removed_length=(start - stop) % length,
+        reversed_insert=reversed_insert,
         circular_source=circular,
     )
 
@@ -293,6 +326,23 @@ class Junction:
     site_regenerated: bool    #: whether the enzyme can cut here again
 
 
+@dataclass(frozen=True)
+class TagOutcome:
+    """Whether one of the vector's tags ends up on the protein.
+
+    Answered by looking at the translated product rather than by a rule
+    about the enzyme, because the answer depends on the reading frame and on
+    whether the insert stops — and because a lab's own copy of a vector may
+    not place its tags where the catalogue says.
+    """
+
+    name: str
+    end: str            #: "N" or "C", where the vector places it
+    present: bool
+    position: int | None = None   #: residue index in the protein, 1-based
+    note: str = ""
+
+
 @dataclass
 class CloningResult:
     """The plasmid you get, and why you should believe it."""
@@ -308,6 +358,10 @@ class CloningResult:
     junctions: list[Junction] = field(default_factory=list)
     annotations: list[dict] = field(default_factory=list)
     protein: str = ""
+    #: True when the insert reads on the minus strand of the vector's own
+    #: numbering, which is how every pET expression cassette is arranged.
+    reversed_insert: bool = False
+    tags: list[TagOutcome] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
 
@@ -329,6 +383,19 @@ class CloningResult:
         return not self.problems
 
 
+def _flip_annotations(annotations: list[dict], length: int) -> list[dict]:
+    """Mirror features onto the reverse complement of a circular sequence."""
+    flipped: list[dict] = []
+    for feature in annotations:
+        entry = dict(feature)
+        start, end = int(feature.get("start", 0)), int(feature.get("end", 0))
+        entry["start"] = length - end
+        entry["end"] = length - start
+        entry["direction"] = -int(feature.get("direction", 1) or 1)
+        flipped.append(entry)
+    return flipped
+
+
 def _remap_annotations(
     annotations: list[dict], backbone: Backbone, plasmid_length: int
 ) -> list[dict]:
@@ -338,9 +405,18 @@ def _remap_annotations(
     molecule any more, and drawing them would be a lie. Features that merely
     straddle a junction are kept and flagged, because a truncated promoter is
     something the user needs to see rather than have silently deleted.
+
+    When the vector was flipped so the insert reads left to right, the
+    features are mirrored first — otherwise every one of them lands on the
+    wrong side of the plasmid, which looks like a plausible map and is not.
     """
     if not backbone.circular_source:
         return []
+
+    if backbone.reversed_insert:
+        annotations = _flip_annotations(
+            annotations, backbone.length + backbone.removed_length
+        )
 
     moved: list[dict] = []
     span = backbone.length
@@ -374,6 +450,7 @@ def clone(
     circular: bool = True,
     name: str = "recombinant",
     vector_annotations: list[dict] | None = None,
+    vector_spec: "VectorSpec | None" = None,
     insert_reverse: str | None = None,
     insert_left_end: End | None = None,
     insert_right_end: End | None = None,
@@ -391,6 +468,10 @@ def clone(
             only way the compatibility check catches anything.
         insert_left_end / insert_right_end: the ends, when they are already
             known. Overrides both of the above.
+        vector_spec: the catalogue entry for this vector, if it is a known
+            one. Its declared tags are then checked against the protein that
+            comes out, which is the only way to answer whether a C-terminal
+            His-tag actually appears on this particular construct.
         orf_start: where the reading frame starts inside the insert, so the
             protein can be translated and the junction frame checked.
 
@@ -531,6 +612,22 @@ def clone(
                     f"{'' if residues == 1 else 's'} to your protein."
                 )
 
+    # Residues the insert encodes, so a vector tag is only credited when it
+    # sits in the stretch the vector actually contributed.
+    frame_start = insert_start + (orf_start or 0)
+    insert_residues = max(0, (insert_end - frame_start)) // 3
+    upstream_residues = max(0, (frame_start - insert_start)) // 3 if orf_start else 0
+
+    tags = (
+        _tag_outcomes(
+            protein, vector_spec,
+            insert_residues=insert_residues,
+            upstream_residues=upstream_residues,
+        )
+        if vector_spec else []
+    )
+    warnings.extend(_tag_warnings(tags, vector_spec, protein))
+
     return CloningResult(
         plasmid=plasmid,
         name=name,
@@ -545,9 +642,85 @@ def clone(
             vector_annotations or [], backbone, len(plasmid)
         ),
         protein=protein,
+        reversed_insert=backbone.reversed_insert,
+        tags=tags,
         warnings=warnings,
         problems=problems,
     )
+
+
+def _tag_outcomes(
+    protein: str, spec: "VectorSpec", *, insert_residues: int, upstream_residues: int,
+) -> list[TagOutcome]:
+    """Which of the vector's tags actually made it onto the protein.
+
+    Read from the translated product, so the answer accounts for the reading
+    frame, for an insert that stops early, and for a lab copy whose tags are
+    not quite where the catalogue says.
+
+    **Where the match has to be** is the load-bearing part. Searching the
+    whole protein finds the *insert's* own 6×His and reports it as the
+    vector's C-terminal tag — a construct that will not bind the column,
+    described as one that will. A vector tag counts only if it lies in the
+    stretch the vector actually contributed: after the insert for a
+    C-terminal tag, before it for an N-terminal one.
+    """
+    outcomes: list[TagOutcome] = []
+    for tag in spec.tags:
+        region = (
+            protein[insert_residues:] if tag.end == "C" else protein[:upstream_residues]
+        )
+        offset = insert_residues if tag.end == "C" else 0
+        at = region.find(tag.motif) if region else -1
+        outcomes.append(
+            TagOutcome(
+                name=tag.name,
+                end=tag.end,
+                present=at >= 0,
+                position=offset + at + 1 if at >= 0 else None,
+                note=tag.note,
+            )
+        )
+    return outcomes
+
+
+def _tag_warnings(
+    outcomes: list[TagOutcome], spec: "VectorSpec | None", protein: str,
+) -> list[str]:
+    """Say what the vector did and did not contribute, and where it collides.
+
+    Two things routinely surprise people. A C-terminal tag that is silently
+    absent because the insert carries its own stop codon or leaves the frame
+    — the construct looks right and does not bind the column. And a vector
+    tag that duplicates one the G-Synth cassette already added, giving a
+    protein with two His-tags and two protease sites.
+    """
+    if spec is None:
+        return []
+
+    messages: list[str] = []
+    for outcome in outcomes:
+        end = "C-terminal" if outcome.end == "C" else "N-terminal"
+        motif = _motif_of(spec, outcome.name)
+        if not outcome.present:
+            messages.append(
+                f"{spec.name}'s {end} {outcome.name} is not on this protein."
+                + (f" {outcome.note}" if outcome.note else "")
+            )
+        elif motif and protein.count(motif) > 1:
+            messages.append(
+                f"{outcome.name} appears more than once: the insert already "
+                f"carries one and {spec.name} adds its own. Turn the cassette "
+                f"option off, or use a vector that does not supply it."
+            )
+    return messages
+
+
+def _motif_of(spec: "VectorSpec", name: str) -> str:
+    for tag in spec.tags:
+        if tag.name == name:
+            return tag.motif
+    return ""
 
 
 def _translate_in_plasmid(plasmid: str, start: int) -> tuple[str, int | None]:

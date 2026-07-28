@@ -406,3 +406,149 @@ class TestCloneEndpoint:
         })
         assert response.data["plasmid"] == expected.plasmid
         assert response.data["protein"] == expected.protein
+
+
+@pytest.mark.django_db
+class TestVectorCatalogue:
+    def test_is_public(self, api_client):
+        """The cloning page builds its dropdown before anything is designed."""
+        assert api_client.get(reverse("design-vectors")).status_code == 200
+
+    def test_pet21a_is_the_default(self, api_client):
+        data = api_client.get(reverse("design-vectors")).data
+        assert data["default"] == "pET-21a"
+        assert data["vectors"][0]["key"] == "pET-21a"
+
+    def test_entries_carry_what_the_ui_shows(self, api_client):
+        data = api_client.get(reverse("design-vectors")).data
+        entry = {v["key"]: v for v in data["vectors"]}["pET-21a"]
+        assert entry["length"] == 5443
+        assert entry["resistance"] == "Ampicillin"
+        assert entry["recommended_pairs"][0] == "NdeI / XhoI"
+        assert entry["has_sequence"] is True
+        assert any(tag["name"] == "His-tag" and tag["end"] == "C"
+                   for tag in entry["tags"])
+
+    def test_more_than_one_vector_is_offered(self, api_client):
+        data = api_client.get(reverse("design-vectors")).data
+        keys = {v["key"] for v in data["vectors"]}
+        assert {"pET-21a", "pET-21", "pET-28a"} <= keys
+
+    def test_a_bundled_sequence_can_be_fetched(self, api_client):
+        response = api_client.get(reverse("design-vector", args=["pET-21a"]))
+        assert response.status_code == 200
+        assert response.data["length"] == 5443
+        assert len(response.data["sequence"]) == 5443
+        assert response.data["annotations"]
+
+    def test_a_vector_without_a_sequence_says_so(self, api_client):
+        response = api_client.get(reverse("design-vector", args=["pGEX-4T-1"]))
+        assert response.status_code == 404
+        assert "Import your own copy" in response.data["detail"]
+
+    def test_an_unknown_vector_is_a_404(self, api_client):
+        assert api_client.get(
+            reverse("design-vector", args=["pNope"])
+        ).status_code == 404
+
+
+@pytest.mark.django_db
+class TestCloningIntoACatalogueVector:
+    url_name = "design-clone"
+
+    def test_a_vector_key_alone_is_enough(self, auth_client):
+        """No sequence needed: pET-21a's ships with G-Synth."""
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector_key": "pET-21a", "name": "EntA",
+        })
+        assert response.status_code == 200, response.data
+        assert response.data["is_clonable"], response.data["problems"]
+        assert response.data["vector_name"] == "pET-21a(+)"
+        assert response.data["length"] > 5000
+
+    def test_the_backbone_survives(self, auth_client):
+        """pET-21a's cassette reads on the minus strand; getting that wrong
+        keeps the 78 bp stuffer and discards the origin and the marker."""
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector_key": "pET-21a",
+        })
+        data = response.data
+        assert data["reversed_insert"] is True
+        assert data["backbone_length"] > 5000
+        assert data["removed_length"] < 200
+
+    def test_the_vectors_features_come_across(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector_key": "pET-21a",
+        })
+        names = {a["name"] for a in response.data["annotations"]}
+        assert {"AmpR", "ori", "lacI", "T7 promoter"} <= names
+
+    def test_it_reports_which_vector_tags_land_on_the_protein(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector_key": "pET-21a",
+        })
+        tags = {t["name"]: t for t in response.data["tags"]}
+        assert "His-tag" in tags and "T7·Tag" in tags
+        # NdeI cloning replaces the T7·Tag with the insert.
+        assert tags["T7·Tag"]["present"] is False
+
+    def test_the_supplied_sequence_is_checked_against_the_entry(self, auth_client):
+        """Pasting pET-21(+) while pET-21a(+) is selected must be caught."""
+        from gsynth_engine import vectors
+
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT,
+            "vector_key": "pET-21a",
+            "vector": vectors.sequence_of("pET-21")["sequence"],
+            "left_enzyme": "BamHI", "right_enzyme": "XhoI",
+        })
+        assert response.status_code == 200, response.data
+        check = response.data["vector"]["check"]
+        assert check["matches"] is False
+        assert any("74 bp shorter" in p for p in check["problems"])
+
+    def test_a_matching_sequence_passes_its_check(self, auth_client):
+        from gsynth_engine import vectors
+
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT,
+            "vector_key": "pET-21a",
+            "vector": vectors.sequence_of("pET-21a")["sequence"],
+        })
+        assert response.data["vector"]["check"]["matches"] is True
+
+    def test_an_unrecognised_sequence_is_still_cloned_into(self, auth_client):
+        """A lab's own backbone is not in any catalogue, and still works."""
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT,
+            "vector_key": "",
+            "vector": build_vector(),
+        })
+        assert response.status_code == 200, response.data
+        assert response.data["is_clonable"]
+        assert response.data["vector"]["recognised"] is False
+
+    def test_pet21_has_no_ndei_so_the_default_pair_is_refused(self, auth_client):
+        """The distinction that matters between pET-21(+) and pET-21a(+)."""
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector_key": "pET-21",
+        })
+        assert response.status_code == 400
+        assert "NdeI does not cut" in response.data["detail"]
+
+    def test_pet21_works_with_its_own_pair(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector_key": "pET-21",
+            "left_enzyme": "BamHI", "right_enzyme": "XhoI",
+        })
+        assert response.status_code == 200, response.data
+        assert response.data["is_clonable"], response.data["problems"]
+
+    def test_a_vector_without_a_bundled_sequence_asks_for_one(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "vector_key": "pGEX-4T-1",
+            "left_enzyme": "BamHI", "right_enzyme": "EcoRI",
+        })
+        assert response.status_code == 400
+        assert "paste or import your own" in str(response.data)

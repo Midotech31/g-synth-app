@@ -8,6 +8,7 @@ import {
   type Catalogue,
   type CloneResult,
   type DesignParams,
+  type VectorSpec,
 } from "../api/client";
 import InsertForm from "../components/InsertForm";
 
@@ -28,22 +29,28 @@ const DEFAULTS: DesignParams = {
 };
 
 type Vector = {
+  key: string;
   name: string;
   sequence: string;
   annotations: Annotation[];
   circular: boolean;
+  /** Set when the sequence came from the catalogue rather than an import. */
+  bundled: boolean;
 };
 
 const EMPTY_VECTOR: Vector = {
-  name: "vector",
+  key: "",
+  name: "",
   sequence: "",
   annotations: [],
   circular: true,
+  bundled: false,
 };
 
 export default function Clone() {
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [params, setParams] = useState<DesignParams>(DEFAULTS);
+  const [vectors, setVectors] = useState<VectorSpec[]>([]);
   const [vector, setVector] = useState<Vector>(EMPTY_VECTOR);
   const [result, setResult] = useState<CloneResult | null>(null);
   const [error, setError] = useState("");
@@ -56,6 +63,70 @@ export default function Clone() {
       setError("Could not load the enzyme catalogue.");
     });
   }, []);
+
+  // Load the vector list, then the default vector's own sequence, so the
+  // page is usable without importing anything.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await api.vectors();
+        if (cancelled) return;
+        setVectors(list.vectors);
+        await selectVector(list.default, list.vectors);
+      } catch {
+        if (!cancelled) setError("Could not load the vector catalogue.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // selectVector is stable for the page's lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Switch vector, pulling its bundled sequence when it has one. */
+  async function selectVector(key: string, known: VectorSpec[] = vectors) {
+    const spec = known.find((v) => v.key === key);
+    setResult(null);
+    setSaved("");
+
+    if (!spec) {
+      setVector({ ...EMPTY_VECTOR, key: "" });
+      return;
+    }
+
+    // Follow the vector's own cloning pair — pET-21(+) has no NdeI site, so
+    // leaving the G-Synth default selected would just fail.
+    const pair = spec.recommended_pairs[0]?.split("/").map((p) => p.trim());
+    if (pair?.length === 2) {
+      setParams((current) => ({
+        ...current,
+        left_enzyme: pair[0],
+        right_enzyme: pair[1],
+      }));
+    }
+
+    if (!spec.has_sequence) {
+      setVector({
+        ...EMPTY_VECTOR, key: spec.key, name: spec.name,
+      });
+      return;
+    }
+    try {
+      const record = await api.vectorSequence(spec.key);
+      setVector({
+        key: spec.key,
+        name: record.name,
+        sequence: record.sequence,
+        annotations: record.annotations,
+        circular: record.topology === "circular",
+        bundled: true,
+      });
+    } catch {
+      setError(`Could not load the sequence for ${spec.name}.`);
+    }
+  }
 
   const set = useCallback(
     <K extends keyof DesignParams>(key: K, value: DesignParams[K]) => {
@@ -76,12 +147,16 @@ export default function Clone() {
     setError("");
     try {
       const record = await api.parseFile(file);
-      setVector({
+      setVector((current) => ({
+        // Keep the catalogue entry selected: the imported sequence is then
+        // checked against it, which is how a substitution gets caught.
+        key: current.key,
         name: record.name || file.name,
         sequence: record.sequence,
         annotations: record.annotations,
         circular: record.topology === "circular",
-      });
+        bundled: false,
+      }));
       setResult(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not read that file.");
@@ -95,9 +170,12 @@ export default function Clone() {
     try {
       const data = await api.clone({
         ...params,
-        vector: vector.sequence,
+        vector_key: vector.key,
+        // A bundled sequence is already on the server; sending it back would
+        // just be a megabyte of round trip.
+        vector: vector.bundled ? "" : vector.sequence,
         vector_name: vector.name,
-        vector_annotations: vector.annotations,
+        vector_annotations: vector.bundled ? undefined : vector.annotations,
         vector_is_circular: vector.circular,
         save_as_project: saveAsProject,
       });
@@ -113,6 +191,7 @@ export default function Clone() {
 
   const vectorLength = vector.sequence.replace(/[^ACGTacgt]/g, "").length;
   const ready = vectorLength > 0 && params.sequence.trim().length > 0;
+  const spec = vectors.find((v) => v.key === vector.key) ?? null;
 
   return (
     <>
@@ -153,15 +232,49 @@ export default function Clone() {
               </div>
               <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
                 <div className="field">
-                  <label htmlFor="vector-name">Name</label>
-                  <input
-                    id="vector-name"
-                    type="text"
-                    value={vector.name}
-                    onChange={(e) => setVectorField("name", e.target.value)}
-                    placeholder="pET-28a(+)"
-                  />
+                  <label htmlFor="vector-key">Backbone</label>
+                  <select
+                    id="vector-key"
+                    value={vector.key}
+                    onChange={(e) => void selectVector(e.target.value)}
+                  >
+                    {vectors.map((v) => (
+                      <option key={v.key} value={v.key}>
+                        {v.name} · {v.length.toLocaleString()} bp · {v.resistance}
+                        {v.has_sequence ? "" : " (import needed)"}
+                      </option>
+                    ))}
+                    <option value="">Something else — I'll supply it</option>
+                  </select>
+                  {spec && <span className="label">{spec.tag_summary}</span>}
                 </div>
+
+                {spec && (
+                  <div className="vector-brief">
+                    <p className="note" style={{ margin: 0 }}>{spec.summary}</p>
+                    <div className="vector-facts">
+                      <span><b>{spec.promoter}</b> promoter</span>
+                      <span><b>{spec.resistance}</b></span>
+                      <span>cloned with <b>{spec.recommended_pairs[0]}</b></span>
+                    </div>
+                    {spec.notes.map((note) => (
+                      <p key={note} className="note vector-note">{note}</p>
+                    ))}
+                  </div>
+                )}
+
+                {!vector.key && (
+                  <div className="field">
+                    <label htmlFor="vector-name">Name</label>
+                    <input
+                      id="vector-name"
+                      type="text"
+                      value={vector.name}
+                      onChange={(e) => setVectorField("name", e.target.value)}
+                      placeholder="pLab-01"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <button
@@ -169,7 +282,7 @@ export default function Clone() {
                     onClick={() => fileInput.current?.click()}
                     style={{ width: "100%" }}
                   >
-                    Import GenBank or FASTA…
+                    {vector.bundled ? "Use my own copy instead…" : "Import GenBank or FASTA…"}
                   </button>
                   <input
                     ref={fileInput}
@@ -183,8 +296,9 @@ export default function Clone() {
                     }}
                   />
                   <p className="note" style={{ marginTop: "0.4rem" }}>
-                    GenBank keeps the vector's features, so they carry over onto
-                    the recombinant map. FASTA gives sequence only.
+                    {vector.bundled
+                      ? "Using the sequence that ships with G-Synth. Import your lab's own copy if it differs — it will be checked against this entry."
+                      : "GenBank keeps the vector's features, so they carry over onto the recombinant map. FASTA gives sequence only."}
                   </p>
                 </div>
 
@@ -243,6 +357,18 @@ export default function Clone() {
               </div>
             ) : (
               <>
+                {result.vector.check && !result.vector.check.matches && (
+                  <div className="notice notice-error">
+                    <strong>This is not {result.vector.spec?.name}.</strong>{" "}
+                    {result.vector.check.problems.join(" ")}
+                  </div>
+                )}
+                {result.vector.check?.notes.length ? (
+                  <div className="notice notice-info">
+                    {result.vector.check.notes.join(" ")}
+                  </div>
+                ) : null}
+
                 <div className={`notice ${result.is_clonable ? "notice-ok" : "notice-error"}`}>
                   {result.is_clonable ? (
                     <>
@@ -345,9 +471,30 @@ export default function Clone() {
                     </div>
                     <div className="card-body">
                       <div className="seq-block">{result.protein}</div>
+                      {result.tags.length > 0 && (
+                        <div className="tag-outcomes">
+                          {result.tags.map((tag) => (
+                            <div
+                              key={`${tag.name}-${tag.end}`}
+                              className={tag.present ? "tag-row on" : "tag-row"}
+                            >
+                              <span className="pill">
+                                {tag.end}-term {tag.name}
+                              </span>
+                              <span>
+                                {tag.present
+                                  ? `on the protein at residue ${tag.position}`
+                                  : "not on this protein"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <p className="note" style={{ marginTop: "0.6rem" }}>
                         Translated from the insert's ATG through the junction and
                         into the vector, to the first in-frame stop.
+                        {result.reversed_insert &&
+                          " The insert reads on the minus strand of the vector's own numbering, as every pET cassette does."}
                       </p>
                     </div>
                   </div>
