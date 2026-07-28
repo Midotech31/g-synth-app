@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Clone from "./pages/Clone";
 import Dashboard from "./pages/Dashboard";
 import Design from "./pages/Design";
+import Optimise from "./pages/Optimise";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Viewer from "./pages/Viewer";
@@ -24,6 +25,9 @@ function Rail() {
       <nav>
         <NavLink to="/" end className={({ isActive }) => (isActive ? "active" : "")}>
           Design
+        </NavLink>
+        <NavLink to="/optimise" className={({ isActive }) => (isActive ? "active" : "")}>
+          Optimise
         </NavLink>
         <NavLink to="/clone" className={({ isActive }) => (isActive ? "active" : "")}>
           Clone
@@ -103,6 +107,7 @@ export default function App() {
           />
           <Route element={<Protected />}>
             <Route path="/" element={<Design />} />
+            <Route path="/optimise" element={<Optimise />} />
             <Route path="/clone" element={<Clone />} />
             <Route path="/projects" element={<Dashboard />} />
             <Route path="/projects/:id" element={<Viewer />} />

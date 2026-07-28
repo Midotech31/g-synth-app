@@ -193,3 +193,45 @@ def resolve_vector(data: dict) -> tuple[str, str, list[dict], object]:
     name = data.get("vector_name") or (spec.name if spec else "vector")
     annotations = [dict(f) for f in (data.get("vector_annotations") or [])]
     return sequence, name, annotations, spec
+
+
+class OptimiseRequestSerializer(serializers.Serializer):
+    """Rewrite a gene for a host, keeping the protein identical."""
+
+    sequence = serializers.CharField(
+        max_length=200_000,
+        help_text="A coding sequence, or a protein when is_protein is set.",
+    )
+    is_protein = serializers.BooleanField(default=False)
+    keep_stop = serializers.BooleanField(
+        default=True,
+        help_text="Turn off for an insert destined for a C-terminal vector "
+                  "tag, where a stop codon would silently remove the tag.",
+    )
+    #: The cloning pair, so the optimiser removes sites that would break it.
+    avoid_enzymes = serializers.ListField(
+        child=serializers.ChoiceField(choices=ENZYME_NAMES),
+        required=False, default=list, max_length=12,
+    )
+    avoid_motifs = serializers.ListField(
+        child=serializers.RegexField(r"^[ACGTacgt]{2,40}$"),
+        required=False, default=list, max_length=20,
+    )
+    max_homopolymer = serializers.IntegerField(min_value=3, max_value=12, default=5)
+    gc_min = serializers.FloatField(min_value=10.0, max_value=90.0, default=30.0)
+    gc_max = serializers.FloatField(min_value=10.0, max_value=90.0, default=70.0)
+    gc_window = serializers.IntegerField(min_value=20, max_value=200, default=50)
+    max_repeat = serializers.IntegerField(min_value=8, max_value=40, default=15)
+    avoid_rare = serializers.BooleanField(default=True)
+    #: Reference genes to measure the usage table against, when the CAI matters.
+    reference_genes = serializers.ListField(
+        child=serializers.CharField(max_length=100_000),
+        required=False, default=list, max_length=200,
+    )
+
+    def validate(self, attrs):
+        if attrs["gc_min"] >= attrs["gc_max"]:
+            raise serializers.ValidationError({
+                "gc_max": "The upper GC bound must be above the lower one.",
+            })
+        return attrs

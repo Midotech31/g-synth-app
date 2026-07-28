@@ -15,6 +15,13 @@ from gsynth_engine.constants import (
     overhang,
 )
 from gsynth_engine.cloning import CloningResult, clone, open_reading_frames
+from gsynth_engine.codon import (
+    ECOLI,
+    Constraints,
+    OptimisationResult,
+    build_table,
+    optimise,
+)
 from gsynth_engine.duplex import DuplexView, construct_duplex
 from gsynth_engine.merzoug import AssemblyPlan, design_merzoug_assembly
 from gsynth_engine.protocol import bench_protocol, order_sheet, order_sheet_csv
@@ -30,6 +37,7 @@ from rest_framework.views import APIView
 from apps.design.serializers import (
     CLEAVAGE_NAMES,
     CloneRequestSerializer,
+    OptimiseRequestSerializer,
     resolve_vector,
     SaveableAssemblyRequestSerializer,
     SSDRequestSerializer,
@@ -299,6 +307,77 @@ class VectorSequenceView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response({**record, "spec": _spec_payload(spec)})
+
+
+def _optimisation_payload(result: OptimisationResult) -> dict:
+    return {
+        "sequence": result.sequence,
+        "protein": result.protein,
+        "length": result.length,
+        "table": result.table,
+        "cai_before": result.cai_before,
+        "cai_after": result.cai_after,
+        "gc_before": result.gc_before,
+        "gc_after": result.gc_after,
+        "sites_removed": result.sites_removed,
+        "rare_codons_before": result.rare_codons_before,
+        "rare_codons_after": result.rare_codons_after,
+        "changed_codons": result.changed_codons,
+        # Empty problems means the gene can be built and cut as asked.
+        "problems": result.problems,
+        "warnings": result.warnings,
+        "is_clean": result.is_clean,
+    }
+
+
+class OptimiseView(APIView):
+    """POST /api/design/optimise/ — rewrite a gene for the expression host.
+
+    The protein is invariant; everything else is negotiable. Pass the cloning
+    enzymes in `avoid_enzymes` so the result does not carry a site that would
+    make the construct impossible to cut.
+    """
+
+    def post(self, request):
+        serializer = OptimiseRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        table = ECOLI
+        if data["reference_genes"]:
+            try:
+                table = build_table(
+                    data["reference_genes"],
+                    name="your reference set",
+                    source=f"{len(data['reference_genes'])} genes you supplied",
+                )
+            except SequenceError as error:
+                return _bad_request(error)
+
+        constraints = Constraints(
+            avoid_enzymes=tuple(data["avoid_enzymes"]),
+            avoid_motifs=tuple(data["avoid_motifs"]),
+            max_homopolymer=data["max_homopolymer"],
+            gc_min=data["gc_min"],
+            gc_max=data["gc_max"],
+            gc_window=data["gc_window"],
+            max_repeat=data["max_repeat"],
+            avoid_rare=data["avoid_rare"],
+        )
+        try:
+            result = optimise(
+                data["sequence"],
+                table=table,
+                constraints=constraints,
+                is_protein=data["is_protein"],
+                keep_stop=data["keep_stop"],
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        payload = _optimisation_payload(result)
+        payload["table_source"] = table.source
+        return Response(payload)
 
 
 class EnzymeCatalogueView(APIView):

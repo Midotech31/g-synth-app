@@ -552,3 +552,97 @@ class TestCloningIntoACatalogueVector:
         })
         assert response.status_code == 400
         assert "paste or import your own" in str(response.data)
+
+
+@pytest.mark.django_db
+class TestOptimiseEndpoint:
+    url_name = "design-optimise"
+
+    # An enterocin-like gene: AT-rich, slow codons, internal NdeI site.
+    DONOR = (
+        "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGGTATATTGGAAATAATGGAGCACATATGGGA"
+        "TTAAATTTAGCATTATTAGGATTAGCAAGTTTATTAGGTAAAGGTATTAGTAAATTAGGA"
+    )
+    DONOR_PROTEIN = "MTTSKLGKGLGYIGNNGAHMGLNLALLGLASLLGKGISKLG"
+
+    def test_requires_authentication(self, api_client):
+        assert api_client.post(
+            reverse(self.url_name), {"sequence": self.DONOR}
+        ).status_code == 401
+
+    def test_the_protein_is_unchanged(self, auth_client):
+        """The invariant, checked over HTTP as well as in the engine."""
+        from gsynth_engine.cloning import translate
+
+        response = auth_client.post(reverse(self.url_name), {"sequence": self.DONOR})
+        assert response.status_code == 200, response.data
+        assert response.data["protein"] == self.DONOR_PROTEIN
+        assert translate(response.data["sequence"]).rstrip("*") == self.DONOR_PROTEIN
+
+    def test_it_adapts_the_gene_to_the_host(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {"sequence": self.DONOR})
+        data = response.data
+        assert data["cai_after"] > data["cai_before"]
+        assert data["rare_codons_after"] < data["rare_codons_before"]
+        assert 40 <= data["gc_after"] <= 60
+
+    def test_the_cloning_sites_are_removed(self, auth_client):
+        """A gene with an internal NdeI site cannot be cloned NdeI/XhoI."""
+        from gsynth_engine.cloning import find_sites
+
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": self.DONOR, "avoid_enzymes": ["NdeI", "XhoI"],
+        }, format="json")
+        assert response.status_code == 200, response.data
+        assert response.data["is_clean"], response.data["problems"]
+        assert find_sites(response.data["sequence"], "NdeI", circular=False) == []
+        assert "CATATG" in response.data["sites_removed"]
+
+    def test_a_protein_can_be_reverse_translated(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": self.DONOR_PROTEIN, "is_protein": True,
+        })
+        assert response.status_code == 200, response.data
+        assert response.data["protein"] == self.DONOR_PROTEIN
+        assert response.data["cai_before"] is None
+        assert response.data["length"] == 3 * len(self.DONOR_PROTEIN) + 3
+
+    def test_the_stop_codon_can_be_left_off(self, auth_client):
+        """For an insert going into a C-terminal vector tag."""
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": self.DONOR_PROTEIN, "is_protein": True, "keep_stop": False,
+        })
+        assert response.data["length"] == 3 * len(self.DONOR_PROTEIN)
+
+    def test_a_reference_set_replaces_the_shipped_table(self, auth_client):
+        """The honest way to get a CAI: measure it against genes you chose."""
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": self.DONOR,
+            "reference_genes": ["ATGTTATTATTAAAAAAA" * 3],
+        }, format="json")
+        assert response.status_code == 200, response.data
+        assert response.data["table"] == "your reference set"
+        assert "1 genes you supplied" in response.data["table_source"]
+
+    def test_a_partial_codon_is_a_usable_message(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {"sequence": "ATGAAAA"})
+        assert response.status_code == 400
+        assert "multiple of three" in response.data["detail"]
+
+    def test_an_inverted_gc_window_is_refused(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": self.DONOR, "gc_min": 70, "gc_max": 40,
+        })
+        assert response.status_code == 400
+        assert "above the lower one" in str(response.data)
+
+    def test_it_matches_the_engine_exactly(self, auth_client):
+        from gsynth_engine.codon import Constraints, optimise
+
+        expected = optimise(
+            self.DONOR, constraints=Constraints(avoid_enzymes=("NdeI",)),
+        )
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": self.DONOR, "avoid_enzymes": ["NdeI"],
+        }, format="json")
+        assert response.data["sequence"] == expected.sequence

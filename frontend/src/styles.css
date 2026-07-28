@@ -484,3 +484,17 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 .tag-row.on { color: var(--ink-soft); }
 .tag-row.on .pill { border-color: #b9d3c1; background: #eef5f0; color: #2c5c3d; }
+
+/* Enzyme chips — toggles, so the selected set is visible without a legend. */
+.enzyme-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.chip {
+  font-family: var(--mono); font-size: 0.72rem;
+  padding: 0.25rem 0.55rem; border-radius: 999px;
+  border: 1px solid var(--line-strong); background: var(--surface);
+  color: var(--ink-soft); cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); }
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+/* A stat can carry a "from" value; keep the two on separate lines. */
+.stat .v small + small { display: block; }

@@ -185,6 +185,42 @@ export type CloneResult = {
   project_id?: number;
 };
 
+export type OptimiseParams = {
+  sequence: string;
+  is_protein?: boolean;
+  keep_stop?: boolean;
+  avoid_enzymes?: string[];
+  avoid_motifs?: string[];
+  max_homopolymer?: number;
+  gc_min?: number;
+  gc_max?: number;
+  gc_window?: number;
+  max_repeat?: number;
+  avoid_rare?: boolean;
+  reference_genes?: string[];
+};
+
+export type OptimiseResult = {
+  sequence: string;
+  protein: string;
+  length: number;
+  table: string;
+  table_source: string;
+  /** Null when the input was a protein: there was no gene to measure. */
+  cai_before: number | null;
+  cai_after: number;
+  gc_before: number | null;
+  gc_after: number;
+  sites_removed: string[];
+  rare_codons_before: number;
+  rare_codons_after: number;
+  changed_codons: number;
+  /** Empty means the gene can be built and cut as asked. */
+  problems: string[];
+  warnings: string[];
+  is_clean: boolean;
+};
+
 export type VectorTag = { name: string; end: string; note: string };
 
 /** A backbone G-Synth knows about. `has_sequence` means it ships with one. */
@@ -444,6 +480,9 @@ export const api = {
 
   designAssembly: (params: DesignParams) =>
     request<AssemblyResult>("/api/design/assembly/", { method: "POST", body: params }),
+
+  optimise: (params: OptimiseParams) =>
+    request<OptimiseResult>("/api/design/optimise/", { method: "POST", body: params }),
 
   clone: (params: CloneParams) =>
     request<CloneResult>("/api/design/clone/", { method: "POST", body: params }),

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import {
   ApiError,
@@ -34,6 +35,16 @@ export default function Design() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState("");
+  const location = useLocation();
+
+  // The optimiser hands its gene over rather than making the user copy it.
+  useEffect(() => {
+    const handed = (location.state as { sequence?: string } | null)?.sequence;
+    if (handed) {
+      setParams((current) => ({ ...current, sequence: handed }));
+      setResult(null);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     api.catalogue().then(setCatalogue).catch(() => {
