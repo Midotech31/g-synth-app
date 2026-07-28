@@ -189,6 +189,27 @@ export default function Clone() {
     }
   }
 
+  /** Take the plasmid out of G-Synth: GenBank keeps the features. */
+  async function exportPlasmid(filetype: "genbank" | "fasta") {
+    const safe = (params.name || "construct").replace(/\s+/g, "_");
+    try {
+      await api.download(
+        `/api/design/clone/export/?filetype=${filetype}`,
+        {
+          ...params,
+          vector_key: vector.key,
+          vector: vector.bundled ? "" : vector.sequence,
+          vector_name: vector.name,
+          vector_annotations: vector.bundled ? undefined : vector.annotations,
+          vector_is_circular: vector.circular,
+        },
+        `${safe}.${filetype === "fasta" ? "fasta" : "gb"}`,
+      );
+    } catch {
+      setError("The download failed. Try cloning again first.");
+    }
+  }
+
   const vectorLength = vector.sequence.replace(/[^ACGTacgt]/g, "").length;
   const ready = vectorLength > 0 && params.sequence.trim().length > 0;
   const spec = vectors.find((v) => v.key === vector.key) ?? null;
@@ -428,6 +449,17 @@ export default function Clone() {
                 <div className="card">
                   <div className="card-head">
                     <h2 style={{ flex: 1 }}>Junctions</h2>
+                    <button className="btn btn-outline"
+                            onClick={() => void exportPlasmid("genbank")}
+                            disabled={!result.is_clonable}
+                            title="Opens in SnapGene, Benchling or ApE with its features">
+                      GenBank
+                    </button>
+                    <button className="btn btn-outline"
+                            onClick={() => void exportPlasmid("fasta")}
+                            disabled={!result.is_clonable}>
+                      FASTA
+                    </button>
                     <button
                       className="btn btn-primary"
                       onClick={() => runClone(true)}

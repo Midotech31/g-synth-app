@@ -23,6 +23,7 @@ from gsynth_engine.codon import (
     optimise,
 )
 from gsynth_engine.duplex import DuplexView, construct_duplex
+from gsynth_engine.genbank import oligos_to_fasta, to_fasta, to_genbank
 from gsynth_engine.merzoug import AssemblyPlan, design_merzoug_assembly
 from gsynth_engine.protocol import bench_protocol, order_sheet, order_sheet_csv
 from gsynth_engine.sequence import SequenceError, gc_content
@@ -536,6 +537,139 @@ class CloneView(APIView):
             )
             payload["project_id"] = project.id
         return Response(payload)
+
+
+def _attachment(text: str, filename: str, content_type: str) -> HttpResponse:
+    response = HttpResponse(text, content_type=content_type)
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def _today() -> str:
+    """GenBank's date field. Taken here rather than in the engine, so the
+    engine's own output stays byte-identical between runs."""
+    from django.utils import timezone
+
+    return timezone.now().strftime("%d-%b-%Y").upper()
+
+
+class CloneExportView(APIView):
+    """POST /api/design/clone/export/?filetype=genbank|fasta — as a file.
+
+    GenBank by default, because that is what carries the features across to
+    SnapGene, Benchling or ApE. A design that only exists inside G-Synth is
+    not finished.
+    """
+
+    def post(self, request):
+        serializer = CloneRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        name = data["name"]
+
+        try:
+            vector_sequence, vector_name, annotations, spec = resolve_vector(data)
+            if data["fragment"]:
+                plan = design_merzoug_assembly(
+                    data["sequence"], **serializer.engine_kwargs
+                )
+                ssd, forward, reverse = plan.ssd, plan.construct_forward, plan.construct_reverse
+            else:
+                kwargs = {
+                    k: v for k, v in serializer.engine_kwargs.items()
+                    if k not in ("target_oligo_length", "overhang_length")
+                }
+                ssd = design_small_sequence(data["sequence"], **kwargs)
+                forward, reverse = ssd.forward, ssd.reverse
+
+            result = clone(
+                vector_sequence, forward, insert_reverse=reverse,
+                left_enzyme=data["left_enzyme"], right_enzyme=data["right_enzyme"],
+                circular=data["vector_is_circular"], name=name,
+                vector_annotations=annotations, vector_spec=spec,
+                orf_start=ssd.orf_start,
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        safe = (name or "construct").replace(" ", "_")
+        if request.query_params.get("filetype") == "fasta":
+            return _attachment(
+                to_fasta(
+                    result.plasmid, name=safe,
+                    description=f"{result.length} bp in {vector_name}",
+                ),
+                f"{safe}.fasta", "text/plain; charset=utf-8",
+            )
+
+        payload = _clone_payload(result, ssd, None)
+        return _attachment(
+            to_genbank(
+                result.plasmid,
+                name=safe,
+                description=f"{name} cloned into {vector_name} "
+                            f"({result.left_enzyme}/{result.right_enzyme})",
+                features=payload["annotations"],
+                circular=True,
+                date=_today(),
+            ),
+            f"{safe}.gb", "chemical/seq-na-genbank",
+        )
+
+
+class ConstructExportView(APIView):
+    """POST /api/design/assembly/export/ — the construct, or its oligos.
+
+    `filetype=oligos` gives one FASTA entry per oligo, which is what a supplier
+    accepts as an upload. Retyping thirty oligo names into a web form is
+    where transcription errors come from.
+    """
+
+    def post(self, request):
+        serializer = SaveableAssemblyRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        name = serializer.validated_data["name"]
+        try:
+            plan = design_merzoug_assembly(
+                serializer.validated_data["sequence"], **serializer.engine_kwargs
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        safe = (name or "construct").replace(" ", "_")
+        wanted = request.query_params.get("filetype", "genbank")
+
+        if wanted == "oligos":
+            return _attachment(
+                oligos_to_fasta(
+                    [o.as_row for o in order_sheet(plan, construct_name=name)]
+                ),
+                f"{safe}_oligos.fasta", "text/plain; charset=utf-8",
+            )
+        if wanted == "fasta":
+            return _attachment(
+                to_fasta(plan.construct_forward, name=safe),
+                f"{safe}.fasta", "text/plain; charset=utf-8",
+            )
+
+        features = [
+            {"name": s.name, "type": "misc_feature", "start": s.start,
+             "end": s.end, "direction": 1}
+            for s in plan.ssd.segments
+        ] + [
+            {"name": f.name, "type": "misc_feature", "start": f.top_start,
+             "end": f.top_end, "direction": 1}
+            for f in plan.fragments
+        ]
+        return _attachment(
+            to_genbank(
+                plan.construct_forward, name=safe,
+                description=f"{name}: {plan.fragment_count} fragments, "
+                            f"{plan.oligo_count} oligos",
+                features=features, circular=False, date=_today(),
+            ),
+            f"{safe}.gb", "chemical/seq-na-genbank",
+        )
 
 
 class OrderSheetView(APIView):

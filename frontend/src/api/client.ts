@@ -367,6 +367,16 @@ function describe(status: number, body: unknown): ApiError {
   return new ApiError(status, `Request failed (${status}).`);
 }
 
+/** Hand a blob to the browser as a download. */
+function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 let refreshInFlight: Promise<string | null> | null = null;
 
 async function refreshAccessToken(): Promise<string | null> {
@@ -497,8 +507,17 @@ export const api = {
       auth: false,
     }),
 
+  /** GET a file the browser saves — for endpoints that need no body. */
+  downloadUrl: async (path: string, filename: string) => {
+    const response = await fetch(path, {
+      headers: { Authorization: `Bearer ${tokenStore.access ?? ""}` },
+    });
+    if (!response.ok) throw new ApiError(response.status, "Download failed.");
+    saveBlob(await response.blob(), filename);
+  },
+
   /** Downloads stream as files, so they bypass the JSON request helper. */
-  download: async (path: string, params: DesignParams, filename: string) => {
+  download: async (path: string, params: DesignParams | CloneParams, filename: string) => {
     const response = await fetch(path, {
       method: "POST",
       headers: {
@@ -508,13 +527,7 @@ export const api = {
       body: JSON.stringify(params),
     });
     if (!response.ok) throw new ApiError(response.status, "Download failed.");
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    saveBlob(await response.blob(), filename);
   },
 
   parseFile: (file: File) => {

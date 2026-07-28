@@ -15,15 +15,18 @@ class Project(models.Model):
     are surfaced separately because they're queried on the list view.
     """
 
+    # What the app actually saves. Kept in step with the views: a module
+    # missing from here still stores, but shows as an unlabelled chip and
+    # fails model validation, so the two drift silently.
     MODULES = (
         ("general",              "General"),
-        ("crispr_designer",      "CRISPR sgRNA Designer"),
+        ("ssd",                  "Small Sequence Design"),
+        ("merzoug_assembly",     "Merzoug Assembly"),
+        ("cloning",              "Cloning"),
+        ("codon_optimization",   "Codon Optimisation"),
+        ("plasmid_visualizer",   "Imported Sequence"),
         ("primer_generator",     "Primer Generator"),
-        ("codon_optimization",   "Codon Optimization"),
-        ("plasmid_visualizer",   "Plasmid Visualizer"),
         ("alignment_tools",      "Alignment Tools"),
-        ("hybridization",        "Hybridization"),
-        ("extended_synthesis",   "Extended Synthesis"),
     )
 
     user = models.ForeignKey(

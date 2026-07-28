@@ -90,6 +90,20 @@ export default function Design() {
     }
   }
 
+  /** Take the construct out: GenBank for a viewer, FASTA for a supplier. */
+  async function exportConstruct(filetype: "genbank" | "fasta" | "oligos") {
+    const safe = (params.name || "construct").replace(/\s+/g, "_");
+    const names = { genbank: `${safe}.gb`, fasta: `${safe}.fasta`,
+                    oligos: `${safe}_oligos.fasta` };
+    try {
+      await api.download(
+        `/api/design/assembly/export/?filetype=${filetype}`, params, names[filetype],
+      );
+    } catch {
+      setError("The download failed. Try designing again first.");
+    }
+  }
+
   const verified = result !== null && result.verification.length === 0;
 
   return (
@@ -233,12 +247,24 @@ export default function Design() {
                   <div className="card-head">
                     <h2 style={{ flex: 1 }}>Oligos to order</h2>
                     <button className="btn btn-outline" onClick={() => download("order-sheet")}
-                            disabled={!verified}>
-                      Download CSV
+                            disabled={!verified} title="The order sheet as a spreadsheet">
+                      CSV
+                    </button>
+                    <button className="btn btn-outline"
+                            onClick={() => void exportConstruct("oligos")}
+                            disabled={!verified}
+                            title="One FASTA entry per oligo — most suppliers take an upload">
+                      Oligo FASTA
                     </button>
                     <button className="btn btn-outline" onClick={() => download("protocol")}
                             disabled={!verified}>
-                      Download protocol
+                      Protocol
+                    </button>
+                    <button className="btn btn-outline"
+                            onClick={() => void exportConstruct("genbank")}
+                            disabled={!verified}
+                            title="The construct with its cassette labelled">
+                      GenBank
                     </button>
                     <button className="btn btn-primary" onClick={() => design(true)} disabled={busy}>
                       Save project

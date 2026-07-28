@@ -646,3 +646,94 @@ class TestOptimiseEndpoint:
             "sequence": self.DONOR, "avoid_enzymes": ["NdeI"],
         }, format="json")
         assert response.data["sequence"] == expected.sequence
+
+
+@pytest.mark.django_db
+class TestExport:
+    """A design that only exists inside G-Synth is not finished."""
+
+    def parse_genbank(self, response):
+        import io
+        from Bio import SeqIO
+
+        return SeqIO.read(io.StringIO(response.content.decode()), "genbank")
+
+    def test_the_recombinant_plasmid_exports_as_genbank(self, auth_client):
+        response = auth_client.post(reverse("design-clone-export"), {
+            "sequence": LONG_INSERT, "vector_key": "pET-21a", "name": "pGS-EntA",
+        })
+        assert response.status_code == 200, response.content[:300]
+        assert 'filename="pGS-EntA.gb"' in response["Content-Disposition"]
+
+        record = self.parse_genbank(response)
+        assert record.annotations["topology"] == "circular"
+        assert len(record.seq) > 5000
+        labels = {
+            f.qualifiers.get("label", [""])[0]
+            for f in record.features if f.type != "source"
+        }
+        assert {"AmpR", "ori", "pGS-EntA"} <= labels
+
+    def test_the_exported_plasmid_is_the_one_the_api_returned(self, auth_client):
+        """Two endpoints, one molecule — they must not drift."""
+        payload = {"sequence": LONG_INSERT, "vector_key": "pET-21a", "name": "EntA"}
+        designed = auth_client.post(reverse("design-clone"), payload).data
+        exported = self.parse_genbank(
+            auth_client.post(reverse("design-clone-export"), payload)
+        )
+        assert str(exported.seq).upper() == designed["plasmid"]
+
+    def test_the_plasmid_exports_as_fasta(self, auth_client):
+        response = auth_client.post(
+            reverse("design-clone-export") + "?filetype=fasta",
+            {"sequence": LONG_INSERT, "vector_key": "pET-21a", "name": "EntA"},
+        )
+        assert response.status_code == 200
+        assert response.content.decode().startswith(">EntA")
+
+    def test_the_construct_exports_with_its_cassette_labelled(self, auth_client):
+        response = auth_client.post(reverse("design-construct-export"), {
+            "sequence": LONG_INSERT, "name": "EntA",
+        })
+        assert response.status_code == 200, response.content[:300]
+
+        record = self.parse_genbank(response)
+        assert record.annotations["topology"] == "linear"
+        labels = {
+            f.qualifiers.get("label", [""])[0]
+            for f in record.features if f.type != "source"
+        }
+        assert "6×His tag" in labels
+        assert "F1" in labels          # the fragments are drawn too
+
+    def test_the_oligos_export_as_one_fasta_per_oligo(self, auth_client):
+        """Suppliers take a FASTA upload; retyping thirty names is where
+        transcription errors come from."""
+        import io
+        from Bio import SeqIO
+
+        designed = auth_client.post(reverse("design-assembly"), {
+            "sequence": LONG_INSERT, "name": "EntA",
+        }).data
+        response = auth_client.post(
+            reverse("design-construct-export") + "?filetype=oligos",
+            {"sequence": LONG_INSERT, "name": "EntA"},
+        )
+        records = list(SeqIO.parse(io.StringIO(response.content.decode()), "fasta"))
+
+        assert len(records) == designed["oligo_count"]
+        assert records[0].id.startswith("EntA_")
+        assert str(records[0].seq) == designed["oligos"][0]["Sequence (5'->3')"]
+
+    def test_export_requires_authentication(self, api_client):
+        for name in ("design-clone-export", "design-construct-export"):
+            assert api_client.post(
+                reverse(name), {"sequence": LONG_INSERT}
+            ).status_code == 401
+
+    def test_a_bad_design_still_errors_usefully(self, auth_client):
+        response = auth_client.post(reverse("design-construct-export"), {
+            "sequence": "ATGXYZ",
+        })
+        assert response.status_code == 400
+        assert "not A, C, G or T" in response.data["detail"]
