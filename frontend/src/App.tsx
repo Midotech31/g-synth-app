@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
 
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import Align from "./pages/Align";
 import Clone from "./pages/Clone";
 import Dashboard from "./pages/Dashboard";
 import Design from "./pages/Design";
@@ -35,6 +36,9 @@ function Rail() {
         </NavLink>
         <NavLink to="/verify" className={({ isActive }) => (isActive ? "active" : "")}>
           Check
+        </NavLink>
+        <NavLink to="/align" className={({ isActive }) => (isActive ? "active" : "")}>
+          Compare
         </NavLink>
         <NavLink to="/projects" className={({ isActive }) => (isActive ? "active" : "")}>
           Projects
@@ -114,6 +118,7 @@ export default function App() {
             <Route path="/optimise" element={<Optimise />} />
             <Route path="/clone" element={<Clone />} />
             <Route path="/verify" element={<Verify />} />
+            <Route path="/align" element={<Align />} />
             <Route path="/projects" element={<Dashboard />} />
             <Route path="/projects/:id" element={<Viewer />} />
           </Route>

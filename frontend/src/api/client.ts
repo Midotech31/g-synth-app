@@ -290,6 +290,39 @@ export type VerifyReport = {
   warnings: string[];
 };
 
+export type AlignRow = {
+  top: string;
+  marks: string;
+  bottom: string;
+  top_start: number | null;
+  top_end: number;
+  bottom_start: number | null;
+  bottom_end: number;
+};
+
+export type AlignResult = {
+  top: string;
+  marks: string;
+  bottom: string;
+  rows: AlignRow[];
+  text: string;
+  score: number;
+  mode: string;
+  length: number;
+  identity: number;
+  similarity: number;
+  identities: number;
+  similarities: number;
+  gaps: number;
+  start_a: number;
+  end_a: number;
+  start_b: number;
+  end_b: number;
+  reverse_complemented: boolean;
+  is_protein: boolean;
+  warnings: string[];
+};
+
 export type VectorTag = { name: string; end: string; note: string };
 
 /** A backbone G-Synth knows about. `has_sequence` means it ships with one. */
@@ -592,6 +625,14 @@ export const api = {
     region_start?: number | null;
     region_end?: number | null;
   }) => request<VerifyReport>("/api/design/verify/", { method: "POST", body: params }),
+
+  align: (params: {
+    first: string;
+    second: string;
+    mode?: string;
+    is_protein?: boolean;
+    try_reverse?: boolean;
+  }) => request<AlignResult>("/api/design/align/", { method: "POST", body: params }),
 
   clone: (params: CloneParams) =>
     request<CloneResult>("/api/design/clone/", { method: "POST", body: params }),

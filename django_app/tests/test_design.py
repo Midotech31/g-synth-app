@@ -964,3 +964,160 @@ class TestVerifyEndpoint:
         }, format="json")
         assert response.status_code == 400
         assert "at least one read" in str(response.data)
+
+
+@pytest.mark.django_db
+class TestAlignEndpoint:
+    url_name = "design-align"
+    GENE = "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGGTATATTGGAAATAATGGAGCACATATGGGA"
+
+    def test_requires_authentication(self, api_client):
+        assert api_client.post(reverse(self.url_name), {
+            "first": self.GENE, "second": self.GENE,
+        }).status_code == 401
+
+    def test_identical_sequences_align_perfectly(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "first": self.GENE, "second": self.GENE,
+        })
+        assert response.status_code == 200, response.data
+        assert response.data["identity"] == 100.0
+        assert response.data["gaps"] == 0
+
+    def test_the_alignment_does_not_invent_or_lose_bases(self, auth_client):
+        other = self.GENE[:20] + "GGG" + self.GENE[25:]
+        response = auth_client.post(reverse(self.url_name), {
+            "first": self.GENE, "second": other,
+        })
+        assert response.data["top"].replace("-", "") == self.GENE
+        assert response.data["bottom"].replace("-", "") == other
+
+    def test_a_deletion_aligns_as_one_gap(self, auth_client):
+        """Affine penalties exist to stop one event becoming four."""
+        deleted = self.GENE[:20] + self.GENE[32:]
+        response = auth_client.post(reverse(self.url_name), {
+            "first": self.GENE, "second": deleted,
+        })
+        assert response.data["gaps"] == 12
+        runs = [run for run in response.data["bottom"].split("-") if run]
+        assert len(runs) == 2
+
+    def test_a_reversed_sequence_is_recognised(self, auth_client):
+        from gsynth_engine.sequence import reverse_complement
+
+        response = auth_client.post(reverse(self.url_name), {
+            "first": self.GENE, "second": reverse_complement(self.GENE),
+        })
+        assert response.data["reverse_complemented"] is True
+        assert response.data["identity"] == 100.0
+        assert any("other way round" in w for w in response.data["warnings"])
+
+    def test_local_finds_only_the_shared_stretch(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "first": "T" * 12 + self.GENE[:40] + "G" * 12,
+            "second": "C" * 12 + self.GENE[:40] + "A" * 12,
+            "mode": "local",
+        })
+        assert response.data["length"] == 40
+        assert response.data["identity"] == 100.0
+
+    def test_protein_alignment_uses_the_published_matrix(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "first": "MTTSKLGKGLGYIGNN", "second": "MTTSRLGKGLGYVGNN",
+            "is_protein": True,
+        })
+        assert response.data["identity"] < 100
+        assert response.data["similarity"] == 100.0
+        assert response.data["marks"].count(":") == 2
+
+    def test_the_rows_are_ready_to_draw(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "first": self.GENE, "second": self.GENE,
+        })
+        row = response.data["rows"][0]
+        assert set(row) >= {"top", "marks", "bottom", "top_start", "bottom_start"}
+        assert "".join(r["top"] for r in response.data["rows"]) == response.data["top"]
+
+    def test_an_empty_sequence_is_refused(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "first": "", "second": self.GENE,
+        })
+        assert response.status_code == 400
+
+    def test_a_pair_too_large_is_refused_with_a_pointer(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "first": "A" * 2500, "second": "A" * 2500,
+        })
+        assert response.status_code == 400
+        assert "verification tool" in response.data["detail"]
+
+
+@pytest.mark.django_db
+class TestPrimerExport:
+    url_name = "design-primers-export"
+
+    def build(self, auth_client):
+        return auth_client.post(reverse("design-clone"), {
+            "sequence": LONG_INSERT, "vector_key": "pET-21a", "name": "EntA",
+        }).data
+
+    def test_primers_export_as_csv(self, auth_client):
+        import csv
+        import io
+
+        cloned = self.build(auth_client)
+        response = auth_client.post(reverse(self.url_name), {
+            "template": cloned["plasmid"],
+            "target_start": cloned["insert_start"],
+            "target_end": cloned["insert_end"],
+            "name": "EntA",
+        })
+        assert response.status_code == 200
+        assert 'filename="EntA_primers.csv"' in response["Content-Disposition"]
+
+        rows = list(csv.DictReader(io.StringIO(response.content.decode())))
+        assert rows
+        assert set(rows[0]) >= {"Name", "Sequence (5'->3')", "Tm (°C)"}
+
+    def test_primers_export_as_fasta(self, auth_client):
+        import io
+        from Bio import SeqIO
+
+        cloned = self.build(auth_client)
+        response = auth_client.post(
+            reverse(self.url_name) + "?filetype=fasta",
+            {
+                "template": cloned["plasmid"],
+                "target_start": cloned["insert_start"],
+                "target_end": cloned["insert_end"],
+                "name": "EntA",
+            },
+        )
+        records = list(SeqIO.parse(io.StringIO(response.content.decode()), "fasta"))
+        assert records
+        assert records[0].id.startswith("EntA_")
+
+    def test_the_export_matches_what_the_design_endpoint_returned(self, auth_client):
+        """Two endpoints, one primer set — they must not drift."""
+        import csv
+        import io
+
+        cloned = self.build(auth_client)
+        payload = {
+            "template": cloned["plasmid"],
+            "target_start": cloned["insert_start"],
+            "target_end": cloned["insert_end"],
+            "name": "EntA",
+        }
+        designed = auth_client.post(reverse("design-primers"), payload).data
+        exported = list(csv.DictReader(io.StringIO(
+            auth_client.post(reverse(self.url_name), payload).content.decode()
+        )))
+        assert [row["Name"] for row in exported] == [
+            p["name"] for p in designed["primers"]
+        ]
+
+    def test_export_requires_authentication(self, api_client):
+        assert api_client.post(reverse(self.url_name), {
+            "template": "ACGT" * 100, "target_start": 10, "target_end": 50,
+        }).status_code == 401

@@ -23,6 +23,7 @@ from gsynth_engine.codon import (
     optimise,
 )
 from gsynth_engine.duplex import DuplexView, construct_duplex
+from gsynth_engine.align import PROTEIN_SCORING, Scoring, align, blosum62
 from gsynth_engine.genbank import oligos_to_fasta, to_fasta, to_genbank
 from gsynth_engine.ligation import ligation_series, plan_ligation
 from gsynth_engine.primers import design_sequencing_primers
@@ -41,6 +42,7 @@ from rest_framework.views import APIView
 from apps.design.serializers import (
     CLEAVAGE_NAMES,
     CloneRequestSerializer,
+    AlignRequestSerializer,
     LigationRequestSerializer,
     OptimiseRequestSerializer,
     PrimerRequestSerializer,
@@ -385,6 +387,101 @@ class OptimiseView(APIView):
         payload = _optimisation_payload(result)
         payload["table_source"] = table.source
         return Response(payload)
+
+
+class AlignView(APIView):
+    """POST /api/design/align/ — compare two sequences.
+
+    Separate from verification, which assumes the read is the construct and
+    exploits that. This makes no such assumption: two genes from different
+    strains, a design against what a supplier returned, a protein against
+    its homologue.
+    """
+
+    def post(self, request):
+        serializer = AlignRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        scoring = Scoring(
+            match=data["match"],
+            mismatch=data["mismatch"],
+            gap_open=data["gap_open"],
+            gap_extend=data["gap_extend"],
+            matrix=blosum62() if data["is_protein"] else None,
+        )
+        try:
+            result = align(
+                data["first"], data["second"],
+                mode=data["mode"], is_protein=data["is_protein"],
+                scoring=scoring, try_reverse=data["try_reverse"],
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        return Response({
+            "top": result.top,
+            "marks": result.marks,
+            "bottom": result.bottom,
+            "rows": result.rows(60),
+            "text": result.to_text(60),
+            "score": result.score,
+            "mode": result.mode,
+            "length": result.length,
+            "identity": result.identity,
+            "similarity": result.similarity,
+            "identities": result.identities,
+            "similarities": result.similarities,
+            "gaps": result.gaps,
+            "start_a": result.start_a,
+            "end_a": result.end_a,
+            "start_b": result.start_b,
+            "end_b": result.end_b,
+            "reverse_complemented": result.reverse_complemented,
+            "is_protein": result.is_protein,
+            "warnings": result.warnings,
+        })
+
+
+class PrimerExportView(APIView):
+    """POST /api/design/primers/export/?filetype=csv|fasta
+
+    A primer set is ordered, not read on screen. CSV goes into a supplier's
+    spreadsheet; FASTA into the ones that take an upload.
+    """
+
+    def post(self, request):
+        serializer = PrimerRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result = design_sequencing_primers(
+                data["template"],
+                target_start=data["target_start"], target_end=data["target_end"],
+                circular=data["circular"], name=data["name"],
+                tm_min=data["tm_min"], tm_max=data["tm_max"],
+                margin=data["margin"], read_length=data["read_length"],
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        safe = (data["name"] or "seq").replace(" ", "_")
+        if request.query_params.get("filetype") == "fasta":
+            return _attachment(
+                oligos_to_fasta(result.as_rows),
+                f"{safe}_primers.fasta", "text/plain; charset=utf-8",
+            )
+
+        import csv
+        import io
+
+        buffer = io.StringIO()
+        rows = result.as_rows
+        if rows:
+            writer = csv.DictWriter(buffer, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+        return _attachment(buffer.getvalue(), f"{safe}_primers.csv", "text/csv")
 
 
 class LigationView(APIView):

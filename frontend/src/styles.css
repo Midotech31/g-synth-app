@@ -504,3 +504,23 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .difference-list { margin: 0; padding-left: 1.1rem; color: var(--ink); }
 .difference-list li { margin-bottom: 0.35rem; line-height: 1.5; font-size: 0.86rem; }
 .difference-list li.silent { color: var(--muted); }
+
+/* Alignment: three lines per row, each with its own numbering either side. */
+.align-row { grid-template-columns: max-content max-content max-content; }
+.align-row .dx-num { min-width: 5ch; }
+.align-row .dx-seq { padding: 0 0.5rem; }
+
+/* Mode picker — the question decides the algorithm, so it is asked in those
+   terms rather than as "global / local / semi-global". */
+.mode-list { display: flex; flex-direction: column; gap: 0.35rem; }
+.mode {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem;
+  padding: 0.5rem 0.65rem; text-align: left; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface); font: inherit; color: var(--ink-soft);
+}
+.mode strong { font-size: 0.86rem; color: var(--ink); }
+.mode span { font-size: 0.75rem; }
+.mode:hover { border-color: var(--accent); }
+.mode.on { border-color: var(--accent); background: var(--accent-wash); }
+.mode.on strong { color: var(--accent); }

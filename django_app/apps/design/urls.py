@@ -2,6 +2,7 @@
 from django.urls import path
 
 from apps.design.views import (
+    AlignView,
     CloneExportView,
     CloneView,
     ConstructExportView,
@@ -11,6 +12,7 @@ from apps.design.views import (
     OptimiseView,
     OrderSheetView,
     ProtocolView,
+    PrimerExportView,
     SequencingPrimerView,
     SSDDesignView,
     VerifyView,
@@ -27,6 +29,8 @@ urlpatterns = [
     path("optimise/", OptimiseView.as_view(), name="design-optimise"),
     path("ligation/", LigationView.as_view(), name="design-ligation"),
     path("primers/", SequencingPrimerView.as_view(), name="design-primers"),
+    path("primers/export/", PrimerExportView.as_view(), name="design-primers-export"),
+    path("align/", AlignView.as_view(), name="design-align"),
     path("verify/", VerifyView.as_view(), name="design-verify"),
     path("clone/", CloneView.as_view(), name="design-clone"),
     path("clone/export/", CloneExportView.as_view(), name="design-clone-export"),

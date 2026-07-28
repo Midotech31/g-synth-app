@@ -120,6 +120,27 @@ export default function Verify() {
     }
   }
 
+  /** A primer set is ordered, not read on screen. */
+  async function exportPrimers(filetype: "csv" | "fasta") {
+    if (!project || !hasRegion) return;
+    const safe = project.name.replace(/\s+/g, "_").slice(0, 20) || "seq";
+    try {
+      await api.download(
+        `/api/design/primers/export/?filetype=${filetype}`,
+        {
+          template: project.sequence,
+          target_start: insertStart!,
+          target_end: insertEnd!,
+          circular,
+          name: safe,
+        } as never,
+        `${safe}_primers.${filetype}`,
+      );
+    } catch {
+      setError("The download failed. Design the primers again first.");
+    }
+  }
+
   async function runLigation() {
     if (!project || !hasRegion) return;
     const insertLength = insertEnd! - insertStart!;
@@ -373,7 +394,18 @@ export default function Verify() {
                     )}
                   </div>
                   <div className="card">
-                    <div className="card-head"><h2>Primers to order</h2></div>
+                    <div className="card-head">
+                      <h2 style={{ flex: 1 }}>Primers to order</h2>
+                      <button className="btn btn-outline"
+                              onClick={() => void exportPrimers("csv")}>
+                        CSV
+                      </button>
+                      <button className="btn btn-outline"
+                              onClick={() => void exportPrimers("fasta")}
+                              title="For suppliers that take a FASTA upload">
+                        FASTA
+                      </button>
+                    </div>
                     <div className="table-scroll">
                       <table className="data">
                         <thead>

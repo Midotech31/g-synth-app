@@ -301,3 +301,20 @@ class VerifyRequestSerializer(serializers.Serializer):
                 {"reads": f"At most {self.MAX_READS} reads at a time."}
             )
         return attrs
+
+
+class AlignRequestSerializer(serializers.Serializer):
+    """Compare two sequences that are not assumed to be the same thing."""
+
+    first = serializers.CharField(max_length=200_000)
+    second = serializers.CharField(max_length=200_000)
+    mode = serializers.ChoiceField(
+        choices=["global", "local", "semi-global"], default="global",
+    )
+    is_protein = serializers.BooleanField(default=False)
+    #: A gene cloned the other way round is not a different gene.
+    try_reverse = serializers.BooleanField(default=True)
+    match = serializers.IntegerField(default=5, min_value=1, max_value=20)
+    mismatch = serializers.IntegerField(default=-4, min_value=-20, max_value=0)
+    gap_open = serializers.IntegerField(default=10, min_value=0, max_value=60)
+    gap_extend = serializers.IntegerField(default=1, min_value=0, max_value=20)
