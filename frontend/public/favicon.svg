@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A duplex with a sticky end: the one thing G-Synth is about. -->
+  <rect width="32" height="32" rx="7" fill="#0b1f3b"/>
+  <g stroke-linecap="round" fill="none">
+    <!-- top strand, running past the bottom one on the right -->
+    <path d="M5 12h22" stroke="#4fd1c5" stroke-width="3"/>
+    <!-- bottom strand, stopping short — the overhang -->
+    <path d="M5 20h15" stroke="#c97634" stroke-width="3"/>
+    <!-- the rungs of the paired region -->
+    <g stroke="#7d93ad" stroke-width="1.4">
+      <path d="M8 13v6M11.5 13v6M15 13v6M18.5 13v6"/>
+    </g>
+  </g>
+</svg>
