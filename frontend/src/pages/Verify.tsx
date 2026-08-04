@@ -9,6 +9,7 @@ import {
   type ProjectSummary,
   type VerifyReport,
 } from "../api/client";
+import Icon from "../components/Icon";
 
 /**
  * The end of the workflow: you built it, now check it is what you designed.
@@ -369,7 +370,7 @@ export default function Verify() {
               ) : (
                 <div className="card">
                   <div className="empty">
-                    <div className="glyph">🔬</div>
+                    <Icon name="microscope" size={38} className="glyph" />
                     <strong>No reads compared yet</strong>
                     <span>
                       Pick a construct and paste what the sequencing facility
@@ -423,7 +424,9 @@ export default function Verify() {
                               <td className="num">{p.tm}</td>
                               <td className="num">{p.gc}</td>
                               <td className="num">
-                                {p.direction === 1 ? "→" : "←"} {p.reads_from + 1}–{p.reads_to}
+                                <Icon name={p.direction === 1 ? "arrowRight" : "arrowLeft"} size={14}
+                                      title={p.direction === 1 ? "forward" : "reverse"} />{" "}
+                                {p.reads_from + 1}–{p.reads_to}
                               </td>
                             </tr>
                           ))}
@@ -441,7 +444,7 @@ export default function Verify() {
               ) : (
                 <div className="card">
                   <div className="empty">
-                    <div className="glyph">🎯</div>
+                    <Icon name="target" size={38} className="glyph" />
                     <strong>No primers yet</strong>
                     <span>Pick a construct, then design primers that read its insert.</span>
                   </div>
@@ -494,7 +497,7 @@ export default function Verify() {
               ) : (
                 <div className="card">
                   <div className="empty">
-                    <div className="glyph">⚖️</div>
+                    <Icon name="scales" size={38} className="glyph" />
                     <strong>No amounts yet</strong>
                     <span>Pick a construct to work out how much insert to add.</span>
                   </div>

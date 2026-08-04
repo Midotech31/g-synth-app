@@ -7,6 +7,7 @@ import {
   type OptimiseParams,
   type OptimiseResult,
 } from "../api/client";
+import Icon from "../components/Icon";
 
 const SAMPLE =
   "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGGTATATTGGAAATAATGGAGCACATATGGGA" +
@@ -187,7 +188,7 @@ export default function Optimise() {
             {!result ? (
               <div className="card">
                 <div className="empty">
-                  <div className="glyph">🧬</div>
+                  <Icon name="helix" size={38} className="glyph" />
                   <strong>Nothing optimised yet</strong>
                   <span>Paste a gene or a protein, then press Optimise.</span>
                 </div>

@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { SeqViz } from "seqviz";
 
 import { ApiError, api, type Annotation, type Project } from "../api/client";
+import Icon from "../components/Icon";
 
 type ViewMode = "circular" | "linear" | "both";
 
@@ -58,7 +59,9 @@ export default function Viewer() {
       <div className="content">
         <div className="notice notice-error">{error}</div>
         <p style={{ marginTop: "1rem" }}>
-          <Link to="/">← Back to projects</Link>
+          <Link to="/" className="back-link">
+            <Icon name="arrowLeft" size={15} /> Back to projects
+          </Link>
         </p>
       </div>
     );
@@ -292,7 +295,9 @@ export default function Viewer() {
         </div>
 
         <p>
-          <Link to="/">← Back to projects</Link>
+          <Link to="/" className="back-link">
+            <Icon name="arrowLeft" size={15} /> Back to projects
+          </Link>
         </p>
       </div>
     </>

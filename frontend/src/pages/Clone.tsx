@@ -12,6 +12,7 @@ import {
 } from "../api/client";
 import InsertForm from "../components/InsertForm";
 import JunctionDuplex from "../components/JunctionDuplex";
+import Icon from "../components/Icon";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
 
@@ -420,7 +421,7 @@ export default function Clone() {
             {!result ? (
               <div className="card">
                 <div className="empty">
-                  <div className="glyph">🧫</div>
+                  <Icon name="plate" size={38} className="glyph" />
                   <strong>No plasmid yet</strong>
                   <span>
                     {vectorLength === 0
@@ -546,7 +547,7 @@ export default function Clone() {
                     <ul className="check-list">
                       {result.validation.map((row) => (
                         <li key={row.check} className={row.passed ? "ok" : "bad"}>
-                          <span className="mark">{row.passed ? "✓" : "✕"}</span>
+                          <Icon name={row.passed ? "check" : "cross"} size={16} className="mark" />
                           <span>
                             <strong>{row.check}</strong>
                             <span className="detail">{row.detail}</span>

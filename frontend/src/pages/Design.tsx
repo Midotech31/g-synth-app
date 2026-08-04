@@ -11,6 +11,7 @@ import {
 import DuplexView from "../components/DuplexView";
 import InsertForm from "../components/InsertForm";
 import { segmentColour } from "../components/segmentColour";
+import Icon from "../components/Icon";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
 
@@ -140,7 +141,7 @@ export default function Design() {
             {!result ? (
               <div className="card">
                 <div className="empty">
-                  <div className="glyph">🧬</div>
+                  <Icon name="helix" size={38} className="glyph" />
                   <strong>No design yet</strong>
                   <span>Set the insert and its ends, then press Design.</span>
                 </div>

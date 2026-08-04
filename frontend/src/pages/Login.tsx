@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { Logo } from "../components/Logo";
 
 export default function Login() {
   const { signIn } = useAuth();
@@ -30,9 +31,8 @@ export default function Login() {
     <div className="auth">
       <div className="panel">
         <div className="lockup">
-          <div className="mark">🧬</div>
-          <h1>G-Synth</h1>
-          <p>Gene design workspace</p>
+          <Logo size={56} />
+          <h1>Sign in to your workspace</h1>
         </div>
 
         <div className="card">

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError, api, type ProjectSummary } from "../api/client";
+import Icon from "../components/Icon";
 
 function formatDate(iso: string): string {
   const date = new Date(iso);
@@ -145,7 +146,7 @@ export default function Dashboard() {
         ) : projects.length === 0 ? (
           <div className="card">
             <div className="empty">
-              <div className="glyph">🧫</div>
+              <Icon name="plate" size={38} className="glyph" />
               <strong>Nothing saved yet</strong>
               <span>
                 Save a design or a plasmid from the workspace, or import a
