@@ -499,6 +499,11 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* A stat can carry a "from" value; keep the two on separate lines. */
 .stat .v small + small { display: block; }
 
+/* The design did not use the overhang length that was asked for. It is not a
+   problem — the assembly is sound — but the number on the form is no longer
+   the number in the tubes, so it is coloured rather than left to be noticed. */
+.stat .v small.widened { color: var(--amber); }
+
 /* Sequencing differences. A silent change is real but harmless, so it is
    toned down rather than hidden — the reader still needs to see it. */
 .difference-list { margin: 0; padding-left: 1.1rem; color: var(--ink); }

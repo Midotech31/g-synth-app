@@ -88,6 +88,15 @@ generated from Biopython's copy. A transcription error in 5 000 bases, or in
 which layer won at each cell. The latter fragments one twelve-base deletion
 into four.
 
+**Four-base overhangs run out.** Placing one junction rules out its whole
+one-mismatch neighbourhood *and* its partner's, so exactly 22 mutually-usable
+4 nt overhangs exist — whichever ones you pick. A 2.4 kb gene at 90 nt oligos
+needs 26, and the design used to fail outright at junction 19. It now widens
+the overhang, which costs nothing (fragments are cut from a fixed construct,
+so the oligos stay the same length) and says so in a warning, because the
+number on the form is no longer the number in the tubes. `OVERHANG_SUPPLY` is
+measured, not estimated; a test re-derives it from the rules themselves.
+
 **Circular means circular.** Sites, reads, features and primer read-ranges
 all wrap past position 0. Clamping at the ends silently truncates them, and
 in every pET construct the insert sits exactly there.
@@ -102,7 +111,13 @@ easily as on purpose. When touching `codon.py` or `verify.py`:
 - Banded alignment must **iterate only the band** and size its buffers by the
   band. Allocating a full row per base turns a linear algorithm quadratic.
 
-Measure before and after. 3 kb optimisation ≈ 0.4 s; a 1 kb read ≈ 0.01 s.
+The same applies in `merzoug.py`: a candidate overhang is checked against a
+**precomputed exclusion set**, not against every overhang already placed.
+Comparing pairwise is quadratic in junctions — invisible on a peptide, half a
+minute on the 200 kb the endpoint accepts.
+
+Measure before and after. 3 kb optimisation ≈ 0.4 s; a 1 kb read ≈ 0.01 s;
+a 2.4 kb assembly ≈ 0.02 s.
 
 ## Verifying UI work
 

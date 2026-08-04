@@ -73,8 +73,8 @@ The frontend proxies `/api` to `:8000`; point it elsewhere with
 ### Tests
 
 ```bash
-python -m pytest gsynth_engine/tests -q     # 424 — the biology
-cd django_app && python -m pytest -q        # 179 — the HTTP layer
+python -m pytest gsynth_engine/tests -q     # 435 — the biology
+cd django_app && python -m pytest -q        # 181 — the HTTP layer
 ```
 
 The engine's suite is the definition of correctness. It is where the golden
@@ -112,6 +112,10 @@ A few decisions that are easy to reverse by accident:
 - **Substitution matrices are generated data, not literals.** BLOSUM62 is
   read from Biopython's copy: 576 values typed by hand is 576 chances to be
   quietly wrong.
+- **Junction overhangs widen when four bases run out.** Each one placed rules
+  out every overhang within a base of it, and of its partner, so only 22 can
+  coexist — while a 2.4 kb gene needs 26. The design goes to five bases rather
+  than failing, and says so; the oligos are the same length either way.
 
 ## Deployment
 

@@ -183,6 +183,18 @@ export default function Design() {
                       <div className="k">Longest oligo</div>
                       <div className="v">{result.longest_oligo}<small>nt</small></div>
                     </div>
+                    {/* A long gene needs more distinct junctions than 4 nt can
+                        supply, so the design widens them. The form still shows
+                        what was asked for; this shows what was built. */}
+                    <div className="stat">
+                      <div className="k">Overhang</div>
+                      <div className="v">
+                        {result.overhang_length}<small>nt</small>
+                        {result.overhang_length !== params.overhang_length && (
+                          <small className="widened">widened</small>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 

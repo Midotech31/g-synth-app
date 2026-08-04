@@ -121,6 +121,15 @@ class TestSSDEndpoint:
         assert "not A, C, G or T" in response.data["detail"]
 
 
+def _random_gene(length: int, seed: int) -> str:
+    """A coding insert long enough to need more junctions than 4 nt can supply."""
+    import random
+
+    codons = ("GCG", "TGC", "GAT", "GAA", "TTT", "GGC", "CAT", "ATT", "AAA", "CTG",
+              "ATG", "AAC", "CCG", "CAG", "CGC", "AGC", "ACC", "GTG", "TGG", "TAT")
+    rng = random.Random(seed)
+    return "".join(rng.choice(codons) for _ in range(length // 3)) + "TAA"
+
 @pytest.mark.django_db
 class TestAssemblyEndpoint:
     url_name = "design-assembly"
@@ -227,6 +236,42 @@ class TestAssemblyEndpoint:
             "sequence": LONG_INSERT, "overhang_length": 2,
         })
         assert response.status_code == 400
+
+    def test_a_whole_gene_designs_over_http(self, auth_client):
+        """The endpoint accepts 200 kb, but was only ever exercised on peptides.
+
+        A 2.4 kb gene needs 26 junctions and there are only 22 sets of 4 nt
+        overhangs that ligate in one order, so this used to come back as a 400
+        naming a junction the user had never heard of.
+        """
+        gene = _random_gene(2_400, seed=7)
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": gene, "target_oligo_length": 90, "overhang_length": 4,
+        })
+        assert response.status_code == 200, response.data
+        assert response.data["verification"] == []
+        assert response.data["fragment_count"] > 25
+
+    def test_reports_the_overhang_it_actually_used(self, auth_client):
+        """The client shows what was built, not what was asked for.
+
+        The design widens the overhang when 4 nt cannot supply the junctions.
+        A response that echoed the request would have the interface — and the
+        bench protocol printed from it — describing oligos nobody ordered.
+        """
+        gene = _random_gene(2_400, seed=7)
+        expected = design_merzoug_assembly(
+            gene, target_oligo_length=90, overhang_length=4,
+        )
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": gene, "target_oligo_length": 90, "overhang_length": 4,
+        })
+        assert response.data["overhang_length"] == expected.overhang_length > 4
+        assert all(
+            len(j) == expected.overhang_length
+            for j in response.data["junction_overhangs"]
+        )
+        assert any("widened" in note for note in response.data["warnings"])
 
 
 @pytest.mark.django_db
