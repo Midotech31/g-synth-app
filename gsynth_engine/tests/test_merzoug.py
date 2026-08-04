@@ -9,7 +9,12 @@ import random
 
 import pytest
 
-from gsynth_engine.constants import left_remainders, right_remainders
+from gsynth_engine.constants import (
+    RESTRICTION_ENZYMES,
+    left_remainders,
+    right_remainders,
+)
+from gsynth_engine.constants import overhang as enzyme_overhang
 from gsynth_engine.merzoug import design_merzoug_assembly
 from gsynth_engine.sequence import (
     SequenceError,
@@ -361,3 +366,80 @@ class TestLongConstructs:
 
         assert plan.verify() == []
         assert elapsed < 5.0, f"placement took {elapsed:.1f}s"
+
+
+class TestTheAssembledEndsMatchTheEnzymes:
+    """The finished assembly must present the sticky ends it will be cloned with.
+
+    Every terminal value in the plan is copied from the SSD when the fragments
+    are built — the first fragment's `left_overhang` is *assigned*
+    `ssd.left_overhang`, not measured. So until `verify()` read the ends back
+    off the molecule, nothing could tell a plan that carries the right end
+    from one that merely says it does, and the two look identical until the
+    ligation fails.
+    """
+
+    def _observed(self, plan):
+        """Both ends, from the fragments rather than from the plan's labels."""
+        return plan.terminal_ends
+
+    @pytest.mark.parametrize("enzyme", sorted(RESTRICTION_ENZYMES))
+    def test_left_end_is_what_the_left_enzyme_leaves(self, enzyme):
+        plan = design_merzoug_assembly(
+            LONG_INSERT, enzyme_pair=f"{enzyme} / XhoI", target_oligo_length=90,
+        )
+        left, _ = self._observed(plan)
+        assert left == enzyme_overhang(enzyme)
+        assert plan.ssd.left_overhang == enzyme_overhang(enzyme)[0]
+
+    @pytest.mark.parametrize("enzyme", sorted(RESTRICTION_ENZYMES))
+    def test_right_end_is_what_the_right_enzyme_leaves(self, enzyme):
+        plan = design_merzoug_assembly(
+            LONG_INSERT, enzyme_pair=f"NdeI / {enzyme}", target_oligo_length=90,
+        )
+        _, right = self._observed(plan)
+        assert right == enzyme_overhang(enzyme)
+        assert plan.ssd.right_overhang == enzyme_overhang(enzyme)[0]
+
+    def test_a_three_prime_cutter_is_reported_as_one(self):
+        """Polarity follows the side, not the strand.
+
+        A protruding top strand is a 5' overhang at the left end and a 3' one
+        at the right. Reading it off the strand alone calls KpnI a 5' cutter,
+        which is the kind of wrong that still ligates on paper.
+        """
+        plan = design_merzoug_assembly(
+            LONG_INSERT, enzyme_pair="KpnI / SacI", target_oligo_length=90,
+        )
+        left, right = self._observed(plan)
+        assert left == ("GTAC", "3'")
+        assert right == ("AGCT", "3'")
+
+    def test_ends_survive_a_gene_sized_assembly(self):
+        """Widening the internal overhangs must not disturb the outer ends."""
+        plan = design_merzoug_assembly(
+            random_insert(2_400, seed=7), target_oligo_length=90,
+        )
+        assert plan.overhang_length > 4, "this case should have widened"
+        assert plan.terminal_ends == (enzyme_overhang("NdeI"), enzyme_overhang("XhoI"))
+        assert plan.verify() == []
+
+    def test_verify_catches_an_end_that_does_not_match(self):
+        """The check must be able to fail, or it protects nothing.
+
+        An earlier compatibility check in the cloning module passed for every
+        input because it compared a label against itself. This moves the
+        bottom strand by one base — the oligos still rebuild both strands, so
+        only a check that reads the geometry can notice.
+        """
+        from dataclasses import replace
+
+        plan = design_merzoug_assembly(LONG_INSERT, enzyme_pair="NdeI / XhoI")
+        assert plan.verify() == []
+
+        first = plan.fragments[0]
+        plan.fragments[0] = replace(first, bottom_offset=first.bottom_offset + 1)
+
+        problems = plan.verify()
+        assert any("left-hand end" in p for p in problems), problems
+        assert any("NdeI" in p for p in problems), problems

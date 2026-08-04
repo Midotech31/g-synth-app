@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from gsynth_engine.constants import left_remainders
+from gsynth_engine.constants import overhang as enzyme_overhang
 from gsynth_engine.sequence import (
     SequenceError,
     gc_content,
@@ -66,6 +67,11 @@ MAX_OVERHANG = 8
 #: promising a supply that no longer exists. Lengths past 6 are not tabulated —
 #: 482 junctions is a 43 kb construct, well beyond what the method is for.
 OVERHANG_SUPPLY: Final[dict[int, int]] = {4: 22, 5: 92, 6: 482}
+
+
+def _describe_end(sequence: str, kind: str) -> str:
+    """An end as a user would say it: the bases and which end they sit on."""
+    return f"{sequence} ({kind} overhang)" if sequence else "blunt"
 
 
 @dataclass(frozen=True)
@@ -160,6 +166,44 @@ class AssemblyPlan:
             default=0,
         )
 
+    @property
+    def terminal_ends(self) -> tuple[tuple[str, str], tuple[str, str]]:
+        """The two outer ends, as the assembled fragments actually present them.
+
+        Read off the molecule the oligos would build rather than copied from
+        the design — every other terminal value in the plan is a label, and a
+        label cannot disagree with itself.
+
+        Returns ``((sequence, kind), (sequence, kind))`` for left and right,
+        sequences in top-strand sense, kind one of ``5'``, ``3'``, ``blunt``.
+        """
+        if not self.fragments:
+            return ("", "blunt"), ("", "blunt")
+
+        top = "".join(f.forward for f in self.fragments)
+        bottom = "".join(reverse_complement(f.reverse) for f in self.fragments)
+        offset = self.fragments[0].bottom_offset
+
+        # Whichever strand reaches further out is single-stranded there. At the
+        # left that exposes the top strand's 5' end or the bottom's 3'; at the
+        # right it is the other way about — which is why the side decides the
+        # polarity and the strand alone cannot.
+        if offset > 0:
+            left = (top[:offset], "5'")
+        elif offset < 0:
+            left = (bottom[:-offset], "3'")
+        else:
+            left = ("", "blunt")
+
+        top_end, bottom_end = len(top), offset + len(bottom)
+        if bottom_end > top_end:
+            right = (bottom[top_end - offset:], "5'")
+        elif top_end > bottom_end:
+            right = (top[bottom_end:], "3'")
+        else:
+            right = ("", "blunt")
+        return left, right
+
     def verify(self) -> list[str]:
         """Re-derive the construct from the fragments. Returns problems found.
 
@@ -193,6 +237,25 @@ class AssemblyPlan:
                 problems.append(
                     f"Fragments {left.index} and {right.index} do not share a "
                     f"junction: {left.right_overhang!r} vs {right.left_overhang!r}."
+                )
+
+        # The outer ends are what the vector has to accept. They are set from
+        # the SSD when the fragments are built, so nothing else here can catch
+        # a plan that labels an end correctly and carries a different one —
+        # and that failure looks like a clean design right up to the ligation
+        # that does not work.
+        (left_seq, left_kind), (right_seq, right_kind) = self.terminal_ends
+        for side, enzyme, seen, kind in (
+            ("left", self.ssd.left_enzyme, left_seq, left_kind),
+            ("right", self.ssd.right_enzyme, right_seq, right_kind),
+        ):
+            wanted = enzyme_overhang(enzyme)
+            if (seen, kind) != wanted:
+                problems.append(
+                    f"The {side}-hand end of the assembled fragments is "
+                    f"{_describe_end(seen, kind)}, but {enzyme} leaves "
+                    f"{_describe_end(*wanted)} — it would not ligate into a "
+                    f"vector cut with {enzyme}."
                 )
 
         # Overhangs must be unique, or fragments ligate in the wrong order.

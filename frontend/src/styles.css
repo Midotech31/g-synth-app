@@ -496,6 +496,13 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .chip:hover { border-color: var(--accent); }
 .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
+/* The two ends the vector will be offered, side by side in the card head.
+   Enzyme names keep their own case: NdeI and NDEI are not the same word to
+   anyone who orders one, and the surrounding label style uppercases. */
+.terminal-end { text-transform: none; }
+.terminal-end + .terminal-end { margin-left: 1.1rem; padding-left: 1.1rem; border-left: 1px solid var(--line); }
+.terminal-end strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+
 /* A stat can carry a "from" value; keep the two on separate lines. */
 .stat .v small + small { display: block; }
 

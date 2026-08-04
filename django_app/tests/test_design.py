@@ -168,6 +168,39 @@ class TestAssemblyEndpoint:
         assert fragments[0]["left_overhang"] == "TA"
         assert fragments[-1]["right_overhang"] == "TCGA"
 
+    def test_reports_the_ends_measured_off_the_assembly(self, auth_client):
+        """The response must say what the fragments present, not what was asked.
+
+        Every terminal value in the plan is copied from the SSD, so a payload
+        built from those labels would agree with itself whatever the oligos
+        actually spell. These come from the assembled duplex, and carry the
+        polarity — which follows the side, not the strand.
+        """
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "left_enzyme": "NdeI", "right_enzyme": "XhoI",
+        })
+        assert response.data["terminal_ends"] == [
+            {"side": "left", "enzyme": "NdeI", "overhang": "TA", "kind": "5'"},
+            {"side": "right", "enzyme": "XhoI", "overhang": "TCGA", "kind": "5'"},
+        ]
+
+    def test_a_three_prime_pair_is_reported_as_three_prime(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "left_enzyme": "KpnI", "right_enzyme": "SacI",
+        })
+        assert [e["kind"] for e in response.data["terminal_ends"]] == ["3'", "3'"]
+        assert [e["overhang"] for e in response.data["terminal_ends"]] == ["GTAC", "AGCT"]
+
+    def test_the_ends_match_what_the_engine_measured(self, auth_client):
+        expected = design_merzoug_assembly(LONG_INSERT, target_oligo_length=90)
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT, "target_oligo_length": 90,
+        })
+        left, right = expected.terminal_ends
+        assert [
+            (e["overhang"], e["kind"]) for e in response.data["terminal_ends"]
+        ] == [left, right]
+
     def test_includes_the_hybridisation_view(self, auth_client):
         """The client draws the duplex from coordinates, not from prose."""
         response = auth_client.post(reverse(self.url_name), {"sequence": LONG_INSERT})

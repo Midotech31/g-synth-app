@@ -136,6 +136,15 @@ def _assembly_payload(plan: AssemblyPlan, construct_name: str) -> dict:
         "overhang_length": plan.overhang_length,
         "longest_oligo": plan.longest_oligo,
         "junction_overhangs": plan.junction_overhangs,
+        # Measured off the assembled fragments, not copied from the design:
+        # this is what the vector will actually be offered.
+        "terminal_ends": [
+            {"side": side, "enzyme": enzyme, "overhang": sequence, "kind": kind}
+            for side, enzyme, (sequence, kind) in (
+                ("left", plan.ssd.left_enzyme, plan.terminal_ends[0]),
+                ("right", plan.ssd.right_enzyme, plan.terminal_ends[1]),
+            )
+        ],
         "fragments": [
             {
                 "index": fragment.index,

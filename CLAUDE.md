@@ -46,6 +46,9 @@ The load-bearing properties, which must never regress:
 - Re-ligating a Merzoug design in silico reproduces the construct base for
   base, **on both strands**. `AssemblyPlan.verify()` runs before any plan is
   returned; nothing downloads until it is empty.
+- The assembled fragments present **the sticky ends the chosen enzymes leave**,
+  sequence and polarity, at both outer ends — measured off the molecule, not
+  read back from the labels the design wrote.
 - Codon optimisation never changes the protein.
 - Recutting a recombinant plasmid with the same pair returns the insert.
 - Every enzyme is checked in **both** positions, left and right.
@@ -96,6 +99,13 @@ the overhang, which costs nothing (fragments are cut from a fixed construct,
 so the oligos stay the same length) and says so in a warning, because the
 number on the form is no longer the number in the tubes. `OVERHANG_SUPPLY` is
 measured, not estimated; a test re-derives it from the rules themselves.
+
+**A terminal end is measured, never quoted.** Every terminal value in a plan
+is copied from the SSD when the fragments are built, so a check that compares
+them agrees with itself whatever the oligos spell. `terminal_ends` reads the
+two ends off the assembled duplex and `verify()` compares *that* against the
+enzyme table. The same distinction is why `cloning.py` has
+`_observed_insert_ends`.
 
 **Circular means circular.** Sites, reads, features and primer read-ranges
 all wrap past position 0. Clamping at the ends silently truncates them, and

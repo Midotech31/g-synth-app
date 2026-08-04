@@ -201,8 +201,17 @@ export default function Design() {
                 <div className="card">
                   <div className="card-head">
                     <h2 style={{ flex: 1 }}>Construct map</h2>
+                    {/* Measured off the assembled fragments. The design's own
+                        label cannot disagree with itself, so showing that
+                        would confirm nothing. */}
                     <span className="label">
-                      5'-{result.ssd.left_overhang} … {result.ssd.right_overhang}-3'
+                      {result.terminal_ends.map((end) => (
+                        <span key={end.side} className="terminal-end">
+                          {end.enzyme}{" "}
+                          <strong>{end.overhang || "blunt"}</strong>
+                          {end.overhang ? ` ${end.kind}` : ""}
+                        </span>
+                      ))}
                     </span>
                   </div>
                   <div className="card-body">

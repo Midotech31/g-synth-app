@@ -112,6 +112,14 @@ export type Duplex = {
   bottom_fragments: DuplexSpan[];
 };
 
+export type TerminalEnd = {
+  side: "left" | "right";
+  enzyme: string;
+  overhang: string;
+  /** "5'", "3'" or "blunt" — polarity follows the side, not the strand. */
+  kind: string;
+};
+
 export type AssemblyResult = {
   construct_forward: string;
   construct_reverse: string;
@@ -122,6 +130,8 @@ export type AssemblyResult = {
   overhang_length: number;
   longest_oligo: number;
   junction_overhangs: string[];
+  /** The outer ends as the assembled fragments present them, not as designed. */
+  terminal_ends: TerminalEnd[];
   fragments: Fragment[];
   oligos: Oligo[];
   ssd: SSDResult;
