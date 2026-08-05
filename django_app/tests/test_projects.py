@@ -89,6 +89,7 @@ class TestProjectExport:
         assert 'filename="pGS_EntA.gb"' in response["Content-Disposition"]
 
         import io
+
         from Bio import SeqIO
 
         record = SeqIO.read(io.StringIO(response.content.decode()), "genbank")

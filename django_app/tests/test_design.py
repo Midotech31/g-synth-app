@@ -177,7 +177,9 @@ class TestAssemblyEndpoint:
         assert len(duplex["bottom_fragments"]) == response.data["fragment_count"]
         assert duplex["segments"], "the cassette should be labelled for colouring"
 
-        for span, fragment in zip(duplex["top_fragments"], response.data["fragments"]):
+        for span, fragment in zip(
+            duplex["top_fragments"], response.data["fragments"], strict=True
+        ):
             assert duplex["top"][span["start"]:span["end"]] == fragment["forward"]
 
     def test_reports_which_strand_carries_each_overhang(self, auth_client):
@@ -654,6 +656,7 @@ class TestExport:
 
     def parse_genbank(self, response):
         import io
+
         from Bio import SeqIO
 
         return SeqIO.read(io.StringIO(response.content.decode()), "genbank")
@@ -710,6 +713,7 @@ class TestExport:
         """Suppliers take a FASTA upload; retyping thirty names is where
         transcription errors come from."""
         import io
+
         from Bio import SeqIO
 
         designed = auth_client.post(reverse("design-assembly"), {
@@ -1081,6 +1085,7 @@ class TestPrimerExport:
 
     def test_primers_export_as_fasta(self, auth_client):
         import io
+
         from Bio import SeqIO
 
         cloned = self.build(auth_client)

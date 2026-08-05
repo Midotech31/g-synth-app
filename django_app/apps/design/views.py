@@ -8,12 +8,8 @@ tests are.
 from __future__ import annotations
 
 from django.http import HttpResponse
-from gsynth_engine.constants import (
-    CLEAVAGE_SITES,
-    COMMON_ENZYME_PAIRS,
-    RESTRICTION_ENZYMES,
-    overhang,
-)
+from gsynth_engine import vectors as vector_catalogue
+from gsynth_engine.align import Scoring, align, blosum62
 from gsynth_engine.cloning import (
     CloningResult,
     clone,
@@ -27,35 +23,38 @@ from gsynth_engine.codon import (
     build_table,
     optimise,
 )
+from gsynth_engine.constants import (
+    CLEAVAGE_SITES,
+    COMMON_ENZYME_PAIRS,
+    RESTRICTION_ENZYMES,
+    overhang,
+)
 from gsynth_engine.duplex import DuplexView, construct_duplex, junction_view
-from gsynth_engine.align import PROTEIN_SCORING, Scoring, align, blosum62
 from gsynth_engine.genbank import oligos_to_fasta, to_fasta, to_genbank
 from gsynth_engine.ligation import ligation_series, plan_ligation
-from gsynth_engine.primers import design_sequencing_primers
-from gsynth_engine.verify import verify
 from gsynth_engine.merzoug import AssemblyPlan, design_merzoug_assembly
+from gsynth_engine.primers import design_sequencing_primers
 from gsynth_engine.protocol import bench_protocol, order_sheet, order_sheet_csv
 from gsynth_engine.sequence import SequenceError, gc_content
 from gsynth_engine.ssd import SSDResult, design_small_sequence
 from gsynth_engine.thermo import ANNEALING
-from gsynth_engine import vectors as vector_catalogue
+from gsynth_engine.verify import verify
 from rest_framework import status
 from rest_framework.permissions import AllowAny
-from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.design.serializers import (
     CLEAVAGE_NAMES,
-    CloneRequestSerializer,
     AlignRequestSerializer,
+    CloneRequestSerializer,
     LigationRequestSerializer,
     OptimiseRequestSerializer,
     PrimerRequestSerializer,
-    VerifyRequestSerializer,
-    resolve_vector,
     SaveableAssemblyRequestSerializer,
     SSDRequestSerializer,
+    VerifyRequestSerializer,
+    resolve_vector,
 )
 from apps.projects.models import Project
 

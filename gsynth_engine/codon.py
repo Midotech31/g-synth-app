@@ -42,12 +42,11 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from gsynth_engine.cloning import find_sites, translate
-from gsynth_engine.constants import RESTRICTION_ENZYMES, STOP_CODONS
+from gsynth_engine.constants import RESTRICTION_ENZYMES
 from gsynth_engine.sequence import (
     SequenceError,
     clean_dna,
     gc_content,
-    longest_homopolymer,
     validate_dna,
 )
 
@@ -155,7 +154,7 @@ def build_table(sequences: list[str], *, name: str, source: str = "") -> CodonTa
         raise SequenceError("No complete codons were found in the reference set.")
 
     weights: dict[str, float] = {}
-    for amino_acid, codons in SYNONYMS.items():
+    for codons in SYNONYMS.values():
         top = max((counts[c] for c in codons), default=0)
         for codon in codons:
             weights[codon] = (counts[codon] / top) if top else 0.0

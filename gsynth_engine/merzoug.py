@@ -42,8 +42,8 @@ from gsynth_engine.sequence import (
     longest_homopolymer,
     reverse_complement,
 )
-from gsynth_engine.thermo import ANNEALING, melting_temperature
 from gsynth_engine.ssd import SSDResult, design_small_sequence
+from gsynth_engine.thermo import ANNEALING, melting_temperature
 
 #: Overhang lengths the method allows. 4 nt is the practical minimum for a
 #: stable ligation junction; beyond 8 nt the oligos get long without making

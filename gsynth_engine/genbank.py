@@ -41,7 +41,7 @@ class Feature:
     qualifiers: dict[str, str] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, entry: dict) -> "Feature":
+    def from_dict(cls, entry: dict) -> Feature:
         return cls(
             name=str(entry.get("name") or entry.get("label") or ""),
             type=str(entry.get("type") or "misc_feature"),

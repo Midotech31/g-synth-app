@@ -145,7 +145,9 @@ def _annotations_from(record) -> list[Annotation]:
             type=ftype,
             start=start,
             end=end,
-            direction=1 if location.strand in (None, 1) else -1,
+            direction=(
+                1 if location.strand == 1 else -1 if location.strand == -1 else 0
+            ),
             color=FEATURE_COLORS.get(ftype, DEFAULT_FEATURE_COLOR),
         ))
     out.sort(key=lambda a: (a.start, -(a.end - a.start)))

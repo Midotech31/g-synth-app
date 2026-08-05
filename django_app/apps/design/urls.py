@@ -11,13 +11,13 @@ from apps.design.views import (
     MerzougAssemblyView,
     OptimiseView,
     OrderSheetView,
-    ProtocolView,
     PrimerExportView,
+    ProtocolView,
     SequencingPrimerView,
     SSDDesignView,
-    VerifyView,
     VectorCatalogueView,
     VectorSequenceView,
+    VerifyView,
 )
 
 urlpatterns = [

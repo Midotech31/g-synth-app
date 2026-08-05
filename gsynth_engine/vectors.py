@@ -36,9 +36,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
+from gsynth_engine.constants import RESTRICTION_ENZYMES
 from gsynth_engine.sequence import clean_dna
 
 #: Where bundled sequences live. A vector earns a place here only when its
@@ -151,9 +152,11 @@ CATALOGUE: tuple[VectorSpec, ...] = (
         bundled="pET-21a.json",
         supplies_translation_start=True,
         notes=(
-            "The His-tag is C-terminal, so an insert carrying its own stop "
-            "codon will not be tagged. Leave the stop off, or put the tag on "
-            "the insert instead.",
+            (
+                "The His-tag is C-terminal, so an insert carrying its own stop "
+                "codon will not be tagged. Leave the stop off, or put the tag on "
+                "the insert instead."
+            ),
             "Cloning at NdeI uses the vector's ATG and removes the T7·Tag.",
         ),
     ),
@@ -183,11 +186,15 @@ CATALOGUE: tuple[VectorSpec, ...] = (
         bundled="pET-21.json",
         supplies_translation_start=False,
         notes=(
-            "There is no NdeI site: this is pET-21(+), not pET-21a(+). The "
-            "a/b/c/d variants add 74 bp carrying NdeI, NheI and the T7·Tag.",
-            "No ribosome binding site and no ATG between the lac operator and "
-            "the cloning region. The insert has to bring its own, or nothing "
-            "is translated.",
+            (
+                "There is no NdeI site: this is pET-21(+), not pET-21a(+). The "
+                "a/b/c/d variants add 74 bp carrying NdeI, NheI and the T7·Tag."
+            ),
+            (
+                "No ribosome binding site and no ATG between the lac operator and "
+                "the cloning region. The insert has to bring its own, or nothing "
+                "is translated."
+            ),
         ),
     ),
     VectorSpec(
@@ -211,9 +218,11 @@ CATALOGUE: tuple[VectorSpec, ...] = (
         aliases=("pET28a", "pET28a(+)", "pET-28a(+)"),
         reference="https://www.addgene.org/vector-database/2565/",
         notes=(
-            "This vector already supplies an N-terminal His-tag and a thrombin "
-            "site. Adding the same cassette to the insert gives the protein two "
-            "of each.",
+            (
+                "This vector already supplies an N-terminal His-tag and a thrombin "
+                "site. Adding the same cassette to the insert gives the protein two "
+                "of each."
+            ),
         ),
     ),
     VectorSpec(
@@ -237,8 +246,10 @@ CATALOGUE: tuple[VectorSpec, ...] = (
         aliases=("pET22b", "pET22b(+)", "pET-22b(+)"),
         reference="https://www.addgene.org/vector-database/2555/",
         notes=(
-            "Cloning at NdeI removes the pelB leader, and with it periplasmic "
-            "export. Use NcoI to keep it.",
+            (
+                "Cloning at NdeI removes the pelB leader, and with it periplasmic "
+                "export. Use NcoI to keep it."
+            ),
         ),
     ),
     VectorSpec(
@@ -262,8 +273,10 @@ CATALOGUE: tuple[VectorSpec, ...] = (
         aliases=("pET32a", "pET32a(+)"),
         reference="https://www.addgene.org/vector-database/2571/",
         notes=(
-            "Cloning at NdeI removes the thioredoxin fusion and the N-terminal "
-            "tags with it.",
+            (
+                "Cloning at NdeI removes the thioredoxin fusion and the N-terminal "
+                "tags with it."
+            ),
         ),
     ),
     VectorSpec(
@@ -286,8 +299,10 @@ CATALOGUE: tuple[VectorSpec, ...] = (
         aliases=("pGEX4T1", "pGEX-4T1"),
         reference="https://www.addgene.org/vector-database/2610/",
         notes=(
-            "No NdeI site: the G-Synth default pair does not apply. Use "
-            "BamHI / EcoRI, and keep the insert in frame with GST.",
+            (
+                "No NdeI site: the G-Synth default pair does not apply. Use "
+                "BamHI / EcoRI, and keep the insert in frame with GST."
+            ),
         ),
     ),
     VectorSpec(
@@ -307,8 +322,10 @@ CATALOGUE: tuple[VectorSpec, ...] = (
         aliases=("pUC-19",),
         reference="https://www.addgene.org/vector-database/2871/",
         notes=(
-            "No T7 promoter and no tags — a construct cloned here is stored, "
-            "not expressed.",
+            (
+                "No T7 promoter and no tags — a construct cloned here is stored, "
+                "not expressed."
+            ),
         ),
     ),
 )
@@ -316,7 +333,7 @@ CATALOGUE: tuple[VectorSpec, ...] = (
 DEFAULT_VECTOR = CATALOGUE[0]
 
 
-@lru_cache(maxsize=None)
+@cache
 def sequence_of(key: str) -> dict | None:
     """The bundled sequence and features for a vector, or None.
 
@@ -384,7 +401,7 @@ def validate(sequence: str, spec: VectorSpec, *, length_tolerance: int = 0) -> V
     knocked out one site in its own working copy has not stopped using the
     vector, but it does need to know before it picks that enzyme.
     """
-    from gsynth_engine.cloning import find_sites   # local: cloning imports us
+    from gsynth_engine.cloning import find_sites  # local: cloning imports us
 
     seq = clean_dna(sequence)
     check = VectorCheck(spec=spec, length=len(seq))
@@ -423,10 +440,9 @@ def validate(sequence: str, spec: VectorSpec, *, length_tolerance: int = 0) -> V
     }
 
     for enzyme in spec.unique_sites:
-        try:
-            count = len(find_sites(seq, enzyme, circular=True))
-        except Exception:                       # unknown enzyme in the table
+        if enzyme not in RESTRICTION_ENZYMES:
             continue
+        count = len(find_sites(seq, enzyme, circular=True))
         if count == 0 and enzyme in essential:
             check.problems.append(
                 f"{enzyme} does not cut this sequence, but {spec.name} has a "

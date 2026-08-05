@@ -1,11 +1,23 @@
 """Tests for FASTA, GenBank and SnapGene upload parsing."""
 import io
+import json
+import struct
+from pathlib import Path
+from xml.etree import ElementTree
 
 import pytest
+from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature, SimpleLocation
+from Bio.SeqRecord import SeqRecord
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
-from apps.sequences.parsing import ParseError, detect_format, parse_sequence_file
+from apps.sequences.parsing import (
+    ParseError,
+    _annotations_from,
+    detect_format,
+    parse_sequence_file,
+)
 
 GENBANK = """LOCUS       pDEMO                    120 bp    DNA     circular SYN 01-JAN-2026
 DEFINITION  Demonstration plasmid for the G-Synth viewer.
@@ -30,6 +42,35 @@ FASTA = """>pFASTA some description here
 ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGAC
 GGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTAC
 """
+
+
+def _snapgene_pet21a() -> bytes:
+    """Build a portable SnapGene sample from the bundled pET-21a record."""
+    path = Path(__file__).resolve().parents[2] / "gsynth_engine/vector_data/pET-21a.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+
+    def packet(kind: int, data: bytes) -> bytes:
+        return bytes([kind]) + struct.pack(">I", len(data)) + data
+
+    cookie = packet(0x09, struct.pack(">8sHHH", b"SnapGene", 1, 1, 1))
+    sequence = packet(0x00, b"\x01" + record["sequence"].encode("ascii"))
+
+    features = ElementTree.Element("Features")
+    for annotation in record["annotations"]:
+        feature = ElementTree.SubElement(
+            features,
+            "Feature",
+            name=annotation["name"],
+            type=annotation["type"],
+            directionality="2" if annotation["direction"] == -1 else "1",
+        )
+        ElementTree.SubElement(
+            feature,
+            "Segment",
+            range=f"{annotation['start'] + 1}-{annotation['end']}",
+            type="standard",
+        )
+    return cookie + sequence + packet(0x0A, ElementTree.tostring(features))
 
 
 class TestFormatDetection:
@@ -86,6 +127,14 @@ class TestGenBankParsing:
         rec = parse_sequence_file(GENBANK, "pDEMO.gb")
         starts = [a.start for a in rec.annotations]
         assert starts == sorted(starts)
+
+    def test_unstranded_feature_stays_unstranded(self):
+        record = SeqRecord(Seq("ACGT"))
+        record.features = [
+            SeqFeature(SimpleLocation(0, 4, strand=None), type="misc_feature")
+        ]
+
+        assert _annotations_from(record)[0].direction == 0
 
 
 class TestFastaParsing:
@@ -154,21 +203,14 @@ class TestSnapGeneImport:
     """A vector arrives from the supplier as .dna. Asking someone to convert
     it first is asking them to use another program to use this one."""
 
-    PET21A = "/root/.claude/uploads/7c8c4b0e-e761-5671-9d9c-44f3743c8a03/dbd85f04-pET21a.dna"
-
     def payload(self, name="pET-21a.dna"):
-        import pathlib
-
-        raw = pathlib.Path(self.PET21A).read_bytes()
-        return SimpleUploadedFile(name, raw, content_type="application/octet-stream")
+        return SimpleUploadedFile(
+            name, _snapgene_pet21a(), content_type="application/octet-stream"
+        )
 
     def test_a_snapgene_file_is_recognised_by_its_bytes(self):
         """These arrive renamed as often as not."""
-        import pathlib
-
-        from apps.sequences.parsing import detect_format
-
-        raw = pathlib.Path(self.PET21A).read_bytes()
+        raw = _snapgene_pet21a()
         assert detect_format(raw, "pET-21a.dna") == "snapgene"
         assert detect_format(raw, "whatever.txt") == "snapgene"
 

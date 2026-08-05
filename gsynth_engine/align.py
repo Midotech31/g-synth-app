@@ -208,7 +208,7 @@ def _gotoh(
             row_y[j] = -(open_cost + extend * j)
     else:
         # Free start along b: the alignment may begin anywhere in it.
-        for j in range(0, m + 1):
+        for j in range(m + 1):
             row_m[j] = 0 if free_start else (0 if j == 0 else NEG)
 
     pointers: list[bytearray] = []
@@ -363,12 +363,13 @@ def align(
 
     if scoring is None:
         scoring = (
-            Scoring(matrix=blosum62(), **{
-                "match": PROTEIN_SCORING.match,
-                "mismatch": PROTEIN_SCORING.mismatch,
-                "gap_open": PROTEIN_SCORING.gap_open,
-                "gap_extend": PROTEIN_SCORING.gap_extend,
-            })
+            Scoring(
+                matrix=blosum62(),
+                match=PROTEIN_SCORING.match,
+                mismatch=PROTEIN_SCORING.mismatch,
+                gap_open=PROTEIN_SCORING.gap_open,
+                gap_extend=PROTEIN_SCORING.gap_extend,
+            )
             if is_protein else Scoring()
         )
 
