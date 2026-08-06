@@ -443,7 +443,13 @@ export type ProjectSummary = {
 export type Project = ProjectSummary & {
   sequence: string;
   notes: string;
-  data: { annotations?: Annotation[]; topology?: string; gc_content?: number };
+  data: {
+    annotations?: Annotation[];
+    topology?: string;
+    gc_content?: number;
+    construct_gc?: number;
+    gc?: number;
+  };
   created_at: string;
 };
 

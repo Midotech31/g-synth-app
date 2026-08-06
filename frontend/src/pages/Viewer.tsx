@@ -58,7 +58,7 @@ export default function Viewer() {
       <div className="content">
         <div className="notice notice-error">{error}</div>
         <p style={{ marginTop: "1rem" }}>
-          <Link to="/">← Back to projects</Link>
+          <Link to="/projects">← Back to projects</Link>
         </p>
       </div>
     );
@@ -74,9 +74,14 @@ export default function Viewer() {
   }
 
   const topology = project.data?.topology ?? "linear";
-  // Imported records call it gc_content, designed ones call it gc. Reading
-  // only one left the stat blank on every construct the app made itself.
-  const gc = project.data?.gc_content ?? (project.data as { gc?: number })?.gc;
+  // Imports, assemblies and cloned plasmids use different payload names.
+  // Keep old saved projects readable, and derive the value as a last resort.
+  const gc = project.data?.gc_content
+    ?? project.data?.construct_gc
+    ?? project.data?.gc
+    ?? (project.sequence.length
+      ? 100 * (project.sequence.match(/[GC]/gi)?.length ?? 0) / project.sequence.length
+      : undefined);
 
   // A saved design carries its whole payload. Showing only the map made the
   // oligos, the junctions and the protein unrecoverable — the parts someone
@@ -292,7 +297,7 @@ export default function Viewer() {
         </div>
 
         <p>
-          <Link to="/">← Back to projects</Link>
+          <Link to="/projects">← Back to projects</Link>
         </p>
       </div>
     </>

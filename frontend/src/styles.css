@@ -169,7 +169,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 
 .field { display: flex; flex-direction: column; gap: 0.35rem; }
 .field > label { font-size: 0.85rem; font-weight: 550; color: var(--ink-soft); }
-input[type="text"], input[type="email"], input[type="password"], textarea {
+input[type="text"], input[type="email"], input[type="password"], input[type="number"], textarea {
   font: inherit;
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--line-strong);
@@ -565,3 +565,47 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .map-filters input[type="checkbox"] { accent-color: var(--accent); }
 .inline-check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--ink-soft); cursor: pointer; }
 .inline-check input { accent-color: var(--accent); }
+
+/* Phone layout: turn the desktop rail into a compact header and let every
+   workspace use the full viewport width. */
+@media (max-width: 720px) {
+  .shell { flex-direction: column; }
+  .rail {
+    width: 100%;
+    flex: none;
+    padding: 0.75rem 0.85rem;
+    gap: 0.7rem;
+  }
+  .rail nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+    scrollbar-width: thin;
+  }
+  .rail nav a { flex: 0 0 auto; padding: 0.42rem 0.6rem; }
+  .rail .spacer { display: none; }
+  .rail .account {
+    border-top: 0;
+    padding-top: 0;
+    flex-direction: row;
+    align-items: center;
+  }
+  .rail .account .who { flex: 1; }
+  .btn-rail { width: auto; flex: none; }
+  .topbar {
+    padding: 0.9rem 0.85rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .topbar > .btn-primary { width: 100%; justify-content: center; }
+  .content { padding: 1rem 0.85rem 2rem; }
+  .card > .card-body { padding: 0.9rem; }
+  .stat-row { gap: 1rem 1.35rem; }
+  .seq-stage { height: 430px; }
+  .empty { padding: 2rem 1rem; }
+}
+
+@media (max-width: 480px) {
+  .row-2 { grid-template-columns: 1fr; }
+  .grid-projects { grid-template-columns: 1fr; }
+}

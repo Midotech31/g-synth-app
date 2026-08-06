@@ -33,6 +33,7 @@ export default function Verify() {
   const [primers, setPrimers] = useState<PrimerSet | null>(null);
   const [ligation, setLigation] = useState<LigationReaction[] | null>(null);
   const [vectorNg, setVectorNg] = useState(50);
+  const [trim, setTrim] = useState(30);
 
   useEffect(() => {
     api.listProjects()
@@ -89,6 +90,7 @@ export default function Verify() {
         design: project.sequence,
         reads: parsed,
         circular,
+        trim,
         region_start: hasRegion ? insertStart : null,
         region_end: hasRegion ? insertEnd : null,
         coding_start: hasRegion ? insertStart : null,
@@ -237,6 +239,18 @@ export default function Verify() {
                   <span className="label">
                     FASTA, or just the bases for a single read
                   </span>
+                  <label htmlFor="trim">Ignore low-quality bases at each end</label>
+                  <input
+                    id="trim"
+                    type="number"
+                    min={0}
+                    max={200}
+                    value={trim}
+                    onChange={(e) => setTrim(Number(e.target.value))}
+                  />
+                  <span className="label">
+                    {trim} bases from the start and {trim} from the end · use 0 for a cleaned sequence
+                  </span>
                 </div>
               )}
 
@@ -361,6 +375,23 @@ export default function Verify() {
                           {report.warnings.map((w) => (
                             <li key={w} style={{ marginBottom: "0.3rem", lineHeight: 1.5 }}>{w}</li>
                           ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {report.reads.some((read) => read.warnings.length > 0) && (
+                    <div className="card">
+                      <div className="card-head"><h2>Read quality notes</h2></div>
+                      <div className="card-body">
+                        <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--ink-soft)" }}>
+                          {report.reads.flatMap((read) =>
+                            read.warnings.map((warning) => (
+                              <li key={`${read.name}-${warning}`} style={{ marginBottom: "0.3rem", lineHeight: 1.5 }}>
+                                <strong>{read.name}:</strong> {warning}
+                              </li>
+                            )),
+                          )}
                         </ul>
                       </div>
                     </div>
