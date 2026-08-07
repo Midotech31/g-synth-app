@@ -10,10 +10,10 @@ import io
 
 import pytest
 from django.urls import reverse
-from gsynth_engine.merzoug import design_merzoug_assembly
-from gsynth_engine.ssd import design_small_sequence
 
 from apps.projects.models import Project
+from gsynth_engine.merzoug import design_merzoug_assembly
+from gsynth_engine.ssd import design_small_sequence
 
 # The specification's Example 1 — the API must reproduce it end to end.
 GOLDEN_INSERT = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA"
@@ -219,7 +219,7 @@ class TestAssemblyEndpoint:
         assert len(duplex["bottom_fragments"]) == response.data["fragment_count"]
         assert duplex["segments"], "the cassette should be labelled for colouring"
 
-        for span, fragment in zip(duplex["top_fragments"], response.data["fragments"]):
+        for span, fragment in zip(duplex["top_fragments"], response.data["fragments"], strict=False):
             assert duplex["top"][span["start"]:span["end"]] == fragment["forward"]
 
     def test_reports_which_strand_carries_each_overhang(self, auth_client):
@@ -732,6 +732,7 @@ class TestExport:
 
     def parse_genbank(self, response):
         import io
+
         from Bio import SeqIO
 
         return SeqIO.read(io.StringIO(response.content.decode()), "genbank")
@@ -788,6 +789,7 @@ class TestExport:
         """Suppliers take a FASTA upload; retyping thirty names is where
         transcription errors come from."""
         import io
+
         from Bio import SeqIO
 
         designed = auth_client.post(reverse("design-assembly"), {
@@ -1159,6 +1161,7 @@ class TestPrimerExport:
 
     def test_primers_export_as_fasta(self, auth_client):
         import io
+
         from Bio import SeqIO
 
         cloned = self.build(auth_client)
@@ -1286,3 +1289,136 @@ class TestValidationAndJunctionViews:
         data = self.cloned(auth_client)
         for site in data["restriction_sites"]:
             assert site["cuts"] == 1 or site["used"]
+
+
+@pytest.mark.django_db
+class TestTraceVerifyEndpoint:
+    """Uploading .ab1 traces rather than pasting the letters off them.
+
+    The trace is what separates a mutation from a bad call, so the response
+    has to carry the confidence — not just the difference.
+    """
+
+    url_name = "design-verify-traces"
+
+    DESIGN = (
+        "ATGGCTAGCAAAGAACTGGTTACCGCTCTGTATCTGGTGTGCGGCGAACGCGGCTTTTTCTACACCCCG"
+        "AAAACCCGCCGCGAAGCGGAAGATCTGCAGGTGGGCCAGGTGGAACTGGGCGGCGGCCCGGGCGCGGGC"
+        "AGCCTGCAGCCGCTGGCGCTGGAAGGCAGCCTGCAGAAACGCGGCATCGTGGAACAGTGCTGCACCAGC"
+        "ATCTGCAGCCTGTACCAGCTGGAAAACTACTGCAACGGCGGCTTTGTGAACCAGCATCTGTGCGGCAGC"
+    )
+
+    def _upload(self, sequence, quality=None, name="fwd.ab1"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from gsynth_engine.tests.test_chromatogram import build_ab1
+
+        blob = build_ab1(sequence, quality if quality is not None else [45] * len(sequence))
+        return SimpleUploadedFile(name, blob, content_type="application/octet-stream")
+
+    def _changed_read(self, at=100):
+        piece = list(self.DESIGN[30:230])
+        piece[at] = {"A": "G", "G": "A", "C": "T", "T": "C"}[piece[at]]
+        return "".join(piece)
+
+    def test_requires_authentication(self, api_client):
+        response = api_client.post(reverse(self.url_name), {
+            "design": self.DESIGN, "traces": [self._upload(self.DESIGN[30:230])],
+        }, format="multipart")
+        assert response.status_code == 401
+
+    def test_a_clean_trace_verifies_the_design(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "design": self.DESIGN, "circular": False,
+            "traces": [self._upload(self.DESIGN[30:230])],
+        }, format="multipart")
+        assert response.status_code == 200, response.data
+        assert response.data["is_verified"] is True
+        assert response.data["differences"] == []
+        assert response.data["traces"][0]["mean_quality"] == 45.0
+
+    def test_a_poor_peak_is_returned_as_unconfident(self, auth_client):
+        """Same letters as a real mutation; the response must not conflate them."""
+        read = self._changed_read()
+        quality = [45] * len(read)
+        quality[100] = 7
+
+        response = auth_client.post(reverse(self.url_name), {
+            "design": self.DESIGN, "circular": False,
+            "traces": [self._upload(read, quality)],
+        }, format="multipart")
+        assert response.status_code == 200, response.data
+        difference = response.data["differences"][0]
+        assert difference["quality"] == 7
+        assert difference["confident"] is False
+        assert "Q7" in difference["description"]
+
+    def test_a_clean_peak_is_returned_as_confident(self, auth_client):
+        read = self._changed_read()
+        response = auth_client.post(reverse(self.url_name), {
+            "design": self.DESIGN, "circular": False,
+            "traces": [self._upload(read)],
+        }, format="multipart")
+        difference = response.data["differences"][0]
+        assert difference["quality"] == 45
+        assert difference["confident"] is True
+
+    def test_the_peaks_around_each_difference_come_back(self, auth_client):
+        """So it can be looked at, not taken on trust. Only the window
+        travels — whole traces would be megabytes per read."""
+        read = self._changed_read()
+        response = auth_client.post(reverse(self.url_name), {
+            "design": self.DESIGN, "circular": False,
+            "traces": [self._upload(read)],
+        }, format="multipart")
+
+        windows = response.data["trace_windows"]
+        assert len(windows) == 1
+        window = windows[0]
+        assert window["read"] == "fwd.ab1"
+        assert set(window["traces"]) == set("ACGT")
+        assert window["bases"], "the window must name the bases it spans"
+        assert any(b["index"] == window["centre"] for b in window["bases"])
+
+    def test_matches_what_the_engine_measured(self, auth_client):
+        """The response reports the engine's numbers, not its own."""
+        from gsynth_engine.chromatogram import read_ab1
+        from gsynth_engine.tests.test_chromatogram import build_ab1
+        from gsynth_engine.verify import verify
+
+        read = self._changed_read()
+        quality = [45] * len(read)
+        quality[100] = 9
+        blob = build_ab1(read, quality)
+
+        trace = read_ab1(blob, name="fwd.ab1")
+        expected = verify(self.DESIGN, {"fwd.ab1": read}, circular=False,
+                          traces={"fwd.ab1": trace})
+
+        response = auth_client.post(reverse(self.url_name), {
+            "design": self.DESIGN, "circular": False,
+            "traces": [self._upload(read, quality)],
+        }, format="multipart")
+
+        assert [d["position"] for d in response.data["differences"]] == [
+            d.position for d in expected.differences
+        ]
+        assert [d["quality"] for d in response.data["differences"]] == [
+            d.quality for d in expected.differences
+        ]
+
+    def test_a_file_that_is_not_a_trace_is_refused_in_plain_words(self, auth_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        response = auth_client.post(reverse(self.url_name), {
+            "design": self.DESIGN,
+            "traces": [SimpleUploadedFile("scan.pdf", b"%PDF-1.4" + b"\x00" * 500)],
+        }, format="multipart")
+        assert response.status_code == 400
+        assert "not an .ab1" in response.data["detail"]
+
+    def test_no_trace_at_all_is_refused(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "design": self.DESIGN,
+        }, format="multipart")
+        assert response.status_code == 400

@@ -90,7 +90,7 @@ class DuplexView:
     def paired(self) -> str:
         """'|' where both strands are present and complementary, else ' '."""
         marks = []
-        for top_base, bottom_base in zip(self.top, self.bottom):
+        for top_base, bottom_base in zip(self.top, self.bottom, strict=False):
             if top_base == GAP or bottom_base == GAP:
                 marks.append(GAP)
             elif complement(top_base) == bottom_base:
@@ -377,7 +377,7 @@ def junction_view(
 
     pairs = "".join(
         "|" if a != GAP and b != GAP and complement(a) == b else GAP
-        for a, b in zip(joined_top, joined_bottom)
+        for a, b in zip(joined_top, joined_bottom, strict=False)
     )
 
     span = (low, high)

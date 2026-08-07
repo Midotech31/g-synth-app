@@ -1,0 +1,22 @@
+# The engine, the HTTP layer and the tools share one set of rules. The
+# Django app already had these; keeping a second copy in its own pyproject
+# meant `ruff check` from the repo root silently used defaults instead, and
+# a genuine undefined name sat in `verify.py` unreported because
+# `from __future__ import annotations` hides it from the interpreter too.
+line-length = 100
+target-version = "py311"
+exclude = ["migrations", ".venv", "staticfiles", "node_modules", "dist",
+           "app.py", "modules", "utils"]
+
+[lint]
+select = ["E", "W", "F", "I", "B", "UP", "DJ"]
+ignore = [
+    "E501",   # line length is a formatting matter, not a lint one
+    "DJ001",  # this project defaults text fields to "" rather than NULL
+]
+
+[lint.isort]
+# `gsynth_engine` is a sibling of `django_app`, not an installed package, so
+# without this it sorts as third-party from one directory and first-party
+# from another — and the ordering flips depending on where ruff was run.
+known-first-party = ["gsynth_engine", "apps", "config"]

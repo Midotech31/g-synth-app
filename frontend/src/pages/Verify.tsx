@@ -10,6 +10,7 @@ import {
   type VerifyReport,
 } from "../api/client";
 import Icon from "../components/Icon";
+import TraceView from "../components/TraceView";
 
 /**
  * The end of the workflow: you built it, now check it is what you designed.
@@ -30,6 +31,7 @@ export default function Verify() {
   const [busy, setBusy] = useState(false);
 
   const [reads, setReads] = useState("");
+  const [traceFiles, setTraceFiles] = useState<File[]>([]);
   const [report, setReport] = useState<VerifyReport | null>(null);
   const [primers, setPrimers] = useState<PrimerSet | null>(null);
   const [ligation, setLigation] = useState<LigationReaction[] | null>(null);
@@ -79,13 +81,28 @@ export default function Verify() {
   async function runVerify() {
     if (!project) return;
     const parsed = parseReads(reads);
-    if (!Object.keys(parsed).length) {
-      setError("Paste at least one read — FASTA, or just the bases.");
+    if (!traceFiles.length && !Object.keys(parsed).length) {
+      setError("Add an .ab1 trace, or paste the bases.");
       return;
     }
     setBusy(true);
     setError("");
     try {
+      // A trace carries the confidence of every base; letters do not. When
+      // both are given the traces win — there is no reason to discard the
+      // one piece of evidence that separates a mutation from a bad call.
+      const common = {
+        design: project.sequence,
+        circular,
+        region_start: hasRegion ? insertStart : null,
+        region_end: hasRegion ? insertEnd : null,
+        coding_start: hasRegion ? insertStart : null,
+        coding_end: hasRegion ? insertEnd : null,
+      };
+      if (traceFiles.length) {
+        setReport(await api.verifyTraces({ ...common, files: traceFiles }));
+        return;
+      }
       setReport(await api.verify({
         design: project.sequence,
         reads: parsed,
@@ -225,7 +242,30 @@ export default function Verify() {
 
               {tab === "reads" && project && (
                 <div className="field">
-                  <label htmlFor="reads">Sequencing reads</label>
+                  <label htmlFor="traces">Trace files (.ab1)</label>
+                  <input
+                    id="traces"
+                    type="file"
+                    accept=".ab1,application/octet-stream"
+                    multiple
+                    onChange={(e) => {
+                      setTraceFiles(Array.from(e.target.files ?? []));
+                      setReport(null);
+                    }}
+                  />
+                  <span className="label">
+                    {traceFiles.length
+                      ? `${traceFiles.length} trace${traceFiles.length === 1 ? "" : "s"} ready`
+                      : "What the facility sent — the peaks say which differences are real"}
+                  </span>
+                </div>
+              )}
+
+              {tab === "reads" && project && (
+                <div className="field">
+                  <label htmlFor="reads">
+                    {traceFiles.length ? "Or paste the bases instead" : "Sequencing reads"}
+                  </label>
                   <textarea
                     id="reads"
                     value={reads}
@@ -307,16 +347,32 @@ export default function Verify() {
                       <div className="card-head"><h2>What differs</h2></div>
                       <div className="card-body">
                         <ul className="difference-list">
-                          {report.differences.map((d) => (
-                            <li key={`${d.kind}-${d.position}-${d.found}`}
-                                className={d.silent ? "silent" : ""}>
-                              {d.description}
-                            </li>
-                          ))}
+                          {report.differences.map((d) => {
+                            const peaks = report.trace_windows?.find(
+                              (w) => w.position === d.position,
+                            );
+                            return (
+                              <li key={`${d.kind}-${d.position}-${d.found}`}
+                                  className={
+                                    (d.silent ? "silent " : "") +
+                                    (d.confident === false ? "unconfident" : "")
+                                  }>
+                                {d.description}
+                                {peaks && <TraceView window={peaks} />}
+                              </li>
+                            );
+                          })}
                         </ul>
                         <p className="note" style={{ marginTop: "0.6rem" }}>
                           Positions are in the construct, counting from 1.
                           Silent changes leave the protein alone.
+                          {report.differences.some((d) => d.confident === false) && (
+                            <>
+                              {" "}Differences marked Q&lt;20 sit on a peak the
+                              basecaller was not sure of — read those again
+                              before acting on them.
+                            </>
+                          )}
                         </p>
                       </div>
                     </div>

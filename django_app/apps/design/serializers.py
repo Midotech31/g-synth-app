@@ -7,13 +7,14 @@ you find yourself computing a sequence in this file, it belongs in
 """
 from __future__ import annotations
 
+from rest_framework import serializers
+
 from gsynth_engine.constants import (
     CLEAVAGE_SITES,
     RESTRICTION_ENZYMES,
 )
 from gsynth_engine.merzoug import MAX_OVERHANG, MIN_OVERHANG
 from gsynth_engine.vectors import CATALOGUE, DEFAULT_VECTOR
-from rest_framework import serializers
 
 ENZYME_NAMES = sorted(RESTRICTION_ENZYMES)
 CLEAVAGE_NAMES = sorted(CLEAVAGE_SITES)
@@ -301,6 +302,42 @@ class VerifyRequestSerializer(serializers.Serializer):
                 {"reads": f"At most {self.MAX_READS} reads at a time."}
             )
         return attrs
+
+
+class TraceUploadSerializer(serializers.Serializer):
+    """Sanger trace files, compared against a design.
+
+    A trace carries what the letters cannot: how much to believe each base.
+    Files arrive as multipart because an .ab1 is binary — base64 in JSON
+    would inflate a 400 kB trace to 550 kB for no gain.
+    """
+
+    design = serializers.CharField(max_length=2_000_000)
+    #: Bounded, because an .ab1 is a fixed shape and anything far larger is
+    #: either the wrong file or someone probing for a memory limit.
+    traces = serializers.ListField(
+        child=serializers.FileField(max_length=255, allow_empty_file=False),
+        min_length=1, max_length=32,
+    )
+    circular = serializers.BooleanField(default=True)
+    trim_quality = serializers.IntegerField(min_value=0, max_value=60, default=13)
+    coding_start = serializers.IntegerField(min_value=0, required=False, allow_null=True)
+    coding_end = serializers.IntegerField(min_value=0, required=False, allow_null=True)
+    region_start = serializers.IntegerField(min_value=0, required=False, allow_null=True)
+    region_end = serializers.IntegerField(min_value=0, required=False, allow_null=True)
+
+    #: A 1.2 kb read is about 400 kB. Ten times that is not a trace.
+    MAX_TRACE_BYTES = 4 * 1024 * 1024
+
+    def validate_traces(self, files):
+        for upload in files:
+            if upload.size > self.MAX_TRACE_BYTES:
+                raise serializers.ValidationError(
+                    f"{upload.name} is {upload.size / 1e6:.1f} MB. A Sanger "
+                    f"trace is normally under 0.5 MB — check it is an .ab1 "
+                    f"and not an archive."
+                )
+        return files
 
 
 class AlignRequestSerializer(serializers.Serializer):

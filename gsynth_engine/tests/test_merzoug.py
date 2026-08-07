@@ -113,7 +113,7 @@ class TestJunctions:
     def test_adjacent_fragments_share_a_complementary_junction(self):
         """Fragment i's right overhang must be fragment i+1's left overhang."""
         plan = design_merzoug_assembly(LONG_INSERT)
-        for left, right in zip(plan.fragments, plan.fragments[1:]):
+        for left, right in zip(plan.fragments, plan.fragments[1:], strict=False):
             assert left.right_overhang == right.left_overhang
             assert len(left.right_overhang) == plan.overhang_length
 
@@ -138,7 +138,7 @@ class TestJunctions:
         for i, first in enumerate(junctions):
             for second in junctions[i + 1 :]:
                 for candidate in (second, reverse_complement(second)):
-                    mismatches = sum(1 for a, b in zip(first, candidate) if a != b)
+                    mismatches = sum(1 for a, b in zip(first, candidate, strict=False) if a != b)
                     assert mismatches >= 2, (
                         f"{first} and {second} differ by {mismatches} base(s)"
                     )
@@ -153,7 +153,7 @@ class TestJunctions:
                 if len(end) != len(junction):
                     continue
                 for candidate in (end, reverse_complement(end)):
-                    mismatches = sum(1 for a, b in zip(junction, candidate) if a != b)
+                    mismatches = sum(1 for a, b in zip(junction, candidate, strict=False) if a != b)
                     assert mismatches >= 2, f"{junction} too close to terminal {end}"
 
 

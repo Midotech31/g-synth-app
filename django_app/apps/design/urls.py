@@ -11,13 +11,14 @@ from apps.design.views import (
     MerzougAssemblyView,
     OptimiseView,
     OrderSheetView,
-    ProtocolView,
     PrimerExportView,
+    ProtocolView,
     SequencingPrimerView,
     SSDDesignView,
-    VerifyView,
+    TraceVerifyView,
     VectorCatalogueView,
     VectorSequenceView,
+    VerifyView,
 )
 
 urlpatterns = [
@@ -32,6 +33,7 @@ urlpatterns = [
     path("primers/export/", PrimerExportView.as_view(), name="design-primers-export"),
     path("align/", AlignView.as_view(), name="design-align"),
     path("verify/", VerifyView.as_view(), name="design-verify"),
+    path("verify/traces/", TraceVerifyView.as_view(), name="design-verify-traces"),
     path("clone/", CloneView.as_view(), name="design-clone"),
     path("clone/export/", CloneExportView.as_view(), name="design-clone-export"),
     path("assembly/export/", ConstructExportView.as_view(), name="design-construct-export"),

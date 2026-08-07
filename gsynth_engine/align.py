@@ -311,13 +311,19 @@ def _gotoh(
 
     if mode == "global":
         while i > 0:
-            top_out.append(a[i - 1]); bottom_out.append("-"); i -= 1
+            top_out.append(a[i - 1])
+            bottom_out.append("-")
+            i -= 1
         while j > 0:
-            top_out.append("-"); bottom_out.append(b[j - 1]); j -= 1
+            top_out.append("-")
+            bottom_out.append(b[j - 1])
+            j -= 1
     elif mode == "semi-global":
         # The whole of `a` is used; whatever is left of it hangs off the end.
         while i > 0:
-            top_out.append(a[i - 1]); bottom_out.append("-"); i -= 1
+            top_out.append(a[i - 1])
+            bottom_out.append("-")
+            i -= 1
 
     top_out.reverse()
     bottom_out.reverse()
@@ -386,7 +392,7 @@ def align(
 
     marks: list[str] = []
     identities = similarities = gaps = 0
-    for x, y in zip(top, bottom):
+    for x, y in zip(top, bottom, strict=False):
         if x == "-" or y == "-":
             marks.append(" ")
             gaps += 1

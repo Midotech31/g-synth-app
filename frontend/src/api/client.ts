@@ -304,6 +304,10 @@ export type Difference = {
   to_residue: string;
   silent: boolean | null;
   description: string;
+  /** Null when the read came as letters — "unknown", not "fine". */
+  quality?: number | null;
+  confident?: boolean | null;
+  read_index?: number | null;
 };
 
 export type VerifyReport = {
@@ -326,8 +330,38 @@ export type VerifyReport = {
     difference_count: number;
     is_clean: boolean;
     warnings: string[];
+    /** Null when the read arrived as letters rather than as a trace. */
+    mean_quality?: number | null;
+    trimmed_start?: number;
+    trimmed_end?: number;
   }[];
   warnings: string[];
+  /** Present only on the trace endpoint. */
+  traces?: TraceSummary[];
+  trace_windows?: TraceWindow[];
+};
+
+export type TraceSummary = {
+  name: string;
+  length: number;
+  mean_quality: number;
+  trim_start: number;
+  trim_stop: number;
+  trimmed_length: number;
+  high_quality_bases: number;
+  sample_count: number;
+  /** Enough good sequence to be worth comparing to a design at all. */
+  usable: boolean;
+};
+
+/** The peaks around one difference — never a whole trace, which is megabytes. */
+export type TraceWindow = {
+  read: string;
+  position: number;
+  samples: [number, number];
+  traces: Record<string, number[]>;
+  bases: { index: number; base: string; quality: number; at: number }[];
+  centre: number;
 };
 
 export type AlignRow = {
@@ -665,6 +699,36 @@ export const api = {
     region_start?: number | null;
     region_end?: number | null;
   }) => request<VerifyReport>("/api/design/verify/", { method: "POST", body: params }),
+
+  /**
+   * The same comparison, from .ab1 files rather than pasted letters.
+   *
+   * Multipart because a trace is binary — base64 in JSON would inflate a
+   * 400 kB file by a third for nothing. What comes back carries the quality
+   * of each disputed base and the peaks around it.
+   */
+  verifyTraces: (params: {
+    design: string;
+    files: File[];
+    circular?: boolean;
+    trim_quality?: number;
+    coding_start?: number | null;
+    coding_end?: number | null;
+    region_start?: number | null;
+    region_end?: number | null;
+  }) => {
+    const form = new FormData();
+    form.append("design", params.design);
+    params.files.forEach((file) => form.append("traces", file));
+    for (const key of ["circular", "trim_quality", "coding_start", "coding_end",
+                       "region_start", "region_end"] as const) {
+      const value = params[key];
+      if (value !== undefined && value !== null) form.append(key, String(value));
+    }
+    return request<VerifyReport>("/api/design/verify/traces/", {
+      method: "POST", formData: form,
+    });
+  },
 
   align: (params: {
     first: string;

@@ -1,8 +1,6 @@
 """Small sequence utilities. Deliberately dependency-free."""
 from __future__ import annotations
 
-import math
-
 _COMPLEMENT = str.maketrans("ACGTacgtNn", "TGCAtgcaNn")
 
 

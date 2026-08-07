@@ -604,3 +604,35 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* A back link reads as one object: the arrow travels with the words. */
 .back-link { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+/* ── Sequencing traces ─────────────────────────────────────────────────
+   The peaks under a disputed base. Drawn rather than described, because
+   "this might be a bad call" is a judgement someone has to make by looking,
+   and the shape is the only thing that supports it. */
+.trace-view {
+  margin: 0.55rem 0 0.2rem;
+  padding: 0.5rem 0.6rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.trace-plot { display: block; width: 100%; }
+/* The disputed column, so the eye lands on it before reading anything. */
+.trace-focus { fill: var(--accent-wash); }
+
+/* Base calls sit at their own peaks, so the row stays in register with the
+   trace above it — evenly spaced letters drift apart from what they label. */
+.trace-bases { position: relative; margin-top: 0.15rem; }
+.trace-base {
+  position: absolute; transform: translateX(-50%);
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 600;
+}
+.trace-base.is-centre { text-decoration: underline; text-underline-offset: 2px; }
+.trace-base.is-poor { opacity: 0.45; }
+.trace-note { margin-top: 0.5rem; }
+
+/* A difference the trace does not support is still shown — hiding it would
+   be deciding for the reader — but it is toned down, because acting on it
+   is usually wrong. */
+.difference-list li.unconfident { color: var(--ink-soft); }
+.difference-list li.unconfident::marker { color: var(--amber); }

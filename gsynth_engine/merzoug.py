@@ -44,8 +44,8 @@ from gsynth_engine.sequence import (
     longest_homopolymer,
     reverse_complement,
 )
-from gsynth_engine.thermo import ANNEALING, melting_temperature
 from gsynth_engine.ssd import SSDResult, design_small_sequence
+from gsynth_engine.thermo import ANNEALING, melting_temperature
 
 #: Overhang lengths the method allows. 4 nt is the practical minimum for a
 #: stable ligation junction; beyond 8 nt the oligos get long without making
@@ -232,7 +232,7 @@ class AssemblyPlan:
             problems.append("The reverse oligos do not reassemble the bottom strand.")
 
         # Junctions must actually be complementary.
-        for left, right in zip(self.fragments, self.fragments[1:]):
+        for left, right in zip(self.fragments, self.fragments[1:], strict=False):
             if left.right_overhang != right.left_overhang:
                 problems.append(
                     f"Fragments {left.index} and {right.index} do not share a "

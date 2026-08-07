@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
 from gsynth_engine.sequence import clean_dna
@@ -316,7 +316,7 @@ CATALOGUE: tuple[VectorSpec, ...] = (
 DEFAULT_VECTOR = CATALOGUE[0]
 
 
-@lru_cache(maxsize=None)
+@cache
 def sequence_of(key: str) -> dict | None:
     """The bundled sequence and features for a vector, or None.
 
@@ -384,7 +384,7 @@ def validate(sequence: str, spec: VectorSpec, *, length_tolerance: int = 0) -> V
     knocked out one site in its own working copy has not stopped using the
     vector, but it does need to know before it picks that enzyme.
     """
-    from gsynth_engine.cloning import find_sites   # local: cloning imports us
+    from gsynth_engine.cloning import find_sites  # local: cloning imports us
 
     seq = clean_dna(sequence)
     check = VectorCheck(spec=spec, length=len(seq))
