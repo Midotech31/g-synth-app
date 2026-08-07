@@ -481,7 +481,7 @@ def verify(
             wanted -= set(range(read.start, read.end))
         else:                                    # wraps the origin
             wanted -= set(range(read.start, len(template)))
-            wanted -= set(range(0, read.end))
+            wanted -= set(range(read.end))
 
     gaps: list[tuple[int, int]] = []
     for position in sorted(wanted):
