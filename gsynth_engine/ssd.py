@@ -29,6 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from gsynth_engine.constants import (
+    ALL_ENZYMES,
     CLEAVAGE_SITES,
     HIS_TAG,
     LEFT_LINKER,
@@ -137,8 +138,11 @@ def _split_pair(enzyme_pair: str) -> tuple[str, str]:
             f"Enzyme pair must look like 'NdeI / XhoI' — got {enzyme_pair!r}."
         )
     for name in parts:
-        if name not in RESTRICTION_ENZYMES:
-            known = ", ".join(sorted(RESTRICTION_ENZYMES))
+        if name not in ALL_ENZYMES:
+            # 109 names is not a useful error message; list the ones this
+            # lab actually keeps, and say how many others are known.
+            known = (", ".join(sorted(RESTRICTION_ENZYMES))
+                     + f", and {len(ALL_ENZYMES) - len(RESTRICTION_ENZYMES)} more")
             raise SequenceError(f"Unknown restriction enzyme {name!r}. Known: {known}")
     return parts[0], parts[1]
 
@@ -277,7 +281,7 @@ def design_small_sequence(
 
     # Warn about anything that would bite at the bench.
     for name, enzyme in ((left, left), (right, right)):
-        site = str(RESTRICTION_ENZYMES[enzyme]["recognition"])
+        site = str(ALL_ENZYMES[enzyme]["recognition"])
         # The site is expected once at each end after ligation; an extra copy
         # inside the insert would be cut during cloning.
         if site and site in seq:

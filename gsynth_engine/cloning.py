@@ -33,7 +33,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from gsynth_engine.constants import RESTRICTION_ENZYMES, STOP_CODONS
+from gsynth_engine.constants import ALL_ENZYMES, STOP_CODONS
 from gsynth_engine.constants import overhang as enzyme_overhang
 from gsynth_engine.sequence import (
     SequenceError,
@@ -132,11 +132,11 @@ def find_sites(sequence: str, enzyme: str, *, circular: bool = True) -> list[int
     position 0 are found too — the doubled search is what "circular" means
     once you have to actually look for something.
     """
-    if enzyme not in RESTRICTION_ENZYMES:
+    if enzyme not in ALL_ENZYMES:
         raise SequenceError(f"Unknown enzyme: {enzyme}.")
 
     seq = clean_dna(sequence)
-    site: str = RESTRICTION_ENZYMES[enzyme]["recognition"]  # type: ignore[index]
+    site: str = ALL_ENZYMES[enzyme]["recognition"]  # type: ignore[index]
     patterns = {site, reverse_complement(site)}
 
     haystack = seq + seq[: len(site) - 1] if circular and len(seq) >= len(site) else seq
@@ -180,7 +180,7 @@ class Backbone:
 
 def _cut_positions(enzyme: str, site_start: int) -> tuple[int, int]:
     """Top and bottom cut positions, in top-strand coordinates."""
-    info = RESTRICTION_ENZYMES[enzyme]
+    info = ALL_ENZYMES[enzyme]
     return (
         site_start + int(info["cut_top"]),      # type: ignore[arg-type]
         site_start + int(info["cut_bottom"]),   # type: ignore[arg-type]
@@ -776,7 +776,7 @@ def _observed_insert_ends(
     The stagger between the strands comes from the left-hand enzyme's own cut
     geometry, and everything else follows from the two lengths.
     """
-    info = RESTRICTION_ENZYMES[left_enzyme]
+    info = ALL_ENZYMES[left_enzyme]
     offset = int(info["cut_bottom"]) - int(info["cut_top"])  # type: ignore[arg-type]
     bottom = reverse_complement(clean_dna(reverse))
 
@@ -808,7 +808,7 @@ def _junction(
         plasmid[(position + offset) % length]
         for offset in range(-window, window)
     )
-    site: str = RESTRICTION_ENZYMES[enzyme]["recognition"]  # type: ignore[index]
+    site: str = ALL_ENZYMES[enzyme]["recognition"]  # type: ignore[index]
     return Junction(
         name=name,
         enzyme=enzyme,

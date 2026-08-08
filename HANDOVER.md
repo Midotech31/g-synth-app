@@ -113,8 +113,8 @@ one pair it was checked against, and silently wrong for every other.
 **Polarity depends on the side, not only the strand.** The two strands run in
 opposite directions, so a protruding top strand is a **5' overhang at a
 fragment's left end** and a **3' overhang at its right**. Deriving polarity
-from the strand alone reports NdeI as a 3' cutter. 19 enzymes are supported
-and every one is tested in **both** positions.
+from the strand alone reports NdeI as a 3' cutter. 109 cut specifications are
+supported and every one is tested in **both** positions.
 
 ### 2.4 Cloning
 
@@ -194,7 +194,8 @@ parse it (see `chromatogram.py`, ~200 lines for ABIF).
 | Module | Lines | Responsibility | Watch out for |
 |---|---|---|---|
 | `sequence.py` | 79 | primitives, `SequenceError` | keep dependency-free |
-| `constants.py` | 125 | 19 enzymes, 7 protease sites, cut geometry | enzymes as positions, never as strings |
+| `constants.py` | 133 | curated 19 + `ALL_ENZYMES` (109), 7 protease sites | enzymes as positions, never as strings |
+| `enzyme_table.py` | — | generated REBASE table | regenerate, never hand-edit |
 | `thermo.py` | 224 | SantaLucia 1998 NN Tm, salt corrections | `ANNEALING` ≠ `PRIMER` — ~7 °C apart |
 | `ssd.py` | 299 | the cassette | golden tests pin the output |
 | `merzoug.py` | 680 | fragmentation, junction placement | `OVERHANG_SUPPLY`, `terminal_ends`, `verify()` |
@@ -249,6 +250,16 @@ tests you thought to write pass, and the molecule is wrong.
 - **Affine gaps need the traceback to remember which layer it is *in*,** not
   which layer won at each cell. The latter fragments one twelve-base deletion
   into four.
+- **Two enzyme sets, for two questions.** `RESTRICTION_ENZYMES` is what a
+  user *picks a cloning pair from* — nineteen, what this lab keeps.
+  `ALL_ENZYMES` is what answers *"what else cuts here"* — 109, because
+  pET-21a has 60 single-cutters and a map drawn from nineteen showed 14.
+  Never widen the first to the size of the second: a hundred-name dropdown
+  is worse than nineteen.
+- **Isoschizomers collapse; neoschizomers do not.** NheI and BmtI share
+  `GCTAGC` and cut it opposite ways — 5' against 3'. Grouping by recognition
+  sequence merges them and hands back the wrong sticky end for whichever
+  name loses. Group by *(site, cut_top, cut_bottom)*.
 - **Sequences and matrices ship only as verified data.** Vector sequences come
   from an authoritative file (a supplier's or the lab's own SnapGene/GenBank
   export) and are validated against their catalogue entry. BLOSUM62 is
@@ -293,7 +304,7 @@ Reference timings: 3 kb optimisation ≈ 0.4 s · 1 kb read ≈ 0.01 s ·
 
 ```bash
 python -m ruff check .                      # one config, at the repo root
-python -m pytest gsynth_engine/tests -q     # 505 — the biology
+python -m pytest gsynth_engine/tests -q     # 856 — the biology
 cd django_app && python -m pytest -q        # 193 — the HTTP layer
 cd frontend && npm run typecheck && npm run build
 ```
@@ -356,10 +367,12 @@ Projects · export to GenBank/FASTA/CSV · circular and linear plasmid maps.
    pUC19 are catalogued but need the user's own SnapGene export each time.
    *Blocked on the user supplying `.dna` files — snapgene.com is not
    reachable from the build container. Do not invent these sequences.*
-2. **19 enzymes** against SnapGene's ~700. The common cloning set is covered;
-   an internal site outside those 19 will not be flagged. REBASE via
-   Biopython is the authoritative source if this is expanded — generate,
-   commit, and pin with a test. Never type them by hand.
+2. ~~19 enzymes~~ **Done.** 109 distinct cut specifications, generated from
+   REBASE by `tools/generate_enzymes.py` and committed. Type IIS enzymes
+   (BsaI, BsmBI, Esp3I) are still excluded: they cut *outside* their
+   recognition sequence, and the data model stores a cut as an offset into
+   the site, so `site[cut_top:]` comes back empty rather than raising.
+   Supporting them means extending the model, not extending the table.
 3. **No interactive sequence editing.** Everything renders read-only. This is
    a deliberate deferral: building a competent editor is months of work and
    the user has SnapGene for browsing. Do not start it without being asked.

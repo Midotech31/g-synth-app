@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
-from gsynth_engine.constants import RESTRICTION_ENZYMES
+from gsynth_engine.constants import ALL_ENZYMES
 from gsynth_engine.sequence import clean_dna
 
 #: Where bundled sequences live. A vector earns a place here only when its
@@ -440,7 +440,7 @@ def validate(sequence: str, spec: VectorSpec, *, length_tolerance: int = 0) -> V
     }
 
     for enzyme in spec.unique_sites:
-        if enzyme not in RESTRICTION_ENZYMES:
+        if enzyme not in ALL_ENZYMES:
             continue
         count = len(find_sites(seq, enzyme, circular=True))
         if count == 0 and enzyme in essential:

@@ -75,12 +75,12 @@ The frontend proxies `/api` to `:8000`; point it elsewhere with
 ### Tests
 
 ```bash
-python -m pytest gsynth_engine/tests -q     # 476 — the biology
-cd django_app && python -m pytest -q        # 184 — the HTTP layer
+python -m pytest gsynth_engine/tests -q     # 856 — the biology
+cd django_app && python -m pytest -q        # 193 — the HTTP layer
 ```
 
 The engine's suite is the definition of correctness. It is where the golden
-examples live, where every one of the 19 enzymes is checked in both positions,
+examples live, where every one of the 109 enzymes is checked in both positions,
 and where the property the whole method rests on is asserted: that the
 designed fragments re-ligate into the construct exactly.
 

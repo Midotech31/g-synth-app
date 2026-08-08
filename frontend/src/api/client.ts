@@ -454,6 +454,10 @@ export type Enzyme = {
   overhang: string;
   overhang_type: string;
   supplies_start_codon: boolean;
+  /** In this lab's freezer. The pickers offer these first; the rest are
+   *  still selectable, because an enzyme in your vector's polylinker
+   *  should not need a code change to be usable. */
+  common: boolean;
 };
 
 export type Catalogue = {

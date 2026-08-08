@@ -42,7 +42,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from gsynth_engine.cloning import find_sites, translate
-from gsynth_engine.constants import RESTRICTION_ENZYMES
+from gsynth_engine.constants import ALL_ENZYMES
 from gsynth_engine.sequence import (
     SequenceError,
     clean_dna,
@@ -217,9 +217,9 @@ class Constraints:
     def motifs(self) -> tuple[str, ...]:
         """Every literal sequence to avoid, from the enzymes and the extras."""
         sites = tuple(
-            str(RESTRICTION_ENZYMES[e]["recognition"])
+            str(ALL_ENZYMES[e]["recognition"])
             for e in self.avoid_enzymes
-            if e in RESTRICTION_ENZYMES
+            if e in ALL_ENZYMES
         )
         return sites + tuple(m.upper() for m in self.avoid_motifs if m)
 
@@ -583,7 +583,7 @@ def optimise(
         changed = len(codons)
 
     for enzyme in constraints.avoid_enzymes:
-        if enzyme in RESTRICTION_ENZYMES and find_sites(
+        if enzyme in ALL_ENZYMES and find_sites(
             optimised, enzyme, circular=False
         ):
             warnings.append(
