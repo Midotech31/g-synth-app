@@ -10,18 +10,15 @@ import Verify from "./pages/Verify";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Viewer from "./pages/Viewer";
+import { Logo } from "./components/Logo";
 
 function Rail() {
   const { user, signOut } = useAuth();
   return (
     <aside className="rail">
       <div className="brand">
-        <span className="mark">🧬</span>
-        <span>
-          <span className="name">G-Synth</span>
-          <br />
-          <span className="ver">v3 · workspace</span>
-        </span>
+        <Logo size={30} tagline={false} />
+        <span className="ver">v3</span>
       </div>
 
       <nav>

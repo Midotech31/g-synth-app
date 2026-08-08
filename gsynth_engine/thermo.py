@@ -65,12 +65,12 @@ class BufferConditions:
 #: 20 µL, so 25 µM of each strand and Ct = 50 µM, in 1× annealing buffer
 #: (50 mM NaCl, no Mg²⁺). This is what the oligos actually experience, so it
 #: is what the design pages report.
-ANNEALING: Final["BufferConditions"] = BufferConditions(
+ANNEALING: Final[BufferConditions] = BufferConditions(
     name="annealing reaction", oligo_nM=50_000.0, na_mM=50.0
 )
 
 #: A conventional primer Tm, for comparison against a supplier's datasheet.
-PRIMER: Final["BufferConditions"] = BufferConditions(
+PRIMER: Final[BufferConditions] = BufferConditions(
     name="primer", oligo_nM=500.0, na_mM=50.0
 )
 

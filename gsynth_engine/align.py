@@ -208,7 +208,7 @@ def _gotoh(
             row_y[j] = -(open_cost + extend * j)
     else:
         # Free start along b: the alignment may begin anywhere in it.
-        for j in range(0, m + 1):
+        for j in range(m + 1):
             row_m[j] = 0 if free_start else (0 if j == 0 else NEG)
 
     pointers: list[bytearray] = []
@@ -311,13 +311,19 @@ def _gotoh(
 
     if mode == "global":
         while i > 0:
-            top_out.append(a[i - 1]); bottom_out.append("-"); i -= 1
+            top_out.append(a[i - 1])
+            bottom_out.append("-")
+            i -= 1
         while j > 0:
-            top_out.append("-"); bottom_out.append(b[j - 1]); j -= 1
+            top_out.append("-")
+            bottom_out.append(b[j - 1])
+            j -= 1
     elif mode == "semi-global":
         # The whole of `a` is used; whatever is left of it hangs off the end.
         while i > 0:
-            top_out.append(a[i - 1]); bottom_out.append("-"); i -= 1
+            top_out.append(a[i - 1])
+            bottom_out.append("-")
+            i -= 1
 
     top_out.reverse()
     bottom_out.reverse()
@@ -363,12 +369,13 @@ def align(
 
     if scoring is None:
         scoring = (
-            Scoring(matrix=blosum62(), **{
-                "match": PROTEIN_SCORING.match,
-                "mismatch": PROTEIN_SCORING.mismatch,
-                "gap_open": PROTEIN_SCORING.gap_open,
-                "gap_extend": PROTEIN_SCORING.gap_extend,
-            })
+            Scoring(
+                matrix=blosum62(),
+                match=PROTEIN_SCORING.match,
+                mismatch=PROTEIN_SCORING.mismatch,
+                gap_open=PROTEIN_SCORING.gap_open,
+                gap_extend=PROTEIN_SCORING.gap_extend,
+            )
             if is_protein else Scoring()
         )
 
@@ -386,7 +393,7 @@ def align(
 
     marks: list[str] = []
     identities = similarities = gaps = 0
-    for x, y in zip(top, bottom):
+    for x, y in zip(top, bottom, strict=False):
         if x == "-" or y == "-":
             marks.append(" ")
             gaps += 1

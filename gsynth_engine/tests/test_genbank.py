@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import io
 
-import pytest
 from Bio import SeqIO
 
 from gsynth_engine import vectors
@@ -61,7 +60,7 @@ class TestRoundTrip:
         drawn = [f for f in record.features if f.type != "source"]
         assert len(drawn) == len(FEATURES)
 
-        for written, read in zip(FEATURES, drawn):
+        for written, read in zip(FEATURES, drawn, strict=False):
             assert int(read.location.start) == written["start"]
             assert int(read.location.end) == written["end"]
 

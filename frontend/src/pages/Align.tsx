@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { ApiError, api, type AlignResult } from "../api/client";
+import Icon from "../components/Icon";
 
 /**
  * Comparing two sequences that are not assumed to be the same thing.
@@ -124,7 +125,7 @@ export default function Align() {
             {!result ? (
               <div className="card">
                 <div className="empty">
-                  <div className="glyph">⚖️</div>
+                  <Icon name="scales" size={38} className="glyph" />
                   <strong>Nothing aligned yet</strong>
                   <span>Paste two sequences and choose what you are asking.</span>
                 </div>

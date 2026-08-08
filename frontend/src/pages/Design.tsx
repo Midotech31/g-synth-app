@@ -11,6 +11,7 @@ import {
 import DuplexView from "../components/DuplexView";
 import InsertForm from "../components/InsertForm";
 import { segmentColour } from "../components/segmentColour";
+import Icon from "../components/Icon";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
 
@@ -140,7 +141,7 @@ export default function Design() {
             {!result ? (
               <div className="card">
                 <div className="empty">
-                  <div className="glyph">🧬</div>
+                  <Icon name="helix" size={38} className="glyph" />
                   <strong>No design yet</strong>
                   <span>Set the insert and its ends, then press Design.</span>
                 </div>
@@ -183,14 +184,35 @@ export default function Design() {
                       <div className="k">Longest oligo</div>
                       <div className="v">{result.longest_oligo}<small>nt</small></div>
                     </div>
+                    {/* A long gene needs more distinct junctions than 4 nt can
+                        supply, so the design widens them. The form still shows
+                        what was asked for; this shows what was built. */}
+                    <div className="stat">
+                      <div className="k">Overhang</div>
+                      <div className="v">
+                        {result.overhang_length}<small>nt</small>
+                        {result.overhang_length !== params.overhang_length && (
+                          <small className="widened">widened</small>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 <div className="card">
                   <div className="card-head">
                     <h2 style={{ flex: 1 }}>Construct map</h2>
+                    {/* Measured off the assembled fragments. The design's own
+                        label cannot disagree with itself, so showing that
+                        would confirm nothing. */}
                     <span className="label">
-                      5'-{result.ssd.left_overhang} … {result.ssd.right_overhang}-3'
+                      {result.terminal_ends.map((end) => (
+                        <span key={end.side} className="terminal-end">
+                          {end.enzyme}{" "}
+                          <strong>{end.overhang || "blunt"}</strong>
+                          {end.overhang ? ` ${end.kind}` : ""}
+                        </span>
+                      ))}
                     </span>
                   </div>
                   <div className="card-body">

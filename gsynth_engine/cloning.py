@@ -31,11 +31,10 @@ polarity — the top strand of one anneals to the bottom strand of the other.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from gsynth_engine.constants import RESTRICTION_ENZYMES, STOP_CODONS
 from gsynth_engine.constants import overhang as enzyme_overhang
-from typing import TYPE_CHECKING
-
 from gsynth_engine.sequence import (
     SequenceError,
     clean_dna,
@@ -108,7 +107,7 @@ class End:
         )
         return "5'" if protrudes_at_its_own_five_prime else "3'"
 
-    def anneals_to(self, other: "End") -> bool:
+    def anneals_to(self, other: End) -> bool:
         """True when these two ends can be ligated together.
 
         One end's overhang is on the strand that runs into the join; the
@@ -450,7 +449,7 @@ def clone(
     circular: bool = True,
     name: str = "recombinant",
     vector_annotations: list[dict] | None = None,
-    vector_spec: "VectorSpec | None" = None,
+    vector_spec: VectorSpec | None = None,
     insert_reverse: str | None = None,
     insert_left_end: End | None = None,
     insert_right_end: End | None = None,
@@ -650,7 +649,7 @@ def clone(
 
 
 def _tag_outcomes(
-    protein: str, spec: "VectorSpec", *, insert_residues: int, upstream_residues: int,
+    protein: str, spec: VectorSpec, *, insert_residues: int, upstream_residues: int,
 ) -> list[TagOutcome]:
     """Which of the vector's tags actually made it onto the protein.
 
@@ -685,7 +684,7 @@ def _tag_outcomes(
 
 
 def _tag_warnings(
-    outcomes: list[TagOutcome], spec: "VectorSpec | None", protein: str,
+    outcomes: list[TagOutcome], spec: VectorSpec | None, protein: str,
 ) -> list[str]:
     """Say what the vector did and did not contribute, and where it collides.
 
@@ -716,7 +715,7 @@ def _tag_warnings(
     return messages
 
 
-def _motif_of(spec: "VectorSpec", name: str) -> str:
+def _motif_of(spec: VectorSpec, name: str) -> str:
     for tag in spec.tags:
         if tag.name == name:
             return tag.motif

@@ -7,8 +7,6 @@ than by a rule that could be wrong for a lab's own copy of a backbone.
 """
 from __future__ import annotations
 
-import pytest
-
 from gsynth_engine import vectors
 from gsynth_engine.cloning import clone
 from gsynth_engine.constants import RESTRICTION_ENZYMES

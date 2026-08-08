@@ -112,6 +112,14 @@ export type Duplex = {
   bottom_fragments: DuplexSpan[];
 };
 
+export type TerminalEnd = {
+  side: "left" | "right";
+  enzyme: string;
+  overhang: string;
+  /** "5'", "3'" or "blunt" — polarity follows the side, not the strand. */
+  kind: string;
+};
+
 export type AssemblyResult = {
   construct_forward: string;
   construct_reverse: string;
@@ -122,6 +130,8 @@ export type AssemblyResult = {
   overhang_length: number;
   longest_oligo: number;
   junction_overhangs: string[];
+  /** The outer ends as the assembled fragments present them, not as designed. */
+  terminal_ends: TerminalEnd[];
   fragments: Fragment[];
   oligos: Oligo[];
   ssd: SSDResult;
@@ -294,6 +304,10 @@ export type Difference = {
   to_residue: string;
   silent: boolean | null;
   description: string;
+  /** Null when the read came as letters — "unknown", not "fine". */
+  quality?: number | null;
+  confident?: boolean | null;
+  read_index?: number | null;
 };
 
 export type VerifyReport = {
@@ -316,8 +330,38 @@ export type VerifyReport = {
     difference_count: number;
     is_clean: boolean;
     warnings: string[];
+    /** Null when the read arrived as letters rather than as a trace. */
+    mean_quality?: number | null;
+    trimmed_start?: number;
+    trimmed_end?: number;
   }[];
   warnings: string[];
+  /** Present only on the trace endpoint. */
+  traces?: TraceSummary[];
+  trace_windows?: TraceWindow[];
+};
+
+export type TraceSummary = {
+  name: string;
+  length: number;
+  mean_quality: number;
+  trim_start: number;
+  trim_stop: number;
+  trimmed_length: number;
+  high_quality_bases: number;
+  sample_count: number;
+  /** Enough good sequence to be worth comparing to a design at all. */
+  usable: boolean;
+};
+
+/** The peaks around one difference — never a whole trace, which is megabytes. */
+export type TraceWindow = {
+  read: string;
+  position: number;
+  samples: [number, number];
+  traces: Record<string, number[]>;
+  bases: { index: number; base: string; quality: number; at: number }[];
+  centre: number;
 };
 
 export type AlignRow = {
@@ -443,7 +487,13 @@ export type ProjectSummary = {
 export type Project = ProjectSummary & {
   sequence: string;
   notes: string;
-  data: { annotations?: Annotation[]; topology?: string; gc_content?: number };
+  data: {
+    annotations?: Annotation[];
+    topology?: string;
+    gc_content?: number;
+    construct_gc?: number;
+    gc?: number;
+  };
   created_at: string;
 };
 
@@ -505,8 +555,13 @@ function saveBlob(blob: Blob, filename: string): void {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.append(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  anchor.remove();
+  // Firefox can cancel the download when the object URL is revoked in the
+  // same task as the synthetic click.
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 let refreshInFlight: Promise<string | null> | null = null;
@@ -527,6 +582,32 @@ async function refreshAccessToken(): Promise<string | null> {
   if (data.refresh) tokenStore.save({ access: data.access, refresh: data.refresh });
   else tokenStore.saveAccess(data.access);
   return data.access;
+}
+
+async function sendWithRefresh(
+  send: (token: string | null) => Promise<Response>,
+): Promise<Response> {
+  const response = await send(tokenStore.access);
+  if (response.status !== 401 || !tokenStore.refresh) return response;
+
+  refreshInFlight = refreshInFlight ?? refreshAccessToken().finally(() => {
+    refreshInFlight = null;
+  });
+  const fresh = await refreshInFlight;
+  if (!fresh) {
+    tokenStore.clear();
+    throw new ApiError(401, "Your session has expired. Please sign in again.");
+  }
+  return send(fresh);
+}
+
+function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  return sendWithRefresh((token) => {
+    const headers = new Headers(init.headers);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    else headers.delete("Authorization");
+    return fetch(path, { ...init, headers });
+  });
 }
 
 type RequestOptions = {
@@ -551,25 +632,20 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     });
   };
 
-  let response = await send(tokenStore.access);
-
-  if (response.status === 401 && auth && tokenStore.refresh) {
-    refreshInFlight = refreshInFlight ?? refreshAccessToken().finally(() => {
-      refreshInFlight = null;
-    });
-    const fresh = await refreshInFlight;
-    if (fresh) {
-      response = await send(fresh);
-    } else {
-      tokenStore.clear();
-      throw new ApiError(401, "Your session has expired. Please sign in again.");
-    }
-  }
+  const response = auth ? await sendWithRefresh(send) : await send(null);
 
   if (response.status === 204 || response.status === 205) return undefined as T;
 
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : null;
+  let payload: unknown = null;
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      if (!response.ok) throw describe(response.status, null);
+      throw new ApiError(502, "The server returned an invalid response.");
+    }
+  }
 
   if (!response.ok) throw describe(response.status, payload);
   return payload as T;
@@ -656,6 +732,36 @@ export const api = {
     region_end?: number | null;
   }) => request<VerifyReport>("/api/design/verify/", { method: "POST", body: params }),
 
+  /**
+   * The same comparison, from .ab1 files rather than pasted letters.
+   *
+   * Multipart because a trace is binary — base64 in JSON would inflate a
+   * 400 kB file by a third for nothing. What comes back carries the quality
+   * of each disputed base and the peaks around it.
+   */
+  verifyTraces: (params: {
+    design: string;
+    files: File[];
+    circular?: boolean;
+    trim_quality?: number;
+    coding_start?: number | null;
+    coding_end?: number | null;
+    region_start?: number | null;
+    region_end?: number | null;
+  }) => {
+    const form = new FormData();
+    form.append("design", params.design);
+    params.files.forEach((file) => form.append("traces", file));
+    for (const key of ["circular", "trim_quality", "coding_start", "coding_end",
+                       "region_start", "region_end"] as const) {
+      const value = params[key];
+      if (value !== undefined && value !== null) form.append(key, String(value));
+    }
+    return request<VerifyReport>("/api/design/verify/traces/", {
+      method: "POST", formData: form,
+    });
+  },
+
   align: (params: {
     first: string;
     second: string;
@@ -679,21 +785,16 @@ export const api = {
 
   /** GET a file the browser saves — for endpoints that need no body. */
   downloadUrl: async (path: string, filename: string) => {
-    const response = await fetch(path, {
-      headers: { Authorization: `Bearer ${tokenStore.access ?? ""}` },
-    });
+    const response = await authenticatedFetch(path);
     if (!response.ok) throw new ApiError(response.status, "Download failed.");
     saveBlob(await response.blob(), filename);
   },
 
   /** Downloads stream as files, so they bypass the JSON request helper. */
   download: async (path: string, params: DesignParams | CloneParams, filename: string) => {
-    const response = await fetch(path, {
+    const response = await authenticatedFetch(path, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${tokenStore.access ?? ""}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
     });
     if (!response.ok) throw new ApiError(response.status, "Download failed.");

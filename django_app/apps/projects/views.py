@@ -1,12 +1,12 @@
 """Project CRUD — always scoped to the signed-in user."""
 from django.http import HttpResponse
 from django.utils import timezone
-from gsynth_engine.genbank import to_fasta, to_genbank
 from rest_framework import viewsets
 from rest_framework.decorators import action
 
 from apps.projects.models import Project
 from apps.projects.serializers import ProjectListSerializer, ProjectSerializer
+from gsynth_engine.genbank import to_fasta, to_genbank
 
 
 class ProjectViewSet(viewsets.ModelViewSet):

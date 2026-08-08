@@ -28,7 +28,9 @@ hybridised in F/R pairs with complementary 4–8 nt overhangs, ligated in order,
 no PCR at any step. It hands back the oligos to order, a bench protocol, and
 the hybridisation view: both strands drawn aligned, with the overhangs
 showing. Nothing can be downloaded until re-ligating the fragments in silico
-reproduces the construct base for base, on both strands.
+reproduces the construct base for base, on both strands — and until the two
+outer ends, read off that molecule, are the sticky ends the chosen enzymes
+leave, on the right strands.
 
 **Clone** cuts a vector and puts the construct in. pET-21a(+) and pET-21(+)
 ship with their sequences; any other backbone is imported — SnapGene `.dna`,
@@ -73,8 +75,8 @@ The frontend proxies `/api` to `:8000`; point it elsewhere with
 ### Tests
 
 ```bash
-python -m pytest gsynth_engine/tests -q     # 424 — the biology
-cd django_app && python -m pytest -q        # 179 — the HTTP layer
+python -m pytest gsynth_engine/tests -q     # 476 — the biology
+cd django_app && python -m pytest -q        # 184 — the HTTP layer
 ```
 
 The engine's suite is the definition of correctness. It is where the golden
@@ -112,6 +114,14 @@ A few decisions that are easy to reverse by accident:
 - **Substitution matrices are generated data, not literals.** BLOSUM62 is
   read from Biopython's copy: 576 values typed by hand is 576 chances to be
   quietly wrong.
+- **A terminal end is measured, not quoted.** Every terminal value in a plan
+  is copied from the design when the fragments are built, so comparing them
+  compares a label with itself. The two ends are read back off the assembled
+  duplex and checked against the enzyme table, polarity included.
+- **Junction overhangs widen when four bases run out.** Each one placed rules
+  out every overhang within a base of it, and of its partner, so only 22 can
+  coexist — while a 2.4 kb gene needs 26. The design goes to five bases rather
+  than failing, and says so; the oligos are the same length either way.
 
 ## Deployment
 

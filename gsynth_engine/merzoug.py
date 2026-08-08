@@ -33,8 +33,10 @@ unique, non-palindromic, and distinct from the vector's own sticky ends.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Final
 
 from gsynth_engine.constants import left_remainders
+from gsynth_engine.constants import overhang as enzyme_overhang
 from gsynth_engine.sequence import (
     SequenceError,
     gc_content,
@@ -42,14 +44,34 @@ from gsynth_engine.sequence import (
     longest_homopolymer,
     reverse_complement,
 )
-from gsynth_engine.thermo import ANNEALING, melting_temperature
 from gsynth_engine.ssd import SSDResult, design_small_sequence
+from gsynth_engine.thermo import ANNEALING, melting_temperature
 
 #: Overhang lengths the method allows. 4 nt is the practical minimum for a
 #: stable ligation junction; beyond 8 nt the oligos get long without making
 #: the junction more specific.
 MIN_OVERHANG = 4
 MAX_OVERHANG = 8
+
+#: How many junctions an overhang of each length can supply *at all*.
+#:
+#: Placing one overhang rules out far more than itself: its whole one-mismatch
+#: neighbourhood, and its reverse complement's, because either would
+#: cross-ligate. At 4 nt that exhausts the alphabet after 22 junctions no
+#: matter which ones are chosen — and a 2.4 kb gene cut into 90 nt oligos
+#: needs 26. Widening by one base multiplies the supply roughly fourfold.
+#:
+#: These are measured, not estimated: each is the largest set obtainable by
+#: exhausting all 4^k words against :class:`_OverhangPool`. A test
+#: re-derives them, so tightening the rules cannot silently leave the table
+#: promising a supply that no longer exists. Lengths past 6 are not tabulated —
+#: 482 junctions is a 43 kb construct, well beyond what the method is for.
+OVERHANG_SUPPLY: Final[dict[int, int]] = {4: 22, 5: 92, 6: 482}
+
+
+def _describe_end(sequence: str, kind: str) -> str:
+    """An end as a user would say it: the bases and which end they sit on."""
+    return f"{sequence} ({kind} overhang)" if sequence else "blunt"
 
 
 @dataclass(frozen=True)
@@ -144,6 +166,44 @@ class AssemblyPlan:
             default=0,
         )
 
+    @property
+    def terminal_ends(self) -> tuple[tuple[str, str], tuple[str, str]]:
+        """The two outer ends, as the assembled fragments actually present them.
+
+        Read off the molecule the oligos would build rather than copied from
+        the design — every other terminal value in the plan is a label, and a
+        label cannot disagree with itself.
+
+        Returns ``((sequence, kind), (sequence, kind))`` for left and right,
+        sequences in top-strand sense, kind one of ``5'``, ``3'``, ``blunt``.
+        """
+        if not self.fragments:
+            return ("", "blunt"), ("", "blunt")
+
+        top = "".join(f.forward for f in self.fragments)
+        bottom = "".join(reverse_complement(f.reverse) for f in self.fragments)
+        offset = self.fragments[0].bottom_offset
+
+        # Whichever strand reaches further out is single-stranded there. At the
+        # left that exposes the top strand's 5' end or the bottom's 3'; at the
+        # right it is the other way about — which is why the side decides the
+        # polarity and the strand alone cannot.
+        if offset > 0:
+            left = (top[:offset], "5'")
+        elif offset < 0:
+            left = (bottom[:-offset], "3'")
+        else:
+            left = ("", "blunt")
+
+        top_end, bottom_end = len(top), offset + len(bottom)
+        if bottom_end > top_end:
+            right = (bottom[top_end - offset:], "5'")
+        elif top_end > bottom_end:
+            right = (top[bottom_end:], "3'")
+        else:
+            right = ("", "blunt")
+        return left, right
+
     def verify(self) -> list[str]:
         """Re-derive the construct from the fragments. Returns problems found.
 
@@ -172,11 +232,30 @@ class AssemblyPlan:
             problems.append("The reverse oligos do not reassemble the bottom strand.")
 
         # Junctions must actually be complementary.
-        for left, right in zip(self.fragments, self.fragments[1:]):
+        for left, right in zip(self.fragments, self.fragments[1:], strict=False):
             if left.right_overhang != right.left_overhang:
                 problems.append(
                     f"Fragments {left.index} and {right.index} do not share a "
                     f"junction: {left.right_overhang!r} vs {right.left_overhang!r}."
+                )
+
+        # The outer ends are what the vector has to accept. They are set from
+        # the SSD when the fragments are built, so nothing else here can catch
+        # a plan that labels an end correctly and carries a different one —
+        # and that failure looks like a clean design right up to the ligation
+        # that does not work.
+        (left_seq, left_kind), (right_seq, right_kind) = self.terminal_ends
+        for side, enzyme, seen, kind in (
+            ("left", self.ssd.left_enzyme, left_seq, left_kind),
+            ("right", self.ssd.right_enzyme, right_seq, right_kind),
+        ):
+            wanted = enzyme_overhang(enzyme)
+            if (seen, kind) != wanted:
+                problems.append(
+                    f"The {side}-hand end of the assembled fragments is "
+                    f"{_describe_end(seen, kind)}, but {enzyme} leaves "
+                    f"{_describe_end(*wanted)} — it would not ligate into a "
+                    f"vector cut with {enzyme}."
                 )
 
         # Overhangs must be unique, or fragments ligate in the wrong order.
@@ -192,45 +271,70 @@ class AssemblyPlan:
         return problems
 
 
-def _cross_ligates(overhang: str, other: str) -> bool:
-    """True when two overhangs are close enough for T4 ligase to confuse them.
+def _confusable_with(overhang: str) -> set[str]:
+    """Every overhang T4 ligase could join to this one's partner.
 
     NEB's ligase-fidelity work shows that overhangs differing at a single
     position still join at a measurable rate. Either strand can present the
-    end, so both orientations are compared.
+    end, so the reverse complement's neighbourhood counts too.
     """
-    for candidate in (overhang, reverse_complement(overhang)):
-        if len(candidate) != len(other):
-            continue
-        if sum(1 for a, b in zip(candidate, other) if a != b) <= 1:
-            return True
-    return False
+    ball: set[str] = set()
+    for word in (overhang, reverse_complement(overhang)):
+        ball.add(word)
+        for i, base in enumerate(word):
+            ball.update(word[:i] + other + word[i + 1:]
+                        for other in "ACGT" if other != base)
+    return ball
 
 
-def _overhang_problem(
-    overhang: str, used: set[str], forbidden: set[str],
-) -> str | None:
-    """Why this overhang is unusable, or None when it is fine."""
-    if is_palindrome(overhang):
-        return "palindromic — it would anneal to itself"
-    if overhang in used or reverse_complement(overhang) in used:
-        return "already used at another junction"
-    # A mispaired junction is a silent failure: the ligation works, the gel
-    # looks right, and the error only appears at sequencing.
-    if any(_cross_ligates(overhang, taken) for taken in used):
-        return "within one base of another junction — they could cross-ligate"
-    if overhang in forbidden or reverse_complement(overhang) in forbidden:
-        return "matches a terminal restriction overhang"
-    if any(_cross_ligates(overhang, end) for end in forbidden):
-        return "within one base of a terminal overhang — it could ligate into the vector"
-    if longest_homopolymer(overhang) >= len(overhang):
-        return "a homopolymer run"
-    gc = sum(1 for base in overhang if base in "GC")
-    if gc == 0:
-        return "no G or C — the junction would be too weak"
-    if gc == len(overhang):
-        return "all G/C — prone to mispairing"
-    return None
+class _OverhangPool:
+    """The overhangs still available, and why each of the rest is not.
+
+    Asking "does this clash with anything already placed?" by comparing
+    against every placed overhang is quadratic in the number of junctions,
+    which is fine for a peptide and not for a gene: a 100 kb input spent six
+    seconds here. Since what a placed overhang excludes never changes, the
+    exclusions are computed once, when it is placed, and every later question
+    is a set lookup.
+    """
+
+    def __init__(self, forbidden: set[str]) -> None:
+        self.taken: set[str] = set()
+        self.forbidden = set(forbidden)
+        #: Words a placed junction would cross-ligate with.
+        self._near_junction: set[str] = set()
+        #: The same for the terminal restriction overhangs, kept separate so
+        #: the two cases can still be told apart in the message.
+        self._near_terminal: set[str] = set()
+        for end in forbidden:
+            self._near_terminal |= _confusable_with(end)
+
+    def take(self, overhang: str) -> None:
+        self.taken.add(overhang)
+        self._near_junction |= _confusable_with(overhang)
+
+    def problem(self, overhang: str) -> str | None:
+        """Why this overhang is unusable, or None when it is fine."""
+        if is_palindrome(overhang):
+            return "palindromic — it would anneal to itself"
+        if overhang in self.taken or reverse_complement(overhang) in self.taken:
+            return "already used at another junction"
+        # A mispaired junction is a silent failure: the ligation works, the gel
+        # looks right, and the error only appears at sequencing.
+        if overhang in self._near_junction:
+            return "within one base of another junction — they could cross-ligate"
+        if overhang in self.forbidden or reverse_complement(overhang) in self.forbidden:
+            return "matches a terminal restriction overhang"
+        if overhang in self._near_terminal:
+            return "within one base of a terminal overhang — it could ligate into the vector"
+        if longest_homopolymer(overhang) >= len(overhang):
+            return "a homopolymer run"
+        gc = sum(1 for base in overhang if base in "GC")
+        if gc == 0:
+            return "no G or C — the junction would be too weak"
+        if gc == len(overhang):
+            return "all G/C — prone to mispairing"
+        return None
 
 
 def _choose_junctions(
@@ -253,7 +357,7 @@ def _choose_junctions(
 
     span = ds_end - ds_start
     junctions: list[int] = []
-    used: set[str] = set()
+    pool = _OverhangPool(forbidden)
 
     for i in range(1, count + 1):
         ideal = ds_start + round(span * i / (count + 1))
@@ -276,10 +380,10 @@ def _choose_junctions(
             overhang = top[position : position + overhang_length]
             if len(overhang) < overhang_length:
                 continue
-            reason = _overhang_problem(overhang, used, forbidden)
+            reason = pool.problem(overhang)
             if reason is None:
                 chosen = position
-                used.add(overhang)
+                pool.take(overhang)
                 break
             last_reason = reason
 
@@ -293,6 +397,128 @@ def _choose_junctions(
         junctions.append(chosen)
 
     return junctions
+
+
+def _supply(overhang_length: int) -> int:
+    """How many junctions this overhang length can supply, at most."""
+    if overhang_length in OVERHANG_SUPPLY:
+        return OVERHANG_SUPPLY[overhang_length]
+    # Past 6 nt the supply is in the thousands; the limit is never the alphabet.
+    return max(OVERHANG_SUPPLY.values()) * 4 ** (overhang_length - 6)
+
+
+def _place_junctions(
+    top: str,
+    *,
+    count: int,
+    overhang_length: int,
+    ds_start: int,
+    ds_end: int,
+    forbidden: set[str],
+    search_window: int,
+) -> tuple[list[int], int, list[str]]:
+    """Place every junction, widening the search — or the overhang — as needed.
+
+    Two different things go wrong as a construct gets longer, and they have
+    different remedies:
+
+    *The supply runs out.* Past 22 junctions there is no set of 4 nt overhangs
+    that ligates in one order, so no amount of searching helps. The overhang
+    must grow. This costs nothing at the bench: fragments are cut from a fixed
+    construct, so a wider stagger leaves the oligos the same length.
+
+    *The search comes up short.* The supply is ample but the bases near this
+    particular junction are not; looking further from the ideal position finds
+    one, at the price of slightly less even fragments.
+
+    Returns the positions, the overhang length actually used, and any warnings.
+    """
+    notes: list[str] = []
+
+    # Jump straight to a length that can supply the junctions. Trying 4 nt
+    # first when 4 nt provably cannot finish only spends the user's time.
+    length = overhang_length
+    while length < MAX_OVERHANG and _supply(length) < count:
+        length += 1
+    if length > overhang_length:
+        notes.append(
+            f"Overhangs widened to {length} nt: {count} junctions need more "
+            f"distinct overhangs than {overhang_length} nt can supply "
+            f"({_supply(overhang_length)}). The oligos stay the same length."
+        )
+
+    # How far a junction may stray before fragments become uneven. Half the
+    # spacing is the point at which two neighbours could meet.
+    spacing = max(1, (ds_end - ds_start) // (count + 1))
+    widest = max(search_window, spacing // 2)
+
+    attempted: list[str] = []
+    last: SequenceError | None = None
+    for candidate_length in range(length, MAX_OVERHANG + 1):
+        window = search_window
+        while True:
+            try:
+                junctions = _choose_junctions(
+                    top,
+                    count=count,
+                    overhang_length=candidate_length,
+                    ds_start=ds_start,
+                    ds_end=ds_end,
+                    forbidden=forbidden,
+                    search_window=window,
+                )
+            except SequenceError as exc:
+                attempted.append(f"{candidate_length} nt within ±{window} nt")
+                last = exc
+            else:
+                if window > search_window:
+                    notes.append(
+                        f"Junctions were allowed to move up to ±{window} nt from "
+                        f"their ideal position (rather than ±{search_window}) to "
+                        f"find usable overhangs, so fragment lengths vary more "
+                        f"than usual."
+                    )
+                if candidate_length > length:
+                    notes.append(
+                        f"Overhangs widened to {candidate_length} nt: the "
+                        f"sequence did not offer enough usable "
+                        f"{length} nt overhangs."
+                    )
+                return junctions, candidate_length, notes
+
+            if window >= widest:
+                break
+            window = min(widest, window * 2)
+
+    # Two very different things bring us here and the advice differs, so say
+    # which it was: "try a different overhang length" is useless counsel to
+    # someone whose gene is a tandem repeat.
+    #
+    # The test is what the junctions consume against what the sequence holds.
+    # Placing one junction rules out its own one-mismatch neighbourhood and
+    # its partner's, so a gene needs about fifty distinct words per junction.
+    # Comparing against the gene's *length* instead would be wrong in a way
+    # that only shows at scale: no sequence of any kind has more than 4^k
+    # distinct k-mers, so every gene past 131 kb would be called repetitive.
+    region = top[ds_start:ds_end]
+    words = {region[i : i + MAX_OVERHANG] for i in range(len(region) - MAX_OVERHANG)}
+    consumed = 2 * (1 + 3 * MAX_OVERHANG)
+    if len(words) < consumed * count:
+        raise SequenceError(
+            f"This sequence does not contain enough distinct subsequences to "
+            f"order {count} junctions: across {len(region)} bases it offers "
+            f"only {len(words)} different {MAX_OVERHANG} nt words, and each "
+            f"junction placed rules out about {consumed} of them. Assemble it "
+            "in blocks — design each half as its own construct and join them "
+            "with the terminal enzymes — or use longer oligos, so there are "
+            "fewer junctions to place."
+        ) from last
+
+    raise SequenceError(
+        "Could not find a set of overhangs that assembles this sequence in one "
+        f"order. Tried {', '.join(attempted)}. Try longer oligos, so there are "
+        "fewer junctions to place."
+    ) from last
 
 
 def design_merzoug_assembly(
@@ -378,7 +604,7 @@ def design_merzoug_assembly(
                 f"stays long enough to carry {overhang_length} nt overhangs."
             )
 
-    junctions = _choose_junctions(
+    junctions, overhang_length, notes = _place_junctions(
         top,
         count=fragment_count - 1,
         overhang_length=overhang_length,
@@ -387,6 +613,7 @@ def design_merzoug_assembly(
         forbidden=forbidden,
         search_window=search_window,
     )
+    warnings.extend(notes)
 
     # Cut positions: top at t, bottom k further along.
     top_cuts = [0, *junctions, len(top)]

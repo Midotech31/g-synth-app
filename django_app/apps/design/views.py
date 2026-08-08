@@ -8,12 +8,29 @@ tests are.
 from __future__ import annotations
 
 from django.http import HttpResponse
-from gsynth_engine.constants import (
-    CLEAVAGE_SITES,
-    COMMON_ENZYME_PAIRS,
-    RESTRICTION_ENZYMES,
-    overhang,
+from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from apps.design.serializers import (
+    CLEAVAGE_NAMES,
+    AlignRequestSerializer,
+    CloneRequestSerializer,
+    LigationRequestSerializer,
+    OptimiseRequestSerializer,
+    PrimerRequestSerializer,
+    SaveableAssemblyRequestSerializer,
+    SSDRequestSerializer,
+    TraceUploadSerializer,
+    VerifyRequestSerializer,
+    resolve_vector,
 )
+from apps.projects.models import Project
+from gsynth_engine import vectors as vector_catalogue
+from gsynth_engine.align import Scoring, align, blosum62
+from gsynth_engine.chromatogram import read_ab1, summarise
 from gsynth_engine.cloning import (
     CloningResult,
     clone,
@@ -27,37 +44,22 @@ from gsynth_engine.codon import (
     build_table,
     optimise,
 )
+from gsynth_engine.constants import (
+    CLEAVAGE_SITES,
+    COMMON_ENZYME_PAIRS,
+    RESTRICTION_ENZYMES,
+    overhang,
+)
 from gsynth_engine.duplex import DuplexView, construct_duplex, junction_view
-from gsynth_engine.align import PROTEIN_SCORING, Scoring, align, blosum62
 from gsynth_engine.genbank import oligos_to_fasta, to_fasta, to_genbank
 from gsynth_engine.ligation import ligation_series, plan_ligation
-from gsynth_engine.primers import design_sequencing_primers
-from gsynth_engine.verify import verify
 from gsynth_engine.merzoug import AssemblyPlan, design_merzoug_assembly
+from gsynth_engine.primers import design_sequencing_primers
 from gsynth_engine.protocol import bench_protocol, order_sheet, order_sheet_csv
 from gsynth_engine.sequence import SequenceError, gc_content
 from gsynth_engine.ssd import SSDResult, design_small_sequence
 from gsynth_engine.thermo import ANNEALING
-from gsynth_engine import vectors as vector_catalogue
-from rest_framework import status
-from rest_framework.permissions import AllowAny
-from rest_framework.throttling import ScopedRateThrottle
-from rest_framework.response import Response
-from rest_framework.views import APIView
-
-from apps.design.serializers import (
-    CLEAVAGE_NAMES,
-    CloneRequestSerializer,
-    AlignRequestSerializer,
-    LigationRequestSerializer,
-    OptimiseRequestSerializer,
-    PrimerRequestSerializer,
-    VerifyRequestSerializer,
-    resolve_vector,
-    SaveableAssemblyRequestSerializer,
-    SSDRequestSerializer,
-)
-from apps.projects.models import Project
+from gsynth_engine.verify import verify
 
 
 def _bad_request(error: SequenceError) -> Response:
@@ -136,6 +138,15 @@ def _assembly_payload(plan: AssemblyPlan, construct_name: str) -> dict:
         "overhang_length": plan.overhang_length,
         "longest_oligo": plan.longest_oligo,
         "junction_overhangs": plan.junction_overhangs,
+        # Measured off the assembled fragments, not copied from the design:
+        # this is what the vector will actually be offered.
+        "terminal_ends": [
+            {"side": side, "enzyme": enzyme, "overhang": sequence, "kind": kind}
+            for side, enzyme, (sequence, kind) in (
+                ("left", plan.ssd.left_enzyme, plan.terminal_ends[0]),
+                ("right", plan.ssd.right_enzyme, plan.terminal_ends[1]),
+            )
+        ],
         "fragments": [
             {
                 "index": fragment.index,
@@ -728,6 +739,125 @@ class SequencingPrimerView(APIView):
         })
 
 
+def _difference_payload(d) -> dict:
+    return {
+        "kind": d.kind,
+        "position": d.position,
+        "expected": d.expected,
+        "found": d.found,
+        "residue": d.residue,
+        "from_residue": d.from_residue,
+        "to_residue": d.to_residue,
+        "silent": d.silent,
+        "description": d.description,
+        # None when the read came as letters. False means the trace does not
+        # support it — noise, not a mutation.
+        "quality": d.quality,
+        "confident": d.confident,
+        "read_index": d.read_index,
+    }
+
+
+def _read_payload(r) -> dict:
+    return {
+        "name": r.name,
+        "length": r.length,
+        "start": r.start,
+        "end": r.end,
+        "covered": r.covered,
+        "reverse_complemented": r.reverse_complemented,
+        "identity": r.identity,
+        "matched": r.matched,
+        "difference_count": len(r.differences),
+        "is_clean": r.is_clean,
+        "warnings": r.warnings,
+        "mean_quality": r.mean_quality,
+        "trimmed_start": r.trimmed_start,
+        "trimmed_end": r.trimmed_end,
+    }
+
+
+class TraceVerifyView(APIView):
+    """POST /api/design/verify/traces/ — the reads, with their peaks.
+
+    The same comparison as `/verify/`, except the reads arrive as .ab1 files.
+    That buys two things the letters cannot give: the ends are trimmed by
+    quality rather than by a fixed count, and every difference is returned
+    with the confidence of the base that produced it — plus the slice of
+    trace around it, so the drawing can show the peak that was called.
+    """
+
+    throttle_scope = "design"
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        serializer = TraceUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        traces, summaries = {}, []
+        for upload in data["traces"]:
+            name = upload.name or f"trace {len(traces) + 1}"
+            try:
+                trace = read_ab1(upload.read(), name=name)
+            except SequenceError as error:
+                return _bad_request(error)
+            traces[name] = trace
+            s = summarise(trace, data["trim_quality"])
+            summaries.append({
+                "name": s.name, "length": s.length,
+                "mean_quality": s.mean_quality,
+                "trim_start": s.trim_start, "trim_stop": s.trim_stop,
+                "trimmed_length": s.trimmed_length,
+                "high_quality_bases": s.high_quality_bases,
+                "sample_count": s.sample_count, "usable": s.usable,
+            })
+
+        region = None
+        if data.get("region_start") is not None and data.get("region_end") is not None:
+            region = (data["region_start"], data["region_end"])
+
+        try:
+            report = verify(
+                data["design"], {n: t.sequence for n, t in traces.items()},
+                circular=data["circular"],
+                coding_start=data.get("coding_start"),
+                coding_end=data.get("coding_end"),
+                region=region, traces=traces,
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        # The peaks around each difference, so it can be looked at rather
+        # than taken on trust. Only these windows travel, never whole traces.
+        windows = []
+        for read in report.reads:
+            trace = traces.get(read.name)
+            if trace is None:
+                continue
+            for d in read.differences:
+                if d.read_index is None:
+                    continue
+                windows.append({
+                    "read": read.name,
+                    "position": d.position,
+                    **trace.window(d.read_index),
+                })
+
+        return Response({
+            "design_length": report.design_length,
+            "coverage": report.coverage,
+            "gaps": report.gaps,
+            "fully_covered": report.fully_covered,
+            "is_verified": report.is_verified,
+            "differences": [_difference_payload(d) for d in report.differences],
+            "reads": [_read_payload(r) for r in report.reads],
+            "traces": summaries,
+            "trace_windows": windows,
+            "warnings": report.warnings,
+        })
+
+
 class VerifyView(APIView):
     """POST /api/design/verify/ — do the reads say you built the design?"""
 
@@ -760,20 +890,7 @@ class VerifyView(APIView):
             "fully_covered": report.fully_covered,
             # Empty differences with at least one read means it is the design.
             "is_verified": report.is_verified,
-            "differences": [
-                {
-                    "kind": d.kind,
-                    "position": d.position,
-                    "expected": d.expected,
-                    "found": d.found,
-                    "residue": d.residue,
-                    "from_residue": d.from_residue,
-                    "to_residue": d.to_residue,
-                    "silent": d.silent,
-                    "description": d.description,
-                }
-                for d in report.differences
-            ],
+            "differences": [_difference_payload(d) for d in report.differences],
             "reads": [
                 {
                     "name": r.name,

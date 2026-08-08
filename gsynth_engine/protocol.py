@@ -219,7 +219,7 @@ def bench_protocol(
         chain = " + ".join(f.name for f in plan.fragments)
         add(f"       {chain}")
         add("")
-        for left_frag, right_frag in zip(plan.fragments, plan.fragments[1:]):
+        for left_frag, right_frag in zip(plan.fragments, plan.fragments[1:], strict=False):
             add(f"       {left_frag.name} → {right_frag.name} "
                 f"via 5'-{left_frag.right_overhang}")
         add("")

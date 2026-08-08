@@ -146,7 +146,7 @@ def _pick(
     length = len(template)
     best: tuple[float, str, int] | None = None
 
-    for shift in range(0, search):
+    for shift in range(search):
         for sign in ((0,) if shift == 0 else (-1, 1)):
             at = anchor + sign * shift
             for size in range(length_range[0], length_range[1] + 1):
@@ -291,7 +291,7 @@ def design_sequencing_primers(
             covered |= set(range(primer.reads_from, primer.reads_to))
         else:
             covered |= set(range(primer.reads_from, length))
-            covered |= set(range(0, primer.reads_to))
+            covered |= set(range(primer.reads_to))
 
     missing = sorted(set(range(target_start, target_end)) - covered)
     gaps: list[tuple[int, int]] = []

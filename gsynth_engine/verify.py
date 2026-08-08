@@ -24,6 +24,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 
+from gsynth_engine.chromatogram import Chromatogram
 from gsynth_engine.cloning import translate
 from gsynth_engine.sequence import SequenceError, clean_dna, reverse_complement
 
@@ -51,6 +52,21 @@ class Difference:
     from_residue: str = ""
     to_residue: str = ""
     silent: bool | None = None
+    #: Where this fell in the read, and how good that base was. Both are
+    #: None when the read arrived as letters rather than as a trace.
+    read_index: int | None = None
+    quality: int | None = None
+
+    @property
+    def confident(self) -> bool | None:
+        """Whether the trace supports this difference being real.
+
+        Q20 is one wrong call in a hundred. Below it a "mutation" is more
+        likely the basecaller choosing between a peak and its neighbour's
+        shoulder, and the trace has to be looked at before anyone reorders
+        an oligo over it.
+        """
+        return None if self.quality is None else self.quality >= 20
 
     @property
     def description(self) -> str:
@@ -61,6 +77,8 @@ class Difference:
             change = f"{self.found} inserted at {where}"
         else:
             change = f"{self.expected} missing at {where}"
+        if self.quality is not None and self.quality < 20:
+            change += f" (Q{self.quality} — check the trace)"
         if self.residue is None:
             return change
         if self.silent:
@@ -87,6 +105,18 @@ class ReadAlignment:
     trimmed_start: int = 0        #: bases dropped from the read's 5' end
     trimmed_end: int = 0
     warnings: list[str] = field(default_factory=list)
+    #: None when the read came as letters; a Phred mean when it came as a trace.
+    mean_quality: float | None = None
+
+    @property
+    def unconfident_differences(self) -> list[Difference]:
+        """Differences the trace does not support. Not mutations — noise."""
+        return [d for d in self.differences if d.confident is False]
+
+    @property
+    def confirmed_differences(self) -> list[Difference]:
+        """Differences a trace backs, plus every difference without one."""
+        return [d for d in self.differences if d.confident is not False]
 
     @property
     def covered(self) -> int:
@@ -163,12 +193,13 @@ def _locate(design: str, read: str, *, circular: bool) -> tuple[int, bool] | Non
     return best[1], best[2]
 
 
-def _align(design: str, read: str, offset: int) -> tuple[list[tuple[int, str, str]], int]:
+def _align(design: str, read: str, offset: int) -> tuple[list[tuple[int, str, str, int]], int]:
     """Banded global alignment of the read against the design at `offset`.
 
-    Returns the edit operations as (design position, expected, found) and how
-    many positions matched. `expected` empty means an insertion in the read;
-    `found` empty means a deletion.
+    Returns the edit operations as (design position, expected, found, read
+    index) and how many positions matched. `expected` empty means an
+    insertion in the read; `found` empty means a deletion. The read index is
+    what lets a difference be shown against its own trace.
 
     **Everything here is sized by the band, not by the read.** Two rolling
     buffers, and a traceback row of the band's width indexed relative to its
@@ -228,7 +259,7 @@ def _align(design: str, read: str, offset: int) -> tuple[list[tuple[int, str, st
     last_high = min(m, n + 2 * BAND + 1)
     j = max(range(last_low, last_high + 1), key=lambda x: previous[x]) if n else 0
     i = n
-    operations: list[tuple[int, str, str]] = []
+    operations: list[tuple[int, str, str, int]] = []
     matched = 0
 
     while i > 0:
@@ -241,13 +272,15 @@ def _align(design: str, read: str, offset: int) -> tuple[list[tuple[int, str, st
             if expected == found:
                 matched += 1
             else:
-                operations.append(((window_start + j - 1) % length, expected, found))
+                operations.append(
+                    ((window_start + j - 1) % length, expected, found, i - 1))
             i, j = i - 1, j - 1
         elif step == 1:
-            operations.append(((window_start + j) % length, "", read[i - 1]))
+            operations.append(((window_start + j) % length, "", read[i - 1], i - 1))
             i -= 1
         else:
-            operations.append(((window_start + j - 1) % length, window[j - 1], ""))
+            operations.append(
+                ((window_start + j - 1) % length, window[j - 1], "", max(0, i - 1)))
             j -= 1
 
     operations.reverse()
@@ -304,13 +337,20 @@ def verify_read(
     trim: int = 30,
     coding_start: int | None = None,
     coding_end: int | None = None,
+    trace: Chromatogram | None = None,
 ) -> ReadAlignment:
     """Place one sequencing read against the design and list what differs.
 
     Args:
         trim: bases to drop from each end before comparing. Sanger reads are
             noise at the start and degrade at the end; the default is
-            deliberately conservative.
+            deliberately conservative. Ignored when `trace` is given — the
+            quality values say where the good sequence actually stops, and a
+            fixed count is wrong in both directions on the same read.
+        trace: the chromatogram this read came from. Supplying it trims by
+            quality and marks each difference with the confidence of the base
+            that produced it, which is what separates a mutation from a bad
+            call.
         coding_start / coding_end: the reading frame, so a substitution can
             be reported as silent or as an amino-acid change.
 
@@ -325,7 +365,13 @@ def verify_read(
     if not raw:
         raise SequenceError(f"{name} is empty.")
 
-    trimmed, cut_start, cut_end = _trim(raw, trim=trim)
+    if trace is not None and trace.quality:
+        # Mott trimming: the good stretch, not a fixed number of bases.
+        start, stop = trace.trim()
+        trimmed = raw[start:stop]
+        cut_start, cut_end = start, len(raw) - stop
+    else:
+        trimmed, cut_start, cut_end = _trim(raw, trim=trim)
     if len(trimmed) < ANCHOR:
         raise SequenceError(
             f"{name} is only {len(raw)} bases; after trimming {trim} from each "
@@ -344,7 +390,7 @@ def verify_read(
     operations, matched = _align(template, oriented, offset)
 
     differences: list[Difference] = []
-    for position, expected, found in operations:
+    for position, expected, found, read_at in operations:
         kind = (
             "substitution" if expected and found
             else "insertion" if not expected else "deletion"
@@ -354,8 +400,13 @@ def verify_read(
             if kind == "substitution" and coding_start is not None and coding_end is not None
             else {}
         )
+        index = len(oriented) - 1 - read_at if flipped else read_at
+        index += cut_start
         differences.append(Difference(
-            kind=kind, position=position, expected=expected, found=found, **effect,
+            kind=kind, position=position, expected=expected, found=found,
+            read_index=index if trace is not None else None,
+            quality=trace.quality_at(index) if trace is not None else None,
+            **effect,
         ))
 
     total = matched + len(differences)
@@ -381,6 +432,7 @@ def verify_read(
         trimmed_start=cut_start,
         trimmed_end=cut_end,
         warnings=warnings,
+        mean_quality=round(trace.mean_quality, 1) if trace is not None else None,
     )
 
 
@@ -393,6 +445,7 @@ def verify(
     coding_start: int | None = None,
     coding_end: int | None = None,
     region: tuple[int, int] | None = None,
+    traces: dict[str, Chromatogram] | None = None,
 ) -> VerificationReport:
     """Check every read against the design and report coverage and changes.
 
@@ -416,6 +469,7 @@ def verify(
             aligned.append(verify_read(
                 template, sequence, name=name, circular=circular, trim=trim,
                 coding_start=coding_start, coding_end=coding_end,
+                trace=(traces or {}).get(name),
             ))
         except SequenceError as error:
             warnings.append(str(error))
@@ -427,7 +481,7 @@ def verify(
             wanted -= set(range(read.start, read.end))
         else:                                    # wraps the origin
             wanted -= set(range(read.start, len(template)))
-            wanted -= set(range(0, read.end))
+            wanted -= set(range(read.end))
 
     gaps: list[tuple[int, int]] = []
     for position in sorted(wanted):

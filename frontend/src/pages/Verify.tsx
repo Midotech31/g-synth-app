@@ -9,6 +9,8 @@ import {
   type ProjectSummary,
   type VerifyReport,
 } from "../api/client";
+import Icon from "../components/Icon";
+import TraceView from "../components/TraceView";
 
 /**
  * The end of the workflow: you built it, now check it is what you designed.
@@ -29,10 +31,12 @@ export default function Verify() {
   const [busy, setBusy] = useState(false);
 
   const [reads, setReads] = useState("");
+  const [traceFiles, setTraceFiles] = useState<File[]>([]);
   const [report, setReport] = useState<VerifyReport | null>(null);
   const [primers, setPrimers] = useState<PrimerSet | null>(null);
   const [ligation, setLigation] = useState<LigationReaction[] | null>(null);
   const [vectorNg, setVectorNg] = useState(50);
+  const [trim, setTrim] = useState(30);
 
   useEffect(() => {
     api.listProjects()
@@ -78,17 +82,33 @@ export default function Verify() {
   async function runVerify() {
     if (!project) return;
     const parsed = parseReads(reads);
-    if (!Object.keys(parsed).length) {
-      setError("Paste at least one read — FASTA, or just the bases.");
+    if (!traceFiles.length && !Object.keys(parsed).length) {
+      setError("Add an .ab1 trace, or paste the bases.");
       return;
     }
     setBusy(true);
     setError("");
     try {
+      // A trace carries the confidence of every base; letters do not. When
+      // both are given the traces win — there is no reason to discard the
+      // one piece of evidence that separates a mutation from a bad call.
+      const common = {
+        design: project.sequence,
+        circular,
+        region_start: hasRegion ? insertStart : null,
+        region_end: hasRegion ? insertEnd : null,
+        coding_start: hasRegion ? insertStart : null,
+        coding_end: hasRegion ? insertEnd : null,
+      };
+      if (traceFiles.length) {
+        setReport(await api.verifyTraces({ ...common, files: traceFiles }));
+        return;
+      }
       setReport(await api.verify({
         design: project.sequence,
         reads: parsed,
         circular,
+        trim,
         region_start: hasRegion ? insertStart : null,
         region_end: hasRegion ? insertEnd : null,
         coding_start: hasRegion ? insertStart : null,
@@ -224,7 +244,30 @@ export default function Verify() {
 
               {tab === "reads" && project && (
                 <div className="field">
-                  <label htmlFor="reads">Sequencing reads</label>
+                  <label htmlFor="traces">Trace files (.ab1)</label>
+                  <input
+                    id="traces"
+                    type="file"
+                    accept=".ab1,application/octet-stream"
+                    multiple
+                    onChange={(e) => {
+                      setTraceFiles(Array.from(e.target.files ?? []));
+                      setReport(null);
+                    }}
+                  />
+                  <span className="label">
+                    {traceFiles.length
+                      ? `${traceFiles.length} trace${traceFiles.length === 1 ? "" : "s"} ready`
+                      : "What the facility sent — the peaks say which differences are real"}
+                  </span>
+                </div>
+              )}
+
+              {tab === "reads" && project && (
+                <div className="field">
+                  <label htmlFor="reads">
+                    {traceFiles.length ? "Or paste the bases instead" : "Sequencing reads"}
+                  </label>
                   <textarea
                     id="reads"
                     value={reads}
@@ -236,6 +279,18 @@ export default function Verify() {
                   />
                   <span className="label">
                     FASTA, or just the bases for a single read
+                  </span>
+                  <label htmlFor="trim">Ignore low-quality bases at each end</label>
+                  <input
+                    id="trim"
+                    type="number"
+                    min={0}
+                    max={200}
+                    value={trim}
+                    onChange={(e) => setTrim(Number(e.target.value))}
+                  />
+                  <span className="label">
+                    {trim} bases from the start and {trim} from the end · use 0 for a cleaned sequence
                   </span>
                 </div>
               )}
@@ -306,16 +361,32 @@ export default function Verify() {
                       <div className="card-head"><h2>What differs</h2></div>
                       <div className="card-body">
                         <ul className="difference-list">
-                          {report.differences.map((d) => (
-                            <li key={`${d.kind}-${d.position}-${d.found}`}
-                                className={d.silent ? "silent" : ""}>
-                              {d.description}
-                            </li>
-                          ))}
+                          {report.differences.map((d) => {
+                            const peaks = report.trace_windows?.find(
+                              (w) => w.position === d.position,
+                            );
+                            return (
+                              <li key={`${d.kind}-${d.position}-${d.found}`}
+                                  className={
+                                    (d.silent ? "silent " : "") +
+                                    (d.confident === false ? "unconfident" : "")
+                                  }>
+                                {d.description}
+                                {peaks && <TraceView window={peaks} />}
+                              </li>
+                            );
+                          })}
                         </ul>
                         <p className="note" style={{ marginTop: "0.6rem" }}>
                           Positions are in the construct, counting from 1.
                           Silent changes leave the protein alone.
+                          {report.differences.some((d) => d.confident === false) && (
+                            <>
+                              {" "}Differences marked Q&lt;20 sit on a peak the
+                              basecaller was not sure of — read those again
+                              before acting on them.
+                            </>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -365,11 +436,28 @@ export default function Verify() {
                       </div>
                     </div>
                   )}
+
+                  {report.reads.some((read) => read.warnings.length > 0) && (
+                    <div className="card">
+                      <div className="card-head"><h2>Read quality notes</h2></div>
+                      <div className="card-body">
+                        <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--ink-soft)" }}>
+                          {report.reads.flatMap((read) =>
+                            read.warnings.map((warning) => (
+                              <li key={`${read.name}-${warning}`} style={{ marginBottom: "0.3rem", lineHeight: 1.5 }}>
+                                <strong>{read.name}:</strong> {warning}
+                              </li>
+                            )),
+                          )}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="card">
                   <div className="empty">
-                    <div className="glyph">🔬</div>
+                    <Icon name="microscope" size={38} className="glyph" />
                     <strong>No reads compared yet</strong>
                     <span>
                       Pick a construct and paste what the sequencing facility
@@ -423,7 +511,9 @@ export default function Verify() {
                               <td className="num">{p.tm}</td>
                               <td className="num">{p.gc}</td>
                               <td className="num">
-                                {p.direction === 1 ? "→" : "←"} {p.reads_from + 1}–{p.reads_to}
+                                <Icon name={p.direction === 1 ? "arrowRight" : "arrowLeft"} size={14}
+                                      title={p.direction === 1 ? "forward" : "reverse"} />{" "}
+                                {p.reads_from + 1}–{p.reads_to}
                               </td>
                             </tr>
                           ))}
@@ -441,7 +531,7 @@ export default function Verify() {
               ) : (
                 <div className="card">
                   <div className="empty">
-                    <div className="glyph">🎯</div>
+                    <Icon name="target" size={38} className="glyph" />
                     <strong>No primers yet</strong>
                     <span>Pick a construct, then design primers that read its insert.</span>
                   </div>
@@ -494,7 +584,7 @@ export default function Verify() {
               ) : (
                 <div className="card">
                   <div className="empty">
-                    <div className="glyph">⚖️</div>
+                    <Icon name="scales" size={38} className="glyph" />
                     <strong>No amounts yet</strong>
                     <span>Pick a construct to work out how much insert to add.</span>
                   </div>

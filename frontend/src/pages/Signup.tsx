@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { Logo } from "../components/Logo";
 
 export default function Signup() {
   const { signUp } = useAuth();
@@ -34,7 +35,7 @@ export default function Signup() {
     <div className="auth">
       <div className="panel">
         <div className="lockup">
-          <div className="mark">🧬</div>
+          <Logo size={56} />
           <h1>Create your account</h1>
           <p>Free — your sequences stay private to you.</p>
         </div>

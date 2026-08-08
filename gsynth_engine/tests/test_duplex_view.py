@@ -38,14 +38,14 @@ class TestPairing:
         assert view.mismatches() == []
 
     def test_every_paired_column_is_complementary(self, view):
-        for top, bottom in zip(view.top, view.bottom):
+        for top, bottom in zip(view.top, view.bottom, strict=False):
             if top != GAP and bottom != GAP:
                 assert complement(top) == bottom
 
     def test_pairing_marks_match_the_strands(self, view):
         marks = view.paired()
         assert len(marks) == view.width
-        for mark, top, bottom in zip(marks, view.top, view.bottom):
+        for mark, top, bottom in zip(marks, view.top, view.bottom, strict=False):
             if top == GAP or bottom == GAP:
                 assert mark == GAP
             else:
@@ -54,7 +54,7 @@ class TestPairing:
     def test_holds_for_every_enzyme_pair(self):
         """A drawing that only works for NdeI/XhoI is not a drawing."""
         names = sorted(RESTRICTION_ENZYMES)
-        for left, right in zip(names, names[1:]):
+        for left, right in zip(names, names[1:], strict=False):
             if left == right:
                 continue
             design = design_merzoug_assembly(
@@ -101,7 +101,7 @@ class TestOverhangs:
         assert view.top.strip(GAP) == plan.construct_forward
         assert view.bottom.strip(GAP) == complement(bottom_sense)
         # No column is padding on both strands at once.
-        assert not any(t == GAP and b == GAP for t, b in zip(view.top, view.bottom))
+        assert not any(t == GAP and b == GAP for t, b in zip(view.top, view.bottom, strict=False))
 
     def test_blunt_ends_leave_no_stagger(self):
         """EcoRV cuts blunt: both strands start and end in the same column."""
@@ -121,14 +121,14 @@ class TestFragmentSpans:
         spans = view.top_fragments
         assert spans[0].start == 0
         assert spans[-1].end == len(plan.construct_forward)
-        for left, right in zip(spans, spans[1:]):
+        for left, right in zip(spans, spans[1:], strict=False):
             assert left.end == right.start
 
     def test_bottom_spans_tile_the_bottom_strand(self, view, plan):
         spans = view.bottom_fragments
         assert spans[0].start == len(plan.ssd.left_overhang)
         assert spans[-1].end == view.width
-        for left, right in zip(spans, spans[1:]):
+        for left, right in zip(spans, spans[1:], strict=False):
             assert left.end == right.start
 
     def test_the_two_strands_are_staggered_at_every_junction(self, view, plan):
@@ -142,9 +142,9 @@ class TestFragmentSpans:
             assert offset == plan.overhang_length
 
     def test_span_sequences_are_the_oligos_that_get_ordered(self, view, plan):
-        for span, fragment in zip(view.top_fragments, plan.fragments):
+        for span, fragment in zip(view.top_fragments, plan.fragments, strict=False):
             assert view.top[span.start : span.end] == fragment.forward
-        for span, fragment in zip(view.bottom_fragments, plan.fragments):
+        for span, fragment in zip(view.bottom_fragments, plan.fragments, strict=False):
             drawn = view.bottom[span.start : span.end]
             assert drawn == complement(reverse_complement(fragment.reverse))
 
@@ -158,14 +158,14 @@ class TestCassetteSegments:
 
     def test_segments_index_the_top_strand(self, view, plan):
         assert view.segments, "the cassette should be labelled"
-        for span, segment in zip(view.segments, plan.ssd.segments):
+        for span, segment in zip(view.segments, plan.ssd.segments, strict=False):
             assert span.name == segment.name
             assert view.top[span.start : span.end] == segment.sequence
 
     def test_segments_tile_the_top_strand_without_gaps(self, view, plan):
         assert view.segments[0].start == 0
         assert view.segments[-1].end == len(plan.construct_forward)
-        for left, right in zip(view.segments, view.segments[1:]):
+        for left, right in zip(view.segments, view.segments[1:], strict=False):
             assert left.end == right.start
 
 
@@ -255,11 +255,11 @@ class TestFragmentView:
         fragment's strands stop where its oligos stop, while in the construct
         the neighbouring fragment carries straight on.
         """
-        for span, fragment in zip(view.top_fragments, plan.fragments):
+        for span, fragment in zip(view.top_fragments, plan.fragments, strict=False):
             single = fragment_duplex(fragment)
             assert view.top[span.start : span.end] == single.top.strip(GAP)
 
-        for span, fragment in zip(view.bottom_fragments, plan.fragments):
+        for span, fragment in zip(view.bottom_fragments, plan.fragments, strict=False):
             single = fragment_duplex(fragment)
             assert view.bottom[span.start : span.end] == single.bottom.strip(GAP)
 
@@ -267,7 +267,7 @@ class TestFragmentView:
         """Where the bottom strand starts, relative to the top."""
         for fragment, top_span, bottom_span in zip(
             plan.fragments, view.top_fragments, view.bottom_fragments
-        ):
+        , strict=False):
             assert bottom_span.start - top_span.start == fragment.bottom_offset
 
 
