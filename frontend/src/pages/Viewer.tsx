@@ -5,6 +5,35 @@ import { SeqViz } from "seqviz";
 import { ApiError, api, type Annotation, type Project } from "../api/client";
 import Icon from "../components/Icon";
 
+/**
+ * Find the annotation a map click landed on.
+ *
+ * SeqViz's onSelection reports the range clicked, not which annotation it
+ * belongs to — a plasmid drawn at a few hundred pixels per thousand bases
+ * routinely has several features under one click. The smallest annotation
+ * containing the click point is the one a person meant: a 20 bp site inside
+ * a 700 bp CDS is what the cursor was actually over.
+ */
+const COMPLEMENT: Record<string, string> = { A: "T", T: "A", G: "C", C: "G", N: "N" };
+
+/** A reverse-strand feature is read 5'→3' opposite to how it is stored. */
+function reverseComplement(seq: string): string {
+  return seq
+    .toUpperCase()
+    .split("")
+    .reverse()
+    .map((base) => COMPLEMENT[base] ?? base)
+    .join("");
+}
+
+function annotationAt(annotations: Annotation[], start: number, end: number): Annotation | null {
+  const covering = annotations.filter((a) => a.start <= start && a.end >= end);
+  if (!covering.length) return null;
+  return covering.reduce((smallest, a) =>
+    a.end - a.start < smallest.end - smallest.start ? a : smallest,
+  );
+}
+
 type ViewMode = "circular" | "linear" | "both";
 
 export default function Viewer() {
@@ -166,6 +195,22 @@ export default function Viewer() {
               viewer={mode}
               showComplement
               showIndex
+              // Clicking a feature in the map selects it here too, so one
+              // click either shows the same detail — an annotation is one
+              // fact, not two independent views of it.
+              onSelection={(sel) => {
+                if (sel.type !== "ANNOTATION" || sel.start === undefined || sel.end === undefined) {
+                  return;
+                }
+                const hit = annotationAt(annotations, sel.start, sel.end);
+                if (hit) setSelected(hit);
+              }}
+              // The reverse direction: picking a feature from the list
+              // highlights its span on the map, because "which one is that"
+              // is the question a list of coordinates cannot answer alone.
+              highlights={
+                selected ? [{ start: selected.start, end: selected.end, color: selected.color }] : []
+              }
               style={{ height: "100%", width: "100%" }}
             />
           </div>
@@ -187,7 +232,8 @@ export default function Viewer() {
                     <button
                       key={`${a.name}-${a.start}-${index}`}
                       className="feature-row"
-                      onClick={() => setSelected(a)}
+                      onClick={() => setSelected(selected === a ? null : a)}
+                      aria-pressed={selected === a}
                       style={{
                         background: selected === a ? "var(--accent-wash)" : "transparent",
                         border: "none",
@@ -213,6 +259,69 @@ export default function Viewer() {
                 </div>
               )}
             </div>
+
+            {/* Clicking a feature — here or on the map itself — has to show
+                something, or "interactive" is just a highlight with no
+                content behind it. This is that content: what the feature
+                is, where it sits, and the bases it actually spans. */}
+            {selected && (
+              <div className="card feature-detail">
+                <div className="card-head">
+                  <span className="dot" style={{ background: selected.color }} />
+                  <h2 style={{ flex: 1 }}>{selected.name}</h2>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => setSelected(null)}
+                    title="Clear selection"
+                  >
+                    <Icon name="cross" size={14} />
+                  </button>
+                </div>
+                <div className="card-body stat-row">
+                  <div className="stat">
+                    <div className="k">Type</div>
+                    <div className="v" style={{ fontSize: "1.05rem" }}>{selected.type}</div>
+                  </div>
+                  <div className="stat">
+                    <div className="k">Strand</div>
+                    <div className="v" style={{ fontSize: "1.05rem" }}>
+                      {selected.direction === -1 ? "reverse" : selected.direction === 1 ? "forward" : "—"}
+                    </div>
+                  </div>
+                  <div className="stat">
+                    <div className="k">Position</div>
+                    <div className="v" style={{ fontSize: "1.05rem" }}>
+                      {(selected.start + 1).toLocaleString()}–{selected.end.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="stat">
+                    <div className="k">Length</div>
+                    <div className="v">
+                      {(selected.end - selected.start).toLocaleString()}<small>bp</small>
+                    </div>
+                  </div>
+                </div>
+                {selected.truncated && (
+                  <p className="note" style={{ padding: "0 1.1rem 0.9rem", color: "var(--amber)" }}>
+                    Truncated at the insert junction — this feature ran past the cut and only
+                    part of it is on the plasmid.
+                  </p>
+                )}
+                <div className="card-body" style={{ paddingTop: 0 }}>
+                  <div className="seq-block">
+                    {selected.direction === -1
+                      ? reverseComplement(project.sequence.slice(selected.start, selected.end))
+                      : project.sequence.slice(selected.start, selected.end)}
+                  </div>
+                  {selected.direction === -1 && (
+                    <p className="note" style={{ marginTop: "0.5rem" }}>
+                      Shown 5'→3' on the strand this feature reads from — the reverse complement
+                      of that span in the sequence above.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {protein && (
               <div className="card">

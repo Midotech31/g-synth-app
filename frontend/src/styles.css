@@ -302,6 +302,13 @@ table.data td.num { font-variant-numeric: tabular-nums; }
 .feature-row .ty { font-family: var(--mono); font-size: 0.68rem; color: var(--muted); }
 .feature-row .rg { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 
+/* What a click on the map turns into: a feature's or restriction site's own
+   facts, plus the bases it actually spans — the reason the map is worth
+   clicking at all rather than just looking decorative. */
+.feature-detail { background: var(--accent-wash); }
+.feature-detail .dot { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.feature-detail .seq-block { max-height: 140px; overflow-y: auto; }
+
 .seq-block {
   font-family: var(--mono); font-size: 0.78rem; line-height: 1.7;
   word-break: break-all; color: var(--ink-soft);

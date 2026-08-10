@@ -39,6 +39,10 @@ export type Annotation = {
   end: number;
   direction: number;
   color: string;
+  /** Clipped where a vector feature met the insert junction. Set only on a
+   *  cloned plasmid's own features — a truncated promoter is worth seeing,
+   *  not silently keeping its pre-cut length. */
+  truncated?: boolean;
 };
 
 export type ParsedRecord = {
