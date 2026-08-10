@@ -8,6 +8,18 @@
  * invalidate its own rotating refresh token.
  */
 
+/**
+ * Where the API lives.
+ *
+ * Empty in development: Vite proxies `/api` to :8000, so a relative path is
+ * same-origin and no CORS is involved. In production the workspace is a
+ * static site and the API is a separate service, so the two are on different
+ * origins and the path has to be absolute — `VITE_API_BASE` supplies it at
+ * build time. Trailing slashes are stripped so `${BASE}/api/...` never
+ * doubles one.
+ */
+const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
+
 const ACCESS_KEY = "gsynth.access";
 const REFRESH_KEY = "gsynth.refresh";
 
@@ -574,7 +586,7 @@ async function refreshAccessToken(): Promise<string | null> {
   const refresh = tokenStore.refresh;
   if (!refresh) return null;
 
-  const response = await fetch("/api/auth/refresh/", {
+  const response = await fetch(`${API_BASE}/api/auth/refresh/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refresh }),
@@ -610,7 +622,7 @@ function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Respo
     const headers = new Headers(init.headers);
     if (token) headers.set("Authorization", `Bearer ${token}`);
     else headers.delete("Authorization");
-    return fetch(path, { ...init, headers });
+    return fetch(`${API_BASE}${path}`, { ...init, headers });
   });
 }
 
@@ -629,7 +641,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const headers: Record<string, string> = {};
     if (!formData) headers["Content-Type"] = "application/json";
     if (auth && token) headers["Authorization"] = `Bearer ${token}`;
-    return fetch(path, {
+    return fetch(`${API_BASE}${path}`, {
       method,
       headers,
       body: formData ?? (body === undefined ? undefined : JSON.stringify(body)),

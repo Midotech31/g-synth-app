@@ -1,4 +1,15 @@
-# Deploy the G-Synth API — click-by-click
+# Deploy G-Synth — click-by-click
+
+**Two services, not one.** `render.yaml` creates both: `gsynth-api` (the
+Django process) and `gsynth-app` (the React workspace, served as static
+files). The blueprint wires them to each other — the API learns the
+workspace's origin so it will accept its requests, and the workspace learns
+the API's URL at build time. Neither value is typed by hand; getting either
+wrong shows up as a CORS error in the browser console that names nothing
+useful.
+
+**Before you start:** the blueprint deploys from `main`. Merge your working
+branch first, or Render will build code you have not looked at.
 
 Goal: a public URL like `https://gsynth-api.onrender.com` that you can open
 in a browser, with a database that survives restarts. No terminal, no
@@ -73,6 +84,12 @@ Your URL appears at the top of the service page, in the form
 ---
 
 ## Check it worked
+
+Open the **workspace** URL (`gsynth-app…onrender.com`), not the API's.
+Create an account and design something — that exercises both services and
+the database in one go. The API's own URL only answers `/api/…`; opening its
+root gives a 404, which is correct and not a fault.
+
 
 Open these in your browser:
 

@@ -33,3 +33,6 @@ node_modules/
 frontend/dist/
 frontend/*.tsbuildinfo
 db.sqlite3
+
+# Local production smoke-test artefacts
+django_app/prodcheck.sqlite3
