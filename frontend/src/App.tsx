@@ -5,6 +5,8 @@ import Align from "./pages/Align";
 import Clone from "./pages/Clone";
 import Dashboard from "./pages/Dashboard";
 import Design from "./pages/Design";
+import Help from "./pages/Help";
+import Home from "./pages/Home";
 import Optimise from "./pages/Optimise";
 import Verify from "./pages/Verify";
 import Login from "./pages/Login";
@@ -23,6 +25,9 @@ function Rail() {
 
       <nav>
         <NavLink to="/" end className={({ isActive }) => (isActive ? "active" : "")}>
+          Home
+        </NavLink>
+        <NavLink to="/design" className={({ isActive }) => (isActive ? "active" : "")}>
           Design
         </NavLink>
         <NavLink to="/optimise" className={({ isActive }) => (isActive ? "active" : "")}>
@@ -39,6 +44,9 @@ function Rail() {
         </NavLink>
         <NavLink to="/projects" className={({ isActive }) => (isActive ? "active" : "")}>
           Projects
+        </NavLink>
+        <NavLink to="/help" className={({ isActive }) => (isActive ? "active" : "")}>
+          Help
         </NavLink>
       </nav>
 
@@ -111,13 +119,15 @@ export default function App() {
             }
           />
           <Route element={<Protected />}>
-            <Route path="/" element={<Design />} />
+            <Route path="/" element={<Home />} />
+            <Route path="/design" element={<Design />} />
             <Route path="/optimise" element={<Optimise />} />
             <Route path="/clone" element={<Clone />} />
             <Route path="/verify" element={<Verify />} />
             <Route path="/align" element={<Align />} />
             <Route path="/projects" element={<Dashboard />} />
             <Route path="/projects/:id" element={<Viewer />} />
+            <Route path="/help" element={<Help />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

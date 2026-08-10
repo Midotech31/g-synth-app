@@ -256,6 +256,43 @@ table.data td.num { font-variant-numeric: tabular-nums; }
 .auth form { display: flex; flex-direction: column; gap: 0.85rem; }
 .auth .alt { text-align: center; font-size: 0.87rem; color: var(--muted); }
 
+/* ── Home ────────────────────────────────────────────────────────────── */
+.home-hero { background: linear-gradient(180deg, var(--accent-wash), var(--surface) 75%); }
+.home-hero-body { display: flex; align-items: center; gap: 1.5rem; }
+.home-hero-body p { color: var(--ink-soft); font-size: 0.95rem; max-width: 620px; }
+
+.pipeline { display: flex; align-items: stretch; gap: 0.5rem; padding: 1.1rem; overflow-x: auto; }
+.pipeline-stage {
+  display: flex; flex-direction: column; gap: 0.45rem;
+  flex: 1 1 160px; min-width: 152px;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  text-decoration: none; color: inherit;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.pipeline-stage:hover { border-color: var(--accent); background: var(--accent-wash); }
+.pipeline-stage .icon { color: var(--accent); }
+.pipeline-stage strong { font-size: 0.92rem; }
+.pipeline-stage span { font-size: 0.78rem; color: var(--muted); line-height: 1.45; }
+.pipeline-arrow { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; color: var(--line-strong); }
+@media (max-width: 900px) {
+  .pipeline { flex-direction: column; }
+  .pipeline-arrow { transform: rotate(90deg); align-self: center; }
+}
+
+.home-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 1.1rem; align-items: start; }
+@media (max-width: 900px) { .home-grid { grid-template-columns: 1fr; } }
+
+/* ── Help ────────────────────────────────────────────────────────────── */
+.help-section:not(:first-child) { border-top: 1px solid var(--line); padding-top: 1.3rem; }
+.help-stage-head { display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; color: var(--ink); }
+.help-stage-head:hover { color: var(--accent); }
+.help-stage-head .icon { color: var(--accent); }
+.help-stage-head h3 { margin: 0; }
+.help-points { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: 0.32rem; }
+.help-points li { font-size: 0.85rem; color: var(--ink-soft); line-height: 1.55; }
+
 /* ── Dashboard ───────────────────────────────────────────────────────── */
 .grid-projects { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.9rem; }
 

@@ -66,7 +66,7 @@ export default function Optimise() {
   /** Hand the optimised gene to the design page, so the workflow continues. */
   function sendToDesign() {
     if (!result) return;
-    navigate("/", { state: { sequence: result.sequence } });
+    navigate("/design", { state: { sequence: result.sequence } });
   }
 
   const inputLength = params.sequence.replace(/\s/g, "").length;
