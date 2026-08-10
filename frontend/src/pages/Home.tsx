@@ -177,6 +177,12 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        <footer className="home-footer">
+          Designed by <strong>Prof. Merzoug Mohamed</strong> &middot; Full Professor, Genomics
+          Technology Platform, Higher School of Biological Sciences of Oran &middot;{" "}
+          <a href="mailto:mohamed.merzoug.essbo@gmail.com">mohamed.merzoug.essbo@gmail.com</a>
+        </footer>
       </div>
     </>
   );

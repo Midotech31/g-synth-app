@@ -284,6 +284,13 @@ table.data td.num { font-variant-numeric: tabular-nums; }
 .home-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 1.1rem; align-items: start; }
 @media (max-width: 900px) { .home-grid { grid-template-columns: 1fr; } }
 
+.home-footer {
+  text-align: center; padding-top: 0.5rem;
+  font-size: 0.78rem; color: var(--muted);
+}
+.home-footer a { color: var(--muted); text-decoration-color: var(--line-strong); }
+.home-footer a:hover { color: var(--accent); }
+
 /* ── Help ────────────────────────────────────────────────────────────── */
 .help-section:not(:first-child) { border-top: 1px solid var(--line); padding-top: 1.3rem; }
 .help-stage-head { display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; color: var(--ink); }

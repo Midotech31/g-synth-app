@@ -145,6 +145,19 @@ export default function Help() {
             </p>
           </div>
         </div>
+
+        <div className="card">
+          <div className="card-head"><h2>About &amp; contact</h2></div>
+          <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+            <strong>Designed by Prof. Merzoug Mohamed</strong>
+            <span className="note">Full Professor</span>
+            <span className="note">Genomics Technology Platform</span>
+            <span className="note">Higher School of Biological Sciences of Oran</span>
+            <span className="note" style={{ marginTop: "0.35rem" }}>
+              <a href="mailto:mohamed.merzoug.essbo@gmail.com">mohamed.merzoug.essbo@gmail.com</a>
+            </span>
+          </div>
+        </div>
       </div>
     </>
   );
