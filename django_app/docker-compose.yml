@@ -1,5 +1,6 @@
-# Local development: Django + Postgres + Redis
+# G-Synth — one command, everything runs.
 # Run with: docker compose up --build
+# Then open http://localhost:5173
 
 services:
   db:
@@ -81,6 +82,20 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
+
+  frontend:
+    build:
+      context: ../frontend
+    environment:
+      VITE_API_TARGET: "http://api:8000"
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    volumes:
+      - ../frontend/src:/app/src
+      - ../frontend/public:/app/public
+      - ../frontend/index.html:/app/index.html
 
 volumes:
   pgdata:
