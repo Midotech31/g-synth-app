@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { SeqViz } from "seqviz";
 
 import {
@@ -50,7 +51,22 @@ const EMPTY_VECTOR: Vector = {
   bundled: false,
 };
 
+/** An insert that arrived from the PCR page already cut. Both strands are
+ *  carried because the stagger between them is the overhang: from one strand
+ *  alone half the geometry is invisible, and an insert cut for a different
+ *  enzyme pair would look correct. */
+type PreDigested = {
+  top: string;
+  bottom: string;
+  leftEnzyme: string | null;
+  rightEnzyme: string | null;
+};
+
 export default function Clone() {
+  const location = useLocation() as { state?: { preDigested?: PreDigested } | null };
+  const [preDigested, setPreDigested] = useState<PreDigested | null>(
+    location.state?.preDigested ?? null,
+  );
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [params, setParams] = useState<DesignParams>(DEFAULTS);
   const [vectors, setVectors] = useState<VectorSpec[]>([]);
@@ -182,6 +198,18 @@ export default function Clone() {
     try {
       const data = await api.clone({
         ...params,
+        // A cut PCR product is an insert, not a gene: designing one around
+        // it would add a second set of sites and tags outside ends that are
+        // already sticky.
+        ...(preDigested
+          ? {
+              sequence: preDigested.top,
+              insert_reverse: preDigested.bottom,
+              pre_digested: true,
+              left_enzyme: preDigested.leftEnzyme ?? params.left_enzyme,
+              right_enzyme: preDigested.rightEnzyme ?? params.right_enzyme,
+            }
+          : {}),
         vector_key: vector.key,
         // A bundled sequence is already on the server; sending it back would
         // just be a megabyte of round trip.
@@ -432,6 +460,23 @@ export default function Clone() {
 
             <div className="card">
               <div className="card-head"><h2>Insert</h2></div>
+              {preDigested && (
+                /* Without this the page silently ignores the insert form, and
+                   the reader has no way to tell why their edits do nothing. */
+                <div className="notice notice-info" style={{ margin: "0 1.1rem", marginTop: "0.9rem" }}>
+                  <strong>Using a cut PCR product.</strong>{" "}
+                  {preDigested.top.length} bp with {preDigested.leftEnzyme} and{" "}
+                  {preDigested.rightEnzyme} ends, ligated as supplied &mdash; the
+                  options below are not applied to it.{" "}
+                  <button
+                    className="btn btn-ghost"
+                    style={{ padding: "0.1rem 0.4rem", fontSize: "0.8rem" }}
+                    onClick={() => setPreDigested(null)}
+                  >
+                    Design an insert instead
+                  </button>
+                </div>
+              )}
               <div className="card-body">
                 <InsertForm
                   params={params}
@@ -756,12 +801,12 @@ export default function Clone() {
                   </div>
                 )}
 
-                {(result.warnings.length > 0 || result.insert.warnings.length > 0) && (
+                {(result.warnings.length > 0 || (result.insert?.warnings.length ?? 0) > 0) && (
                   <div className="card">
                     <div className="card-head"><h2>Notes</h2></div>
                     <div className="card-body">
                       <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--ink-soft)" }}>
-                        {[...new Set([...result.insert.warnings, ...result.warnings])].map((note) => (
+                        {[...new Set([...(result.insert?.warnings ?? []), ...result.warnings])].map((note) => (
                           <li key={note} style={{ marginBottom: "0.35rem", lineHeight: 1.5 }}>
                             {note}
                           </li>

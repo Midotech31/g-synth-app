@@ -309,6 +309,111 @@ def linearise(
     )
 
 
+@dataclass(frozen=True)
+class Digest:
+    """A linear fragment cut at both ends, and what was trimmed away.
+
+    This is what a PCR product becomes on the bench once the tails carrying
+    the restriction sites have done their job: a shorter duplex whose ends
+    are sticky. `top` and `bottom` are both 5'→3' in their own directions, so
+    they are what a supplier would print, not one string and its reverse.
+    """
+
+    top: str
+    bottom: str
+    left_end: End
+    right_end: End
+    #: Bases lost from each end — the clamp plus the part of the site that
+    #: stays behind on the discarded stub.
+    trimmed_left: int
+    trimmed_right: int
+
+    @property
+    def length(self) -> int:
+        """Length of the top strand, overhangs included."""
+        return len(self.top)
+
+
+def digest_linear(
+    fragment: str,
+    *,
+    left_enzyme: str,
+    right_enzyme: str,
+) -> Digest:
+    """Cut a linear fragment with one enzyme near each end.
+
+    The middle piece is kept: the two short stubs outside the cuts are what
+    fall away, which on a cloning PCR product is the clamp bases plus part of
+    each recognition site. What survives is the insert, carrying the sticky
+    ends the enzymes leave.
+
+    The ends are read off the cut molecule rather than looked up from the
+    enzyme table, for the same reason `terminal_ends` is measured elsewhere:
+    a value copied from the table agrees with the table whatever the bases
+    actually spell.
+
+    Raises:
+        SequenceError: when either enzyme fails to cut, or when the left
+            enzyme's site does not lie to the left of the right enzyme's —
+            which means the primers or the enzymes have been swapped, and
+            the "insert" that would come back is the piece meant to be
+            thrown away.
+    """
+    working = clean_dna(fragment)
+
+    left_sites = find_sites(working, left_enzyme, circular=False)
+    right_sites = find_sites(working, right_enzyme, circular=False)
+
+    for enzyme, sites in ((left_enzyme, left_sites), (right_enzyme, right_sites)):
+        if not sites:
+            raise SequenceError(
+                f"{enzyme} does not cut this fragment. Check that the primer "
+                f"tail carries the {enzyme} site and that the sequence is the "
+                f"PCR product rather than the template."
+            )
+
+    # With the same enzyme at both ends there is one site per end; take the
+    # outermost of each so the whole insert is kept.
+    left_start = min(left_sites)
+    right_start = max(right_sites)
+    if left_enzyme == right_enzyme and len(left_sites) < 2:
+        raise SequenceError(
+            f"{left_enzyme} cuts this fragment only once, so it cannot open "
+            f"both ends. Use a different enzyme at one end."
+        )
+
+    left_top, left_bottom = _cut_positions(left_enzyme, left_start)
+    right_top, right_bottom = _cut_positions(right_enzyme, right_start)
+
+    if min(left_top, left_bottom) >= min(right_top, right_bottom):
+        raise SequenceError(
+            f"The {left_enzyme} site is not to the left of the {right_enzyme} "
+            f"site in this product. The enzymes are the wrong way round for "
+            f"these primers — swap them, or swap the tails."
+        )
+
+    # The two strands are cut at different columns, and that stagger *is* the
+    # overhang — so they span different stretches and have different lengths.
+    # Returning one as the plain reverse complement of the other would
+    # describe a blunt fragment whatever the enzymes actually leave, and
+    # `_observed_insert_ends` would then measure blunt ends off it.
+    top = working[left_top:right_top]
+    bottom = reverse_complement(working[left_bottom:right_bottom])
+
+    return Digest(
+        top=top,
+        bottom=bottom,
+        # Downstream of the left cut, upstream of the right one: the insert
+        # is the piece between them.
+        left_end=_end_at(working, left_top, left_bottom, side="downstream"),
+        right_end=_end_at(working, right_top, right_bottom, side="upstream"),
+        # Measured on the top strand, which is the one the insert's own
+        # coordinates are quoted in.
+        trimmed_left=left_top,
+        trimmed_right=len(working) - right_top,
+    )
+
+
 # ── Ligation ────────────────────────────────────────────────────────────────
 
 

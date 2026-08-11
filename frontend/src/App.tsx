@@ -26,6 +26,7 @@ const Design = lazy(() => import("./pages/Design"));
 const Help = lazy(() => import("./pages/Help"));
 const Learn = lazy(() => import("./pages/Learn"));
 const Optimise = lazy(() => import("./pages/Optimise"));
+const Pcr = lazy(() => import("./pages/Pcr"));
 const Verify = lazy(() => import("./pages/Verify"));
 const Viewer = lazy(() => import("./pages/Viewer"));
 
@@ -47,6 +48,9 @@ function Rail() {
         </NavLink>
         <NavLink to="/optimise" className={({ isActive }) => (isActive ? "active" : "")}>
           Optimise
+        </NavLink>
+        <NavLink to="/pcr" className={({ isActive }) => (isActive ? "active" : "")}>
+          PCR
         </NavLink>
         <NavLink to="/clone" className={({ isActive }) => (isActive ? "active" : "")}>
           Clone
@@ -165,6 +169,7 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/design" element={<Design />} />
             <Route path="/optimise" element={<Optimise />} />
+            <Route path="/pcr" element={<Pcr />} />
             <Route path="/clone" element={<Clone />} />
             <Route path="/verify" element={<Verify />} />
             <Route path="/align" element={<Align />} />

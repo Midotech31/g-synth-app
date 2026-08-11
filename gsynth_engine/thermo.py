@@ -74,6 +74,17 @@ PRIMER: Final[BufferConditions] = BufferConditions(
     name="primer", oligo_nM=500.0, na_mM=50.0
 )
 
+#: A standard PCR: 0.5 µM each primer in 50 mM K⁺, 1.5 mM Mg²⁺, 0.2 mM dNTP.
+#:
+#: Distinct from PRIMER, which is the same primer concentration in a plain
+#: monovalent buffer. Mg²⁺ raises Tm by several degrees, and dNTPs chelate
+#: part of it back — so a Tm quoted off a supplier's datasheet is not the
+#: temperature the primer anneals at in the tube, and an annealing
+#: temperature set from that figure runs cold.
+PCR: Final[BufferConditions] = BufferConditions(
+    name="PCR reaction", oligo_nM=500.0, na_mM=50.0, mg_mM=1.5, dntp_mM=0.2
+)
+
 #: SantaLucia 1998 unified parameters, ΔH (kcal/mol) and ΔS (cal/mol/K).
 #: Keyed "top/bottom", both written 5'→3'. The ten entries below cover all
 #: sixteen dinucleotides once dyad symmetry is applied in `_stack`.

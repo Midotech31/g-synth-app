@@ -14,6 +14,7 @@ from gsynth_engine.constants import (
     CLEAVAGE_SITES,
 )
 from gsynth_engine.merzoug import MAX_OVERHANG, MIN_OVERHANG
+from gsynth_engine.pcr import DEFAULT_CLAMP
 from gsynth_engine.vectors import CATALOGUE, DEFAULT_VECTOR
 
 #: Every enzyme with verified cut geometry. The interface groups the
@@ -162,6 +163,29 @@ class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
         default=True,
         help_text="False clones the SSD duplex directly, without fragmenting it.",
     )
+    #: Skip designing an insert and ligate the one supplied.
+    #:
+    #: A PCR product that has already been cut is an insert, not a gene: its
+    #: sticky ends exist and adding sites and tags around them a second time
+    #: would build something nobody asked for. When this is set, `sequence`
+    #: is the cut fragment's top strand and `insert_reverse` its bottom —
+    #: both are needed, because the stagger between them is the overhang, and
+    #: from one strand alone half the geometry cannot be seen.
+    pre_digested = serializers.BooleanField(default=False)
+    insert_reverse = serializers.CharField(
+        max_length=200_000, required=False, allow_blank=True, default="",
+    )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if attrs.get("pre_digested") and not attrs.get("insert_reverse"):
+            raise serializers.ValidationError({
+                "insert_reverse": "Supply the cut fragment's bottom strand as "
+                                  "well. With only one strand the overhangs "
+                                  "cannot be measured, and an insert cut for a "
+                                  "different pair would look correct."
+            })
+        return attrs
 
 
 def resolve_vector(data: dict) -> tuple[str, str, list[dict], object]:
@@ -357,3 +381,38 @@ class AlignRequestSerializer(serializers.Serializer):
     mismatch = serializers.IntegerField(default=-4, min_value=-20, max_value=0)
     gap_open = serializers.IntegerField(default=10, min_value=0, max_value=60)
     gap_extend = serializers.IntegerField(default=1, min_value=0, max_value=20)
+
+
+class PcrRequestSerializer(serializers.Serializer):
+    """A PCR, conventional or with cloning tails.
+
+    The enzymes are optional and travel together: naming one alone cannot
+    open both ends of a product, and the engine refuses it. `null` is
+    accepted as well as omission so the interface can clear a choice.
+    """
+
+    template = serializers.CharField(max_length=200_000)
+    target_start = serializers.IntegerField(min_value=0, default=0)
+    target_end = serializers.IntegerField(min_value=1, required=False, allow_null=True,
+                                          default=None)
+    left_enzyme = serializers.ChoiceField(choices=ENZYME_NAMES, required=False,
+                                          allow_null=True, default=None)
+    right_enzyme = serializers.ChoiceField(choices=ENZYME_NAMES, required=False,
+                                           allow_null=True, default=None)
+    # Bounded above because the clamp is synthesised into every primer: a
+    # request for a thousand bases of clamp is an oligo nobody can order.
+    clamp = serializers.IntegerField(min_value=0, max_value=20, default=DEFAULT_CLAMP)
+    keep_frame = serializers.BooleanField(default=False)
+    name = serializers.CharField(max_length=60, required=False, default="product")
+
+    def validate(self, attrs):
+        end = attrs.get("target_end")
+        if end is not None and end <= attrs["target_start"]:
+            raise serializers.ValidationError(
+                {"target_end": "The region must end after it starts."}
+            )
+        if (attrs.get("left_enzyme") is None) != (attrs.get("right_enzyme") is None):
+            raise serializers.ValidationError(
+                {"right_enzyme": "Choose an enzyme for both ends, or for neither."}
+            )
+        return attrs

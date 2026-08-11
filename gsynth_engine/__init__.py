@@ -27,6 +27,7 @@ from gsynth_engine.merzoug import (
     OligoPair,
     design_merzoug_assembly,
 )
+from gsynth_engine.pcr import PcrPrimer, PcrResult, design_pcr
 from gsynth_engine.sequence import (
     clean_dna,
     gc_content,
@@ -38,10 +39,13 @@ from gsynth_engine.ssd import SSDResult, design_small_sequence
 __all__ = [
     "AssemblyPlan",
     "OligoPair",
+    "PcrPrimer",
+    "PcrResult",
     "SSDResult",
     "__version__",
     "clean_dna",
     "design_merzoug_assembly",
+    "design_pcr",
     "design_small_sequence",
     "gc_content",
     "is_palindrome",
