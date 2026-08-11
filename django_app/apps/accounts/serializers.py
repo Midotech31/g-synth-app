@@ -1,6 +1,7 @@
 """DRF serializers for user registration, profile, and token issuance."""
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -34,12 +35,29 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "date_joined")
 
 
+def _check_password(password: str, user) -> None:
+    """Run Django's password validators *against the account they are for*.
+
+    Attached to a field as `validators=[validate_password]`, Django calls it
+    with `user=None`, and `UserAttributeSimilarityValidator` then has nothing
+    to compare against and passes everything. That is silent: the validator is
+    listed in settings, the tests that only check length still pass, and
+    "merzoug2024" is accepted for merzoug@example.com. Passing the user is the
+    whole point of having that validator configured.
+
+    Errors are re-raised under the password field so the interface can put the
+    message next to the input the reader has to change.
+    """
+    try:
+        validate_password(password, user)
+    except DjangoValidationError as error:
+        raise serializers.ValidationError({"password": list(error.messages)}) from error
+
+
 class RegisterSerializer(serializers.ModelSerializer):
     """Sign-up payload: email + name + password (validated) + confirm."""
 
-    password = serializers.CharField(
-        write_only=True, required=True, validators=[validate_password],
-    )
+    password = serializers.CharField(write_only=True, required=True)
     password2 = serializers.CharField(write_only=True, required=True)
 
     class Meta:
@@ -51,6 +69,13 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"password2": "The two passwords do not match."}
             )
+        # Unsaved, and only ever used for comparison — the account does not
+        # exist yet, but its email and name are already known, which is what
+        # the similarity check needs.
+        _check_password(
+            attrs["password"],
+            User(email=attrs.get("email", ""), name=attrs.get("name", "")),
+        )
         return attrs
 
     def create(self, validated_data):
@@ -63,9 +88,7 @@ class ChangePasswordSerializer(serializers.Serializer):
     """Change password: needs the current password + new + confirm."""
 
     current_password = serializers.CharField(write_only=True, required=True)
-    new_password = serializers.CharField(
-        write_only=True, required=True, validators=[validate_password],
-    )
+    new_password = serializers.CharField(write_only=True, required=True)
     new_password2 = serializers.CharField(write_only=True, required=True)
 
     def validate(self, attrs):
@@ -82,6 +105,9 @@ class ChangePasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"new_password": "The new password must differ from the current one."}
             )
+        # Here the account exists, so the similarity check has the real
+        # stored email and name rather than a stand-in.
+        _check_password(attrs["new_password"], user)
         return attrs
 
     def save(self, **kwargs):

@@ -1,0 +1,44 @@
+# Citation metadata, in the Citation File Format.
+# https://citation-file-format.github.io/
+#
+# GitHub reads this file to offer a "Cite this repository" button, and Zenodo
+# reads it when minting a DOI for a release. Keep `version` and `date-released`
+# in step with the release tag: a citation that does not name a version cannot
+# be checked against the results it produced.
+
+cff-version: 1.2.0
+title: "G-Synth: PCR-free gene synthesis and cloning design with verified assembly"
+message: "If you use this software in published work, please cite it as below."
+type: software
+
+authors:
+  - family-names: Merzoug
+    given-names: Mohamed
+    email: mohamed.merzoug.essbo@gmail.com
+    affiliation: >-
+      Genomics Technology Platform, Higher School of Biological Sciences
+      of Oran (ESSBO), Oran, Algeria
+
+repository-code: "https://github.com/Midotech31/g-synth-app"
+license: MIT
+version: 1.0.0
+date-released: "2026-08-11"
+
+abstract: >-
+  G-Synth automates a laboratory gene synthesis and cloning workflow: codon
+  optimisation that provably preserves the protein, PCR-free oligo assembly
+  with orthogonal overhangs (Merzoug assembly), in-silico cloning into a
+  vector, and verification of the result against Sanger traces. Designs are
+  re-ligated in silico on both strands and checked against the sticky ends the
+  chosen restriction enzymes leave before they can be exported, so no oligo
+  set is issued that has not been simulated end to end.
+
+keywords:
+  - gene synthesis
+  - molecular cloning
+  - codon optimisation
+  - restriction enzymes
+  - oligonucleotide assembly
+  - synthetic biology
+  - Sanger sequencing verification
+  - bioinformatics

@@ -118,6 +118,12 @@ AUTH_PASSWORD_VALIDATORS = [
      "OPTIONS": {"min_length": 8}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    # Blocks a password derived from the address or name the account already
+    # publishes. Those are the first two guesses anyone makes, and the other
+    # three validators accept them: "merzoug2024" is long enough, is not on
+    # the common-password list, and is not all digits.
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+     "OPTIONS": {"user_attributes": ("email", "name")}},
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
