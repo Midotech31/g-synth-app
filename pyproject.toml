@@ -45,7 +45,12 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-test = ["pytest>=8.0", "pytest-cov>=5.0"]
+# Biopython is a *test* dependency, never a runtime one — the engine still
+# imports nothing outside the standard library. The suite uses it as an
+# independent second opinion: BLOSUM62 and the parsed GenBank records are
+# checked against Biopython's rather than against this project's own output,
+# which is the only way those two can disagree and be noticed.
+test = ["pytest>=8.0", "pytest-cov>=5.0", "biopython>=1.83"]
 
 [project.urls]
 Homepage = "https://github.com/Midotech31/g-synth-app"

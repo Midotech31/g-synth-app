@@ -1,4 +1,7 @@
-FROM node:20-alpine
+# Matches the version CI tests on. Node 20 cannot run the test suite —
+# jsdom's undici needs an API it does not have — so a container pinned to
+# it would pass here and fail the moment anyone ran the tests inside it.
+FROM node:22-alpine
 
 WORKDIR /app
 

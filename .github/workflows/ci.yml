@@ -101,7 +101,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # 22, not 20: jsdom's undici calls `webidl.util.markAsUncloneable`,
+          # which is absent on 20, so every test file failed to start its
+          # worker before a single test ran. 20 is also on GitHub's
+          # deprecation path.
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
