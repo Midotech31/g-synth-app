@@ -726,6 +726,77 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .empty { padding: 2rem 1rem; }
 }
 
+/* ── Learn / chat ──────────────────────────────────────────────────────── */
+.chat-area {
+  flex: 1; display: flex; flex-direction: column;
+  min-height: 0; overflow: hidden;
+}
+.chat-messages {
+  flex: 1; overflow-y: auto;
+  padding: 1.25rem 1.75rem 0.75rem;
+  display: flex; flex-direction: column; gap: 0.75rem;
+}
+.chat-empty {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; gap: 0.6rem;
+  padding: 3rem 1rem 1.5rem;
+  color: var(--muted);
+}
+.chat-empty h2 { color: var(--ink-soft); }
+.chat-empty .note { max-width: 520px; }
+.chat-suggestions {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 0.5rem; margin-top: 0.75rem;
+}
+.chat-suggestion {
+  font-size: 0.82rem; text-align: left;
+  max-width: 320px; white-space: normal; line-height: 1.45;
+}
+
+.chat-bubble {
+  max-width: 680px; padding: 0.7rem 0.95rem;
+  border-radius: var(--radius);
+  line-height: 1.6; font-size: 0.9rem;
+  white-space: pre-wrap; word-break: break-word;
+}
+.chat-user {
+  align-self: flex-end;
+  background: var(--accent); color: var(--accent-ink);
+}
+.chat-user .chat-role { color: rgba(255,255,255,0.7); }
+.chat-assistant {
+  align-self: flex-start;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.chat-role { margin-bottom: 0.2rem; }
+.chat-thinking {
+  display: flex; align-items: center; gap: 0.5rem;
+  color: var(--muted); font-style: italic;
+}
+
+.chat-input-bar {
+  display: flex; align-items: flex-end; gap: 0.5rem;
+  padding: 0.75rem 1.75rem 1.25rem;
+  border-top: 1px solid var(--line);
+  background: rgba(255,255,255,0.6);
+}
+.chat-input {
+  flex: 1; resize: none; min-height: 42px; max-height: 160px;
+  font: inherit; font-size: 0.9rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface); color: var(--ink);
+}
+.chat-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chat-send { flex: none; padding: 0.55rem 0.7rem; }
+
+@media (max-width: 720px) {
+  .chat-messages { padding: 1rem 0.85rem 0.5rem; }
+  .chat-input-bar { padding: 0.6rem 0.85rem 0.85rem; }
+  .chat-bubble { max-width: 100%; }
+}
+
 @media (max-width: 480px) {
   .row-2 { grid-template-columns: 1fr; }
   .grid-projects { grid-template-columns: 1fr; }

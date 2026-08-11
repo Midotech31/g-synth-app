@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Design from "./pages/Design";
 import Help from "./pages/Help";
 import Home from "./pages/Home";
+import Learn from "./pages/Learn";
 import Optimise from "./pages/Optimise";
 import Verify from "./pages/Verify";
 import Login from "./pages/Login";
@@ -41,6 +42,9 @@ function Rail() {
         </NavLink>
         <NavLink to="/align" className={({ isActive }) => (isActive ? "active" : "")}>
           Compare
+        </NavLink>
+        <NavLink to="/learn" className={({ isActive }) => (isActive ? "active" : "")}>
+          Learn
         </NavLink>
         <NavLink to="/projects" className={({ isActive }) => (isActive ? "active" : "")}>
           Projects
@@ -125,6 +129,7 @@ export default function App() {
             <Route path="/clone" element={<Clone />} />
             <Route path="/verify" element={<Verify />} />
             <Route path="/align" element={<Align />} />
+            <Route path="/learn" element={<Learn />} />
             <Route path="/projects" element={<Dashboard />} />
             <Route path="/projects/:id" element={<Viewer />} />
             <Route path="/help" element={<Help />} />

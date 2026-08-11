@@ -826,4 +826,10 @@ export const api = {
     formData.append("file", file);
     return request<ParsedRecord>("/api/sequences/parse/", { method: "POST", formData });
   },
+
+  askTutor: (question: string, history: { role: string; content: string }[]) =>
+    request<{ answer: string }>("/api/tutor/ask/", {
+      method: "POST",
+      body: { question, history },
+    }),
 };
