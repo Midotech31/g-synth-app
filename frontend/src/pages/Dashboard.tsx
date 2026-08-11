@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError, api, type ProjectSummary } from "../api/client";
+import ConfirmDialog from "../components/ConfirmDialog";
 import Icon from "../components/Icon";
+import LiveStatus from "../components/LiveStatus";
 
 function formatDate(iso: string): string {
   const date = new Date(iso);
@@ -16,7 +18,10 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [pending, setPending] = useState<ProjectSummary | null>(null);
+  const [announcement, setAnnouncement] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,21 +79,35 @@ export default function Dashboard() {
     }
   }
 
-  async function remove(id: number, name: string) {
-    if (!confirm(`Delete “${name}”? This cannot be undone.`)) return;
+  async function remove(project: ProjectSummary) {
+    setPending(null);
     try {
-      await api.deleteProject(id);
-      setProjects((current) => current.filter((p) => p.id !== id));
+      await api.deleteProject(project.id);
+      setProjects((current) => current.filter((p) => p.id !== project.id));
+      setAnnouncement(`Deleted “${project.name}”.`);
+      // The button that opened the question went with the card, so there is
+      // nothing to hand focus back to. The heading of the list they are
+      // still in is the nearest honest place to leave them.
+      heading.current?.focus();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not delete that project.");
     }
   }
 
+  const status = uploading
+    ? "Reading your file…"
+    : loading
+      ? "Loading your projects…"
+      : announcement ||
+        `${projects.length} ${projects.length === 1 ? "project" : "projects"}.`;
+
   return (
     <>
+      <LiveStatus message={status} />
+
       <div className="topbar">
         <div className="grow">
-          <h1>Projects</h1>
+          <h1 ref={heading} tabIndex={-1}>Projects</h1>
           <p className="sub">
             Designs, plasmids and imported sequences. Only you can see them.
           </p>
@@ -103,7 +122,11 @@ export default function Dashboard() {
         </button>
       </div>
 
-      <div className="content" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      <div
+        className="content"
+        style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
+        aria-busy={loading || uploading}
+      >
         <input
           ref={fileInput}
           type="file"
@@ -116,7 +139,7 @@ export default function Dashboard() {
           }}
         />
 
-        {error && <div className="notice notice-error">{error}</div>}
+        {error && <div className="notice notice-error" role="alert">{error}</div>}
 
         <div
           className={`dropzone${dragOver ? " over" : ""}`}
@@ -139,7 +162,7 @@ export default function Dashboard() {
         </div>
 
         {loading ? (
-          <div className="center-note">
+          <div className="center-note" role="status">
             <span className="spinner" />
             <span>Loading your projects…</span>
           </div>
@@ -166,18 +189,29 @@ export default function Dashboard() {
                     <span>{formatDate(project.updated_at)}</span>
                   </span>
                 </Link>
+                {/* Read out of context — in a list of every button on the
+                    page — "Delete" alone does not say what of. */}
                 <div className="foot">
-                  <Link to={`/projects/${project.id}`} className="btn btn-ghost">
+                  <Link
+                    to={`/projects/${project.id}`}
+                    className="btn btn-ghost"
+                    aria-label={`Open ${project.name}`}
+                  >
                     Open
                   </Link>
                   <button
                     className="btn btn-ghost"
                     onClick={() => void exportProject(project)}
                     title="GenBank, with its features"
+                    aria-label={`Export ${project.name}`}
                   >
                     Export
                   </button>
-                  <button className="btn btn-danger" onClick={() => remove(project.id, project.name)}>
+                  <button
+                    className="btn btn-danger"
+                    onClick={() => setPending(project)}
+                    aria-label={`Delete ${project.name}`}
+                  >
                     Delete
                   </button>
                 </div>
@@ -186,6 +220,15 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={pending !== null}
+        title={`Delete “${pending?.name ?? ""}”?`}
+        body="The sequence, its features and everything saved with it go for good. There is no copy on the server afterwards."
+        confirmLabel="Delete project"
+        onConfirm={() => pending && void remove(pending)}
+        onCancel={() => setPending(null)}
+      />
     </>
   );
 }

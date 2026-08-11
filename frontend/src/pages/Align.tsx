@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { ApiError, api, type AlignResult } from "../api/client";
 import Icon from "../components/Icon";
+import LiveStatus from "../components/LiveStatus";
 
 /**
  * Comparing two sequences that are not assumed to be the same thing.
@@ -47,8 +48,16 @@ export default function Align() {
 
   const clean = (text: string) => text.replace(/[^A-Za-z]/g, "").length;
 
+  const status = busy
+    ? "Aligning…"
+    : result === null
+      ? ""
+      : `${result.identity}% identity over ${result.length} ${result.is_protein ? "residues" : "bases"}, ${result.gaps} gaps.`;
+
   return (
     <>
+      <LiveStatus message={status} />
+
       <div className="topbar">
         <div className="grow">
           <h1>Compare two sequences</h1>
@@ -67,8 +76,12 @@ export default function Align() {
         </button>
       </div>
 
-      <div className="content" style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-        {error && <div className="notice notice-error">{error}</div>}
+      <div
+        className="content"
+        style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}
+        aria-busy={busy}
+      >
+        {error && <div className="notice notice-error" role="alert">{error}</div>}
 
         <div className="design-layout">
           <div className="card">
@@ -77,24 +90,27 @@ export default function Align() {
               <div className="field">
                 <label htmlFor="a">First</label>
                 <textarea id="a" value={first} onChange={(e) => { setFirst(e.target.value); setResult(null); }}
-                          rows={6} className="mono" style={{ fontSize: "0.76rem" }} />
-                <span className="label">{clean(first)} {isProtein ? "residues" : "nt"}</span>
+                          rows={6} className="mono" style={{ fontSize: "0.76rem" }}
+                          aria-describedby="a-count" />
+                <span className="label" id="a-count">{clean(first)} {isProtein ? "residues" : "nt"}</span>
               </div>
               <div className="field">
                 <label htmlFor="b">Second</label>
                 <textarea id="b" value={second} onChange={(e) => { setSecond(e.target.value); setResult(null); }}
-                          rows={6} className="mono" style={{ fontSize: "0.76rem" }} />
-                <span className="label">{clean(second)} {isProtein ? "residues" : "nt"}</span>
+                          rows={6} className="mono" style={{ fontSize: "0.76rem" }}
+                          aria-describedby="b-count" />
+                <span className="label" id="b-count">{clean(second)} {isProtein ? "residues" : "nt"}</span>
               </div>
 
               <div className="field">
-                <label>What are you asking?</label>
-                <div className="mode-list">
+                <span className="field-label" id="mode-label">What are you asking?</span>
+                <div className="mode-list" role="group" aria-labelledby="mode-label">
                   {MODES.map((option) => (
                     <button
                       key={option.key}
                       type="button"
                       className={mode === option.key ? "mode on" : "mode"}
+                      aria-pressed={mode === option.key}
                       onClick={() => { setMode(option.key); setResult(null); }}
                     >
                       <strong>{option.label}</strong>

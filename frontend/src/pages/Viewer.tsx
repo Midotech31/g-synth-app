@@ -86,7 +86,7 @@ export default function Viewer() {
   if (error) {
     return (
       <div className="content">
-        <div className="notice notice-error">{error}</div>
+        <div className="notice notice-error" role="alert">{error}</div>
         <p style={{ marginTop: "1rem" }}>
           <Link to="/projects" className="back-link">
             <Icon name="arrowLeft" size={15} /> Back to projects
@@ -98,7 +98,7 @@ export default function Viewer() {
 
   if (!project) {
     return (
-      <div className="center-note">
+      <div className="center-note" role="status" aria-live="polite" aria-busy="true">
         <span className="spinner" />
         <span>Opening sequence…</span>
       </div>

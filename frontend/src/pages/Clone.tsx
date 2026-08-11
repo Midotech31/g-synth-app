@@ -13,6 +13,7 @@ import {
 import InsertForm from "../components/InsertForm";
 import JunctionDuplex from "../components/JunctionDuplex";
 import Icon from "../components/Icon";
+import LiveStatus from "../components/LiveStatus";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
 
@@ -280,8 +281,18 @@ export default function Clone() {
   const ready = vectorLength > 0 && params.sequence.trim().length > 0;
   const spec = vectors.find((v) => v.key === vector.key) ?? null;
 
+  const status = busy
+    ? "Cloning…"
+    : result === null
+      ? ""
+      : result.is_clonable
+        ? `Clonable: ${result.length.toLocaleString()} bp plasmid, ${result.validation.filter((c) => c.passed).length} of ${result.validation.length} checks passed.`
+        : "This will not clone. Read the reasons above the result.";
+
   return (
     <>
+      <LiveStatus message={status} />
+
       <div className="topbar">
         <div className="grow">
           <h1>Clone into a vector</h1>
@@ -301,9 +312,13 @@ export default function Clone() {
         </button>
       </div>
 
-      <div className="content" style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-        {error && <div className="notice notice-error">{error}</div>}
-        {saved && <div className="notice notice-info">{saved}</div>}
+      <div
+        className="content"
+        style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}
+        aria-busy={busy}
+      >
+        {error && <div className="notice notice-error" role="alert">{error}</div>}
+        {saved && <div className="notice notice-info" role="status">{saved}</div>}
 
         <div className="design-layout">
           {/* ── Inputs ─────────────────────────────────────────────────── */}
@@ -506,10 +521,11 @@ export default function Clone() {
                 <div className="card">
                   <div className="card-head">
                     <h2 style={{ flex: 1 }}>Map</h2>
-                    <div className="seg-toggle">
+                    <div className="seg-toggle" role="group" aria-label="Map view">
                       {(["circular", "linear", "both"] as const).map((option) => (
                         <button key={option} type="button"
                                 className={mapView === option ? "on" : ""}
+                                aria-pressed={mapView === option}
                                 onClick={() => setMapView(option)}>
                           {option[0].toUpperCase() + option.slice(1)}
                         </button>
@@ -579,14 +595,15 @@ export default function Clone() {
                     <div className="card-body feature-detail" style={{ borderTop: "1px solid var(--line)" }}>
                       <div className="card-head" style={{ padding: 0, border: "none", marginBottom: "0.6rem" }}>
                         <span className="dot" style={{ background: selected.color }} />
-                        <h2 style={{ flex: 1, fontSize: "1rem" }}>
+                        {/* Inside the map card, under its own heading. */}
+                        <h3 style={{ flex: 1, fontSize: "1rem" }}>
                           {selected.name}
                           {selected.kind === "site" && (
                             <span className="label" style={{ marginLeft: "0.5rem" }}>restriction site</span>
                           )}
-                        </h2>
+                        </h3>
                         <button className="btn btn-ghost" onClick={() => setSelected(null)}
-                                title="Clear selection">
+                                title="Clear selection" aria-label="Clear selection">
                           <Icon name="cross" size={14} />
                         </button>
                       </div>

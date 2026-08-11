@@ -24,7 +24,7 @@ function Rail() {
         <span className="ver">v3</span>
       </div>
 
-      <nav>
+      <nav aria-label="Workspace">
         <NavLink to="/" end className={({ isActive }) => (isActive ? "active" : "")}>
           Home
         </NavLink>
@@ -75,7 +75,7 @@ function Protected() {
 
   if (loading) {
     return (
-      <div className="center-note">
+      <div className="center-note" role="status" aria-live="polite">
         <span className="spinner" />
         <span>Loading…</span>
       </div>
@@ -85,8 +85,14 @@ function Protected() {
 
   return (
     <div className="shell">
+      {/* First thing in the tab order, so the nine rail links can be passed
+          over. `tabIndex` on the target because following a fragment moves
+          the caret but not focus in several browsers. */}
+      <a className="skip-link" href="#main">
+        Skip to main content
+      </a>
       <Rail />
-      <main className="canvas">
+      <main className="canvas" id="main" role="main" tabIndex={-1}>
         <Outlet />
       </main>
     </div>

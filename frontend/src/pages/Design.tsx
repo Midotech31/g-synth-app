@@ -12,6 +12,7 @@ import DuplexView from "../components/DuplexView";
 import InsertForm from "../components/InsertForm";
 import { segmentColour } from "../components/segmentColour";
 import Icon from "../components/Icon";
+import LiveStatus from "../components/LiveStatus";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
 
@@ -107,8 +108,20 @@ export default function Design() {
 
   const verified = result !== null && result.verification.length === 0;
 
+  // The verdict is the reason for the wait, so it is what gets said. The
+  // error has its own alert; repeating it here would announce it twice.
+  const status = busy
+    ? "Designing…"
+    : result === null
+      ? ""
+      : verified
+        ? `Design verified: ${result.fragment_count} fragments, ${result.oligo_count} oligos to order.`
+        : "Design failed verification. Do not order these oligos.";
+
   return (
     <>
+      <LiveStatus message={status} />
+
       <div className="topbar">
         <div className="grow">
           <h1>Design a construct</h1>
@@ -123,9 +136,13 @@ export default function Design() {
         </button>
       </div>
 
-      <div className="content" style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-        {error && <div className="notice notice-error">{error}</div>}
-        {saved && <div className="notice notice-info">{saved}</div>}
+      <div
+        className="content"
+        style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}
+        aria-busy={busy}
+      >
+        {error && <div className="notice notice-error" role="alert">{error}</div>}
+        {saved && <div className="notice notice-info" role="status">{saved}</div>}
 
         <div className="design-layout">
           {/* ── Inputs ─────────────────────────────────────────────────── */}
