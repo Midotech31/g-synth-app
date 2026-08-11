@@ -106,6 +106,14 @@ class VectorSpec:
 
     @property
     def has_sequence(self) -> bool:
+        """This backbone ships with its own verified sequence.
+
+        False does not mean the vector is unusable — it means the sequence
+        must be imported and will be checked against this entry. Only
+        sequences from an authoritative file are bundled, because a
+        transcription error in 5 000 bases is invisible and would poison
+        every design made against the backbone.
+        """
         return bool(self.bundled)
 
     @property

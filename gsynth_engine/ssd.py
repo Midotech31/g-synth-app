@@ -60,6 +60,18 @@ class Segment:
 
 @dataclass
 class SSDResult:
+    """One small single-stranded DNA design: the two oligos and what they mean.
+
+    `forward` and `reverse` are what you order — each written 5'→3' in its
+    own direction, so `reverse` is *not* the reverse complement of `forward`
+    read backwards; annealed, they form the cassette with the sticky ends the
+    chosen enzyme pair leaves at either end.
+
+    `segments` records which part of the design each stretch of bases came
+    from — site, start codon, tag, linker, protease site, insert — so the
+    interface can colour the construct without re-deriving the layout.
+    """
+
     forward: str
     reverse: str
     is_coding: bool

@@ -80,6 +80,16 @@ class CodonTable:
     weights: dict[str, float]
 
     def weight(self, codon: str) -> float:
+        """Relative adaptiveness, 0–1: this codon's usage against the most
+        used codon for the same amino acid, which scores 1.0.
+
+        Not a frequency — the synonyms of one amino acid do not sum to 1.
+        These are the w values CAI is the geometric mean of.
+
+        An unknown codon returns 0.0 rather than raising, so a sequence
+        containing an ambiguity code degrades the score instead of failing
+        the whole optimisation.
+        """
         return self.weights.get(codon.upper(), 0.0)
 
     def best(self, amino_acid: str) -> str:
@@ -253,6 +263,13 @@ class OptimisationResult:
 
     @property
     def is_clean(self) -> bool:
+        """No *problems* — the gene can be built and cut as asked.
+
+        Warnings are not consulted. A rare codon left in to satisfy a GC
+        window costs a little translation speed and leaves this True; a
+        restriction site that survived optimisation blocks the strategy and
+        makes it False. Severity follows consequence.
+        """
         return not self.problems
 
 

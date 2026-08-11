@@ -115,6 +115,12 @@ class Alignment:
 
     @property
     def identity(self) -> float:
+        """Percentage, 0–100 to one decimal — not a 0–1 fraction.
+
+        Measured over the aligned length, so gap columns count against it.
+        The same two sequences score lower under a global alignment than a
+        local one, and comparing figures from different modes is meaningless.
+        """
         return round(100.0 * self.identities / self.length, 1) if self.length else 0.0
 
     @property

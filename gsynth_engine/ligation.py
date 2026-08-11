@@ -65,6 +65,13 @@ class LigationPlan:
 
     @property
     def insert_molecules(self) -> float:
+        """Insert molecules in the reaction — a count, not a concentration.
+
+        Converted from femtomoles, so a typical reaction is of the order of
+        10^9. This is the figure the ratio is really about: at equal *mass* a
+        5.4 kb vector is outnumbered by a 150 bp insert thirty-six to one,
+        which is why the protocol is worked out in fmol rather than in ng.
+        """
         return self.insert_fmol * 1e-15 * AVOGADRO
 
     @property

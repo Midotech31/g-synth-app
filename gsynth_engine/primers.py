@@ -92,6 +92,12 @@ class PrimerSet:
 
     @property
     def covers_target(self) -> bool:
+        """Every base of the requested region falls in some primer's read.
+
+        Read range, not primer position: a primer sits back from what it
+        reads, and the region it covers starts downstream of its 3' end. A
+        set can therefore cover a target that no primer overlaps.
+        """
         return not self.gaps
 
     @property

@@ -104,6 +104,18 @@ class OligoPair:
 
     @property
     def right_overhang_strand(self) -> str:
+        """Which strand protrudes at this fragment's right end.
+
+        Note the inversion against `left_overhang_strand`: the bottom strand
+        running further right than the top leaves *bottom* protruding here,
+        where at the left end a positive offset leaves *top*. The strands run
+        in opposite directions, so the same physical stagger is named by the
+        end it sits at.
+
+        This is the strand, not the polarity. A protruding top strand is a 5'
+        overhang at the left end and a 3' overhang at the right — deriving
+        polarity from the strand alone reports NdeI as a 3' cutter.
+        """
         end_offset = (self.bottom_offset + len(self.reverse)) - len(self.forward)
         if end_offset > 0:
             return "bottom"
