@@ -51,10 +51,22 @@ substitution reported as the residue it changes.
 
 Everything below was run from a fresh clone before being written down.
 
+### With Docker — one command
+
 ```bash
 git clone https://github.com/Midotech31/g-synth-app.git
-cd g-synth-app
+cd g-synth-app/django_app
+docker compose up --build
+```
 
+Open <http://localhost:5173>. This starts Postgres, Redis, the API, the
+frontend, and a local Ollama that answers the **Learn** page's questions —
+the model is pulled on first boot, so that run takes a few minutes and every
+later one takes seconds. Nothing else to install and no keys to set.
+
+### Without Docker
+
+```bash
 # Backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r django_app/requirements.txt
@@ -68,21 +80,39 @@ npm install
 npm run dev                                                     # :5173
 ```
 
-Open <http://localhost:5173>, create an account, and the workspace is there.
 The frontend proxies `/api` to `:8000`; point it elsewhere with
-`VITE_API_TARGET`.
+`VITE_API_TARGET`. The Learn page needs `ollama serve` running locally, and
+says so plainly if it is not — every other page works without it.
+
+### The engine on its own
+
+The engine has no dependencies outside the standard library, so it can be
+installed and used from a script or a notebook without any of the above:
+
+```bash
+pip install -e .
+```
+
+```python
+from gsynth_engine import design_merzoug_assembly
+
+plan = design_merzoug_assembly(my_gene, enzyme_pair="NdeI / XhoI", is_coding=True)
+assert plan.verify() == []          # empty means the oligos re-ligate to the design
+```
 
 ### Tests
 
 ```bash
-python -m pytest gsynth_engine/tests -q     # 476 — the biology
-cd django_app && python -m pytest -q        # 184 — the HTTP layer
+python -m pytest gsynth_engine/tests -q     # 901 — the biology
+cd django_app && python -m pytest -q        # 206 — the HTTP layer
+cd frontend && npm test                     # the interface
 ```
 
-The engine's suite is the definition of correctness. It is where the golden
-examples live, where every one of the 19 enzymes is checked in both positions,
-and where the property the whole method rests on is asserted: that the
-designed fragments re-ligate into the construct exactly.
+All three run in CI on every push. The engine's suite is the definition of
+correctness: it is where the golden examples live, where every one of the 109
+enzymes is checked in both positions, and where the property the whole method
+rests on is asserted — that the designed fragments re-ligate into the
+construct exactly.
 
 ## What is in here
 
@@ -126,3 +156,27 @@ A few decisions that are easy to reverse by accident:
 ## Deployment
 
 `django_app/DEPLOY.md` covers Supabase + Render, both on free tiers.
+
+## Contributing
+
+`CONTRIBUTING.md` describes where a change belongs, what a test here is
+expected to assert, and the properties that must not regress.
+
+## Citing this work
+
+If G-Synth contributed to published results, please cite it. `CITATION.cff`
+carries the machine-readable record, and GitHub renders it as a **Cite this
+repository** button. Cite the version you actually used — the software is
+tagged per release, and a construct designed under one version cannot be
+checked against another.
+
+## Licence
+
+MIT — see `LICENSE`. Use it, modify it, build on it, including commercially;
+the only condition is that the copyright notice travels with it.
+
+## Author
+
+**Prof. Merzoug Mohamed** — Full Professor
+Genomics Technology Platform, Higher School of Biological Sciences of Oran
+<mohamed.merzoug.essbo@gmail.com>

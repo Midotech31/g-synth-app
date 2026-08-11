@@ -28,6 +28,11 @@ export default function InsertForm({
 
   const enzymes = catalogue?.enzymes ?? [];
   const byName = new Map(enzymes.map((e) => [e.name, e]));
+  // A hundred names in one flat list is worse than nineteen. The set this
+  // lab keeps in the freezer goes first; the rest stay selectable, because
+  // an enzyme in your vector's polylinker should not need a code change.
+  const common = enzymes.filter((e) => e.common !== false);
+  const rest = enzymes.filter((e) => e.common === false);
   const left = byName.get(params.left_enzyme);
   const right = byName.get(params.right_enzyme);
 
@@ -67,11 +72,22 @@ export default function InsertForm({
             value={params.left_enzyme}
             onChange={(e) => onChange("left_enzyme", e.target.value)}
           >
-            {enzymes.map((e) => (
-              <option key={e.name} value={e.name}>
-                {e.name} · {e.recognition}
-              </option>
-            ))}
+            <optgroup label="In the freezer">
+              {common.map((e) => (
+                <option key={e.name} value={e.name}>
+                  {e.name} · {e.recognition}
+                </option>
+              ))}
+            </optgroup>
+            {rest.length > 0 && (
+              <optgroup label={`Others (${rest.length})`}>
+                {rest.map((e) => (
+                  <option key={e.name} value={e.name}>
+                    {e.name} · {e.recognition}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
           {left && (
             <span className="label">
@@ -87,11 +103,22 @@ export default function InsertForm({
             value={params.right_enzyme}
             onChange={(e) => onChange("right_enzyme", e.target.value)}
           >
-            {enzymes.map((e) => (
-              <option key={e.name} value={e.name}>
-                {e.name} · {e.recognition}
-              </option>
-            ))}
+            <optgroup label="In the freezer">
+              {common.map((e) => (
+                <option key={e.name} value={e.name}>
+                  {e.name} · {e.recognition}
+                </option>
+              ))}
+            </optgroup>
+            {rest.length > 0 && (
+              <optgroup label={`Others (${rest.length})`}>
+                {rest.map((e) => (
+                  <option key={e.name} value={e.name}>
+                    {e.name} · {e.recognition}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
           {right && (
             <span className="label">

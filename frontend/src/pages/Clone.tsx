@@ -13,6 +13,7 @@ import {
 import InsertForm from "../components/InsertForm";
 import JunctionDuplex from "../components/JunctionDuplex";
 import Icon from "../components/Icon";
+import LiveStatus from "../components/LiveStatus";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
 
@@ -59,6 +60,10 @@ export default function Clone() {
   const [mapView, setMapView] = useState<"circular" | "linear" | "both">("circular");
   const [showSites, setShowSites] = useState(true);
   const [onlyUsedSites, setOnlyUsedSites] = useState(false);
+  const [selected, setSelected] = useState<{
+    name: string; start: number; end: number; direction: number; color: string;
+    kind: "feature" | "site"; recognition?: string; cuts?: number; used?: boolean;
+  } | null>(null);
   const [showEnds, setShowEnds] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -188,6 +193,7 @@ export default function Clone() {
         save_as_project: saveAsProject,
       });
       setResult(data);
+      setSelected(null);        // a stale selection would name a feature from the last plasmid
       if (data.project_id) setSaved(`Saved to your projects (#${data.project_id}).`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "The cloning failed.");
@@ -256,12 +262,37 @@ export default function Clone() {
     return [...base, ...sites];
   }, [result, showSites, visibleSites]);
 
+  /** Everything a click could land on, features and sites together, so one
+   *  handler can find whichever the cursor was actually over. */
+  const clickable = useMemo(() => {
+    const features = (result?.annotations ?? []).map((a) => ({
+      kind: "feature" as const, name: a.name, start: a.start, end: a.end,
+      direction: a.direction, color: a.color,
+    }));
+    const sites = showSites ? visibleSites.map((s) => ({
+      kind: "site" as const, name: s.name, start: s.start, end: s.end,
+      direction: 1, color: s.color, recognition: s.recognition,
+      cuts: s.cuts, used: s.used,
+    })) : [];
+    return [...features, ...sites];
+  }, [result, showSites, visibleSites]);
+
   const vectorLength = vector.sequence.replace(/[^ACGTacgt]/g, "").length;
   const ready = vectorLength > 0 && params.sequence.trim().length > 0;
   const spec = vectors.find((v) => v.key === vector.key) ?? null;
 
+  const status = busy
+    ? "Cloning…"
+    : result === null
+      ? ""
+      : result.is_clonable
+        ? `Clonable: ${result.length.toLocaleString()} bp plasmid, ${result.validation.filter((c) => c.passed).length} of ${result.validation.length} checks passed.`
+        : "This will not clone. Read the reasons above the result.";
+
   return (
     <>
+      <LiveStatus message={status} />
+
       <div className="topbar">
         <div className="grow">
           <h1>Clone into a vector</h1>
@@ -281,9 +312,13 @@ export default function Clone() {
         </button>
       </div>
 
-      <div className="content" style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-        {error && <div className="notice notice-error">{error}</div>}
-        {saved && <div className="notice notice-info">{saved}</div>}
+      <div
+        className="content"
+        style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}
+        aria-busy={busy}
+      >
+        {error && <div className="notice notice-error" role="alert">{error}</div>}
+        {saved && <div className="notice notice-info" role="status">{saved}</div>}
 
         <div className="design-layout">
           {/* ── Inputs ─────────────────────────────────────────────────── */}
@@ -486,10 +521,11 @@ export default function Clone() {
                 <div className="card">
                   <div className="card-head">
                     <h2 style={{ flex: 1 }}>Map</h2>
-                    <div className="seg-toggle">
+                    <div className="seg-toggle" role="group" aria-label="Map view">
                       {(["circular", "linear", "both"] as const).map((option) => (
                         <button key={option} type="button"
                                 className={mapView === option ? "on" : ""}
+                                aria-pressed={mapView === option}
                                 onClick={() => setMapView(option)}>
                           {option[0].toUpperCase() + option.slice(1)}
                         </button>
@@ -530,9 +566,94 @@ export default function Clone() {
                       annotations={mapAnnotations}
                       viewer={mapView}
                       showIndex
+                      onSelection={(sel) => {
+                        if (sel.type !== "ANNOTATION" || sel.start === undefined || sel.end === undefined) {
+                          return;
+                        }
+                        const covering = clickable.filter(
+                          (a) => a.start <= sel.start! && a.end >= sel.end!,
+                        );
+                        if (!covering.length) return;
+                        const hit = covering.reduce((smallest, a) =>
+                          a.end - a.start < smallest.end - smallest.start ? a : smallest,
+                        );
+                        setSelected(hit);
+                      }}
+                      highlights={
+                        selected ? [{ start: selected.start, end: selected.end, color: selected.color }] : []
+                      }
                       style={{ height: "100%", width: "100%" }}
                     />
                   </div>
+
+                  {/* What was clicked. A restriction site and a vector
+                      feature answer different questions — a site's recognition
+                      sequence and cut count matter more than its strand — so
+                      the panel shows what fits the kind rather than one shape
+                      forced onto both. */}
+                  {selected && (
+                    <div className="card-body feature-detail" style={{ borderTop: "1px solid var(--line)" }}>
+                      <div className="card-head" style={{ padding: 0, border: "none", marginBottom: "0.6rem" }}>
+                        <span className="dot" style={{ background: selected.color }} />
+                        {/* Inside the map card, under its own heading. */}
+                        <h3 style={{ flex: 1, fontSize: "1rem" }}>
+                          {selected.name}
+                          {selected.kind === "site" && (
+                            <span className="label" style={{ marginLeft: "0.5rem" }}>restriction site</span>
+                          )}
+                        </h3>
+                        <button className="btn btn-ghost" onClick={() => setSelected(null)}
+                                title="Clear selection" aria-label="Clear selection">
+                          <Icon name="cross" size={14} />
+                        </button>
+                      </div>
+                      <div className="stat-row">
+                        <div className="stat">
+                          <div className="k">Position</div>
+                          <div className="v" style={{ fontSize: "1.05rem" }}>
+                            {(selected.start + 1).toLocaleString()}–{selected.end.toLocaleString()}
+                          </div>
+                        </div>
+                        <div className="stat">
+                          <div className="k">Length</div>
+                          <div className="v">
+                            {(selected.end - selected.start).toLocaleString()}<small>bp</small>
+                          </div>
+                        </div>
+                        {selected.kind === "feature" ? (
+                          <div className="stat">
+                            <div className="k">Strand</div>
+                            <div className="v" style={{ fontSize: "1.05rem" }}>
+                              {selected.direction === -1 ? "reverse" : "forward"}
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="stat">
+                              <div className="k">Recognition</div>
+                              <div className="v mono" style={{ fontSize: "1.05rem" }}>
+                                {selected.recognition}
+                              </div>
+                            </div>
+                            <div className="stat">
+                              <div className="k">Cuts here</div>
+                              <div className="v" style={{ fontSize: "1.05rem" }}>
+                                {selected.cuts}{selected.used ? " · used for cloning" : ""}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <div className="seq-block" style={{ marginTop: "0.6rem" }}>
+                        {selected.direction === -1
+                          ? result.plasmid.slice(selected.start, selected.end)
+                              .split("").reverse()
+                              .map((b) => ({ A: "T", T: "A", G: "C", C: "G" } as Record<string, string>)[b] ?? b)
+                              .join("")
+                          : result.plasmid.slice(selected.start, selected.end)}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="card">

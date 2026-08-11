@@ -120,6 +120,12 @@ class ReadAlignment:
 
     @property
     def covered(self) -> int:
+        """Bases spanned by this read: end − start, half-open, 0-based.
+
+        The span between the outermost aligned positions, not a count of
+        bases that matched — a read with mismatches inside it covers the
+        same span as a clean one. Use `identity` for how well it agreed.
+        """
         return self.end - self.start
 
     @property
@@ -154,6 +160,12 @@ class VerificationReport:
 
     @property
     def fully_covered(self) -> bool:
+        """Every base of the design was read by at least one trace.
+
+        Coverage only — it says nothing about whether the reads *agreed*.
+        A design can be fully covered and still differ everywhere; that is
+        `is_verified`.
+        """
         return not self.gaps
 
 

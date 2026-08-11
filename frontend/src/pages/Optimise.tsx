@@ -8,6 +8,7 @@ import {
   type OptimiseResult,
 } from "../api/client";
 import Icon from "../components/Icon";
+import LiveStatus from "../components/LiveStatus";
 
 const SAMPLE =
   "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGGTATATTGGAAATAATGGAGCACATATGGGA" +
@@ -66,13 +67,23 @@ export default function Optimise() {
   /** Hand the optimised gene to the design page, so the workflow continues. */
   function sendToDesign() {
     if (!result) return;
-    navigate("/", { state: { sequence: result.sequence } });
+    navigate("/design", { state: { sequence: result.sequence } });
   }
 
   const inputLength = params.sequence.replace(/\s/g, "").length;
 
+  const status = busy
+    ? "Optimising…"
+    : result === null
+      ? ""
+      : result.is_clean
+        ? `Optimised: ${result.changed_codons} codons changed, CAI ${result.cai_after}, GC ${result.gc_after}%. The protein is unchanged.`
+        : "Optimised, but the sequence cannot be made clean. Read the problems above the result.";
+
   return (
     <>
+      <LiveStatus message={status} />
+
       <div className="topbar">
         <div className="grow">
           <h1>Optimise for the host</h1>
@@ -87,8 +98,12 @@ export default function Optimise() {
         </button>
       </div>
 
-      <div className="content" style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-        {error && <div className="notice notice-error">{error}</div>}
+      <div
+        className="content"
+        style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}
+        aria-busy={busy}
+      >
+        {error && <div className="notice notice-error" role="alert">{error}</div>}
 
         <div className="design-layout">
           {/* ── Inputs ─────────────────────────────────────────────────── */}
@@ -106,8 +121,9 @@ export default function Optimise() {
                   rows={7}
                   className="mono"
                   style={{ fontSize: "0.78rem" }}
+                  aria-describedby="opt-seq-count"
                 />
-                <span className="label">
+                <span className="label" id="opt-seq-count">
                   {inputLength} {params.is_protein ? "residues" : "nt"} entered
                 </span>
               </div>
@@ -131,13 +147,16 @@ export default function Optimise() {
               </div>
 
               <div className="field">
-                <label>Keep these sites out</label>
-                <div className="enzyme-chips">
+                <span className="field-label" id="avoid-label">Keep these sites out</span>
+                {/* Each chip stays pressed or not; without saying so, the
+                    selected set is visible only as a colour. */}
+                <div className="enzyme-chips" role="group" aria-labelledby="avoid-label">
                   {COMMON.map((name) => (
                     <button
                       key={name}
                       type="button"
                       className={params.avoid_enzymes?.includes(name) ? "chip on" : "chip"}
+                      aria-pressed={params.avoid_enzymes?.includes(name) ?? false}
                       onClick={() => toggleEnzyme(name)}
                     >
                       {name}

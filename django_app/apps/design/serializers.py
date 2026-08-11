@@ -10,13 +10,15 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from gsynth_engine.constants import (
+    ALL_ENZYMES,
     CLEAVAGE_SITES,
-    RESTRICTION_ENZYMES,
 )
 from gsynth_engine.merzoug import MAX_OVERHANG, MIN_OVERHANG
 from gsynth_engine.vectors import CATALOGUE, DEFAULT_VECTOR
 
-ENZYME_NAMES = sorted(RESTRICTION_ENZYMES)
+#: Every enzyme with verified cut geometry. The interface groups the
+#: nineteen this lab keeps ahead of the rest; the API accepts all.
+ENZYME_NAMES = sorted(ALL_ENZYMES)
 CLEAVAGE_NAMES = sorted(CLEAVAGE_SITES)
 VECTOR_KEYS = [spec.key for spec in CATALOGUE]
 

@@ -10,6 +10,7 @@ import {
   type VerifyReport,
 } from "../api/client";
 import Icon from "../components/Icon";
+import LiveStatus from "../components/LiveStatus";
 import TraceView from "../components/TraceView";
 
 /**
@@ -181,8 +182,36 @@ export default function Verify() {
     }
   }
 
+  /** Each tab answers its own question, so each has its own verdict. */
+  function verdict(): string {
+    if (tab === "reads") {
+      if (!report) return "";
+      return report.is_verified
+        ? `It is the design: every read agrees over ${report.coverage}% of the region checked.`
+        : `${report.differences.length} difference${report.differences.length === 1 ? "" : "s"}. The clone is not what was designed.`;
+    }
+    if (tab === "primers") {
+      if (!primers) return "";
+      return primers.covers_target
+        ? `${primers.primers.length} primers, together reading the whole insert on both strands.`
+        : "The primers do not cover the whole insert.";
+    }
+    if (!ligation) return "";
+    return `Amounts worked out for ${ligation.length} ligation reactions.`;
+  }
+
+  const status = busy
+    ? tab === "reads"
+      ? "Comparing the reads to the design…"
+      : tab === "primers"
+        ? "Designing primers…"
+        : "Working out the amounts…"
+    : verdict();
+
   return (
     <>
+      <LiveStatus message={status} />
+
       <div className="topbar">
         <div className="grow">
           <h1>Check the clone</h1>
@@ -193,8 +222,12 @@ export default function Verify() {
         </div>
       </div>
 
-      <div className="content" style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-        {error && <div className="notice notice-error">{error}</div>}
+      <div
+        className="content"
+        style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}
+        aria-busy={busy}
+      >
+        {error && <div className="notice notice-error" role="alert" id="verify-error">{error}</div>}
 
         <div className="design-layout">
           {/* ── Pick the construct ─────────────────────────────────────── */}
@@ -250,12 +283,16 @@ export default function Verify() {
                     type="file"
                     accept=".ab1,application/octet-stream"
                     multiple
+                    // "Add an .ab1 trace, or paste the bases" is a complaint
+                    // about these two fields; it is attached to them so it is
+                    // read when either is reached, not only when it appears.
+                    aria-describedby={error ? "traces-hint verify-error" : "traces-hint"}
                     onChange={(e) => {
                       setTraceFiles(Array.from(e.target.files ?? []));
                       setReport(null);
                     }}
                   />
-                  <span className="label">
+                  <span className="label" id="traces-hint">
                     {traceFiles.length
                       ? `${traceFiles.length} trace${traceFiles.length === 1 ? "" : "s"} ready`
                       : "What the facility sent — the peaks say which differences are real"}
@@ -276,8 +313,9 @@ export default function Verify() {
                     className="mono"
                     style={{ fontSize: "0.74rem" }}
                     placeholder={">T7-F\nGATCC...\n>T7-R\nCTAGG..."}
+                    aria-describedby={error ? "reads-hint verify-error" : "reads-hint"}
                   />
-                  <span className="label">
+                  <span className="label" id="reads-hint">
                     FASTA, or just the bases for a single read
                   </span>
                   <label htmlFor="trim">Ignore low-quality bases at each end</label>
@@ -288,8 +326,9 @@ export default function Verify() {
                     max={200}
                     value={trim}
                     onChange={(e) => setTrim(Number(e.target.value))}
+                    aria-describedby="trim-hint"
                   />
-                  <span className="label">
+                  <span className="label" id="trim-hint">
                     {trim} bases from the start and {trim} from the end · use 0 for a cleaned sequence
                   </span>
                 </div>
@@ -322,12 +361,18 @@ export default function Verify() {
 
           {/* ── Results ────────────────────────────────────────────────── */}
           <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-            <div className="seg-toggle" style={{ alignSelf: "flex-start" }}>
+            <div
+              className="seg-toggle"
+              style={{ alignSelf: "flex-start" }}
+              role="group"
+              aria-label="What to check"
+            >
               {(["reads", "primers", "ligation"] as Tab[]).map((option) => (
                 <button
                   key={option}
                   type="button"
                   className={tab === option ? "on" : ""}
+                  aria-pressed={tab === option}
                   onClick={() => setTab(option)}
                 >
                   {option === "reads" ? "Sequencing reads"

@@ -1,0 +1,69 @@
+# Packaging for the engine only.
+#
+# `gsynth_engine` is the part worth installing on its own: it is the biology,
+# it has no dependencies beyond the standard library, and it is usable from a
+# script or a notebook without Django, an HTTP server, or this repository's
+# frontend. The web layer under django_app/ is an application, not a library,
+# and is deployed rather than installed — it keeps its own requirements.txt.
+#
+# The version is read from gsynth_engine/__init__.py so a release tag, the
+# CITATION.cff entry, and the importable `__version__` cannot drift apart.
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gsynth-engine"
+dynamic = ["version"]
+description = "PCR-free gene synthesis and cloning design with verified in-silico assembly"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [
+    { name = "Mohamed Merzoug", email = "mohamed.merzoug.essbo@gmail.com" },
+]
+keywords = [
+    "bioinformatics",
+    "gene-synthesis",
+    "molecular-cloning",
+    "codon-optimisation",
+    "restriction-enzymes",
+    "synthetic-biology",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Typing :: Typed",
+]
+# Deliberately empty. The engine is standard library only, which is why it can
+# be dropped into a pipeline without pulling a dependency tree behind it.
+dependencies = []
+
+[project.optional-dependencies]
+# Biopython is a *test* dependency, never a runtime one — the engine still
+# imports nothing outside the standard library. The suite uses it as an
+# independent second opinion: BLOSUM62 and the parsed GenBank records are
+# checked against Biopython's rather than against this project's own output,
+# which is the only way those two can disagree and be noticed.
+test = ["pytest>=8.0", "pytest-cov>=5.0", "biopython>=1.83"]
+
+[project.urls]
+Homepage = "https://github.com/Midotech31/g-synth-app"
+Repository = "https://github.com/Midotech31/g-synth-app"
+Issues = "https://github.com/Midotech31/g-synth-app/issues"
+
+[tool.setuptools]
+packages = ["gsynth_engine"]
+
+[tool.setuptools.dynamic]
+version = { attr = "gsynth_engine.__version__" }
+
+[tool.setuptools.package-data]
+# The reference data is the package. A BLOSUM62 matrix or a vector sequence
+# that fails to ship turns an import error into a wrong answer at the bench.
+gsynth_engine = ["data/*.json", "vector_data/*.json"]

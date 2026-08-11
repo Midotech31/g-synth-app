@@ -4,6 +4,36 @@ import { SeqViz } from "seqviz";
 
 import { ApiError, api, type Annotation, type Project } from "../api/client";
 import Icon from "../components/Icon";
+import LiveStatus from "../components/LiveStatus";
+
+/**
+ * Find the annotation a map click landed on.
+ *
+ * SeqViz's onSelection reports the range clicked, not which annotation it
+ * belongs to — a plasmid drawn at a few hundred pixels per thousand bases
+ * routinely has several features under one click. The smallest annotation
+ * containing the click point is the one a person meant: a 20 bp site inside
+ * a 700 bp CDS is what the cursor was actually over.
+ */
+const COMPLEMENT: Record<string, string> = { A: "T", T: "A", G: "C", C: "G", N: "N" };
+
+/** A reverse-strand feature is read 5'→3' opposite to how it is stored. */
+function reverseComplement(seq: string): string {
+  return seq
+    .toUpperCase()
+    .split("")
+    .reverse()
+    .map((base) => COMPLEMENT[base] ?? base)
+    .join("");
+}
+
+function annotationAt(annotations: Annotation[], start: number, end: number): Annotation | null {
+  const covering = annotations.filter((a) => a.start <= start && a.end >= end);
+  if (!covering.length) return null;
+  return covering.reduce((smallest, a) =>
+    a.end - a.start < smallest.end - smallest.start ? a : smallest,
+  );
+}
 
 type ViewMode = "circular" | "linear" | "both";
 
@@ -13,6 +43,7 @@ export default function Viewer() {
   const [error, setError] = useState("");
   const [mode, setMode] = useState<ViewMode>("circular");
   const [selected, setSelected] = useState<Annotation | null>(null);
+  const [status, setStatus] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -54,10 +85,22 @@ export default function Viewer() {
     if (project?.data?.topology === "linear") setMode("linear");
   }, [project]);
 
+  useEffect(() => {
+    // Set a render after the record lands, not with it: a live region that
+    // arrives already holding its sentence is never announced, only one
+    // already on the page whose contents then change.
+    if (project) {
+      setStatus(
+        `${project.name} opened. ${project.sequence.length.toLocaleString()} bases, ` +
+        `${project.data?.annotations?.length ?? 0} features.`,
+      );
+    }
+  }, [project]);
+
   if (error) {
     return (
       <div className="content">
-        <div className="notice notice-error">{error}</div>
+        <div className="notice notice-error" role="alert">{error}</div>
         <p style={{ marginTop: "1rem" }}>
           <Link to="/projects" className="back-link">
             <Icon name="arrowLeft" size={15} /> Back to projects
@@ -69,7 +112,7 @@ export default function Viewer() {
 
   if (!project) {
     return (
-      <div className="center-note">
+      <div className="center-note" role="status" aria-live="polite" aria-busy="true">
         <span className="spinner" />
         <span>Opening sequence…</span>
       </div>
@@ -101,6 +144,8 @@ export default function Viewer() {
 
   return (
     <>
+      <LiveStatus message={status} />
+
       <div className="topbar">
         <div className="grow">
           <h1>{project.name}</h1>
@@ -108,12 +153,13 @@ export default function Viewer() {
             {project.notes || `${topology} sequence`}
           </p>
         </div>
-        <div style={{ display: "flex", gap: "0.4rem" }}>
+        <div style={{ display: "flex", gap: "0.4rem" }} role="group" aria-label="Map view">
           {(["circular", "linear", "both"] as ViewMode[]).map((m) => (
             <button
               key={m}
               className={`btn ${mode === m ? "btn-primary" : "btn-outline"}`}
               onClick={() => setMode(m)}
+              aria-pressed={mode === m}
               disabled={m === "circular" && topology === "linear"}
               title={
                 m === "circular" && topology === "linear"
@@ -166,6 +212,22 @@ export default function Viewer() {
               viewer={mode}
               showComplement
               showIndex
+              // Clicking a feature in the map selects it here too, so one
+              // click either shows the same detail — an annotation is one
+              // fact, not two independent views of it.
+              onSelection={(sel) => {
+                if (sel.type !== "ANNOTATION" || sel.start === undefined || sel.end === undefined) {
+                  return;
+                }
+                const hit = annotationAt(annotations, sel.start, sel.end);
+                if (hit) setSelected(hit);
+              }}
+              // The reverse direction: picking a feature from the list
+              // highlights its span on the map, because "which one is that"
+              // is the question a list of coordinates cannot answer alone.
+              highlights={
+                selected ? [{ start: selected.start, end: selected.end, color: selected.color }] : []
+              }
               style={{ height: "100%", width: "100%" }}
             />
           </div>
@@ -187,7 +249,8 @@ export default function Viewer() {
                     <button
                       key={`${a.name}-${a.start}-${index}`}
                       className="feature-row"
-                      onClick={() => setSelected(a)}
+                      onClick={() => setSelected(selected === a ? null : a)}
+                      aria-pressed={selected === a}
                       style={{
                         background: selected === a ? "var(--accent-wash)" : "transparent",
                         border: "none",
@@ -213,6 +276,70 @@ export default function Viewer() {
                 </div>
               )}
             </div>
+
+            {/* Clicking a feature — here or on the map itself — has to show
+                something, or "interactive" is just a highlight with no
+                content behind it. This is that content: what the feature
+                is, where it sits, and the bases it actually spans. */}
+            {selected && (
+              <div className="card feature-detail">
+                <div className="card-head">
+                  <span className="dot" style={{ background: selected.color }} />
+                  <h2 style={{ flex: 1 }}>{selected.name}</h2>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => setSelected(null)}
+                    title="Clear selection"
+                    aria-label="Clear selection"
+                  >
+                    <Icon name="cross" size={14} />
+                  </button>
+                </div>
+                <div className="card-body stat-row">
+                  <div className="stat">
+                    <div className="k">Type</div>
+                    <div className="v" style={{ fontSize: "1.05rem" }}>{selected.type}</div>
+                  </div>
+                  <div className="stat">
+                    <div className="k">Strand</div>
+                    <div className="v" style={{ fontSize: "1.05rem" }}>
+                      {selected.direction === -1 ? "reverse" : selected.direction === 1 ? "forward" : "—"}
+                    </div>
+                  </div>
+                  <div className="stat">
+                    <div className="k">Position</div>
+                    <div className="v" style={{ fontSize: "1.05rem" }}>
+                      {(selected.start + 1).toLocaleString()}–{selected.end.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="stat">
+                    <div className="k">Length</div>
+                    <div className="v">
+                      {(selected.end - selected.start).toLocaleString()}<small>bp</small>
+                    </div>
+                  </div>
+                </div>
+                {selected.truncated && (
+                  <p className="note" style={{ padding: "0 1.1rem 0.9rem", color: "var(--amber)" }}>
+                    Truncated at the insert junction — this feature ran past the cut and only
+                    part of it is on the plasmid.
+                  </p>
+                )}
+                <div className="card-body" style={{ paddingTop: 0 }}>
+                  <div className="seq-block">
+                    {selected.direction === -1
+                      ? reverseComplement(project.sequence.slice(selected.start, selected.end))
+                      : project.sequence.slice(selected.start, selected.end)}
+                  </div>
+                  {selected.direction === -1 && (
+                    <p className="note" style={{ marginTop: "0.5rem" }}>
+                      Shown 5'→3' on the strand this feature reads from — the reverse complement
+                      of that span in the sequence above.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {protein && (
               <div className="card">

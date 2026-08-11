@@ -52,6 +52,8 @@ The load-bearing properties, which must never regress:
 - Codon optimisation never changes the protein.
 - Recutting a recombinant plasmid with the same pair returns the insert.
 - Every enzyme is checked in **both** positions, left and right.
+- The curated 19 are re-checked against REBASE on every run; a hand-typed
+  cut position is otherwise invisible when wrong.
 
 ## Decisions that are easy to reverse by accident
 
@@ -80,6 +82,12 @@ described as one that will.
 **Tm comes from stacking, under the reaction the protocol prescribes.** Not
 from base composition, and not at a generic primer dilution — those differ by
 about 7 °C, and composition cannot tell two oligos of equal GC apart.
+
+**Two enzyme sets.** `RESTRICTION_ENZYMES` (19) is what a pair is *chosen*
+from; `ALL_ENZYMES` (109, generated from REBASE) is what answers "what else
+cuts here". Widening the first to the size of the second makes the dropdown
+useless. Isoschizomers collapse onto one name; neoschizomers must not —
+NheI and BmtI cut `GCTAGC` opposite ways.
 
 **Sequences and matrices ship only as verified data.** Vector sequences come
 from an authoritative file (a supplier's or the lab's own SnapGene/GenBank

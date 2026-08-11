@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Final
 
+from gsynth_engine.enzyme_table import ENZYME_TABLE
+
 # ── Standard purification / cleavage cassette ────────────────────────────────
 HIS_TAG: Final[str] = "CACCACCACCACCACCAC"          # 6× His
 LEFT_LINKER: Final[str] = "GGTTCTTCT"               # flexible Gly-Ser-Ser
@@ -66,6 +68,16 @@ RESTRICTION_ENZYMES: Final[dict[str, dict[str, object]]] = {
 }
 
 
+#: Every enzyme G-Synth can reason about: the curated set above, plus the
+#: wide REBASE table. Use this to ask "what cuts here". `RESTRICTION_ENZYMES`
+#: remains the list a user *picks a cloning pair from* — a dropdown of a
+#: hundred names is worse than nineteen, and this lab uses nineteen.
+ALL_ENZYMES: Final[dict[str, dict[str, object]]] = {
+    **{name: dict(spec) for name, spec in ENZYME_TABLE.items()},
+    **RESTRICTION_ENZYMES,          # the curated entries win on name collision
+}
+
+
 def _rc(sequence: str) -> str:
     return sequence.translate(str.maketrans("ACGT", "TGCA"))[::-1]
 
@@ -77,7 +89,7 @@ def left_remainders(enzyme: str) -> tuple[str, str]:
     the first, the reverse oligo ends with the second. The insert is the
     right-hand piece of the cut, so it keeps everything after the cut.
     """
-    info = RESTRICTION_ENZYMES[enzyme]
+    info = ALL_ENZYMES[enzyme]
     site: str = info["recognition"]           # type: ignore[assignment]
     top: int = info["cut_top"]                # type: ignore[assignment]
     bottom: int = info["cut_bottom"]          # type: ignore[assignment]
@@ -90,7 +102,7 @@ def right_remainders(enzyme: str) -> tuple[str, str]:
     Returns (forward_suffix, reverse_prefix). The insert is the left-hand
     piece of the cut, so it keeps everything before the cut.
     """
-    info = RESTRICTION_ENZYMES[enzyme]
+    info = ALL_ENZYMES[enzyme]
     site: str = info["recognition"]           # type: ignore[assignment]
     top: int = info["cut_top"]                # type: ignore[assignment]
     bottom: int = info["cut_bottom"]          # type: ignore[assignment]
@@ -102,7 +114,7 @@ def overhang(enzyme: str) -> tuple[str, str]:
 
     Sequence is given in top-strand sense.
     """
-    info = RESTRICTION_ENZYMES[enzyme]
+    info = ALL_ENZYMES[enzyme]
     site: str = info["recognition"]           # type: ignore[assignment]
     top: int = info["cut_top"]                # type: ignore[assignment]
     bottom: int = info["cut_bottom"]          # type: ignore[assignment]

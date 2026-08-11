@@ -1,20 +1,28 @@
-# Render blueprint for the G-Synth Django API.
+# Render blueprint for G-Synth: the API and the workspace that talks to it.
 #
-# Render reads this file automatically when you create a Blueprint from the
-# repository, so the only value you have to supply by hand is DATABASE_URL
-# (marked `sync: false` below — Render prompts for it during setup).
+# Two services, because they are two different things. The API is a Python
+# process that has to stay running; the workspace is a folder of files that
+# a CDN serves. Rendering them as one would mean paying for a web process to
+# hand out static assets.
 #
 # Deploy: https://dashboard.render.com/blueprints → New Blueprint Instance
 # Full walkthrough: django_app/DEPLOY.md
+#
+# The only value you supply by hand is DATABASE_URL (`sync: false` below);
+# Render prompts for it during setup. Everything else is wired between the
+# two services here, including the origin each has to trust — get that by
+# hand and the browser blocks every request with a CORS error that names
+# nothing useful.
 
 services:
+  # ── The API ──────────────────────────────────────────────────────────
   - type: web
     name: gsynth-api
     runtime: python
     plan: free
     region: frankfurt          # closest free region to Oran
     rootDir: django_app
-    branch: claude/django-rewrite
+    branch: main
 
     buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput"
     startCommand: "python manage.py migrate --noinput && gunicorn config.wsgi:application --workers 2 --access-logfile -"
@@ -43,13 +51,47 @@ services:
           name: gsynth-api
           property: host
 
-      # No browser frontend yet — the React SPA (Phase 1) gets added here.
+      # The workspace's origin, resolved from the static site below. The API
+      # rejects a browser request from anywhere else, so this is the one
+      # value that decides whether the app works at all in production.
       - key: CORS_ALLOWED_ORIGINS
-        value: ""
+        fromService:
+          type: web
+          name: gsynth-app
+          property: url
 
-      # Postgres connection string. Render will ask you for this when you
-      # create the blueprint: paste the Supabase "Session pooler" URL.
-      # Required — without it the app refuses to start rather than silently
-      # falling back to a SQLite file that every redeploy would erase.
+      # Postgres connection string. Render asks for this when you create the
+      # blueprint: paste the Supabase "Session pooler" URL. Required —
+      # without it the app refuses to start rather than silently falling back
+      # to a SQLite file that every redeploy would erase.
       - key: DATABASE_URL
         sync: false
+
+  # ── The workspace ────────────────────────────────────────────────────
+  - type: web
+    name: gsynth-app
+    runtime: static
+    plan: free
+    rootDir: frontend
+    branch: main
+
+    buildCommand: "npm ci && npm run build"
+    staticPublishPath: ./dist
+
+    # React Router owns the paths. Without this, opening /clone directly —
+    # or reloading anywhere but the root — asks the CDN for a file that was
+    # never built and gets a 404.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+    envVars:
+      # Baked in at build time. In development this is empty and Vite proxies
+      # /api to :8000; in production the two services are separate origins,
+      # so the client needs the API's absolute URL.
+      - key: VITE_API_BASE
+        fromService:
+          type: web
+          name: gsynth-api
+          property: url

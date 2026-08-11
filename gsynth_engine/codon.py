@@ -42,7 +42,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from gsynth_engine.cloning import find_sites, translate
-from gsynth_engine.constants import RESTRICTION_ENZYMES
+from gsynth_engine.constants import ALL_ENZYMES
 from gsynth_engine.sequence import (
     SequenceError,
     clean_dna,
@@ -80,6 +80,16 @@ class CodonTable:
     weights: dict[str, float]
 
     def weight(self, codon: str) -> float:
+        """Relative adaptiveness, 0–1: this codon's usage against the most
+        used codon for the same amino acid, which scores 1.0.
+
+        Not a frequency — the synonyms of one amino acid do not sum to 1.
+        These are the w values CAI is the geometric mean of.
+
+        An unknown codon returns 0.0 rather than raising, so a sequence
+        containing an ambiguity code degrades the score instead of failing
+        the whole optimisation.
+        """
         return self.weights.get(codon.upper(), 0.0)
 
     def best(self, amino_acid: str) -> str:
@@ -217,9 +227,9 @@ class Constraints:
     def motifs(self) -> tuple[str, ...]:
         """Every literal sequence to avoid, from the enzymes and the extras."""
         sites = tuple(
-            str(RESTRICTION_ENZYMES[e]["recognition"])
+            str(ALL_ENZYMES[e]["recognition"])
             for e in self.avoid_enzymes
-            if e in RESTRICTION_ENZYMES
+            if e in ALL_ENZYMES
         )
         return sites + tuple(m.upper() for m in self.avoid_motifs if m)
 
@@ -253,6 +263,13 @@ class OptimisationResult:
 
     @property
     def is_clean(self) -> bool:
+        """No *problems* — the gene can be built and cut as asked.
+
+        Warnings are not consulted. A rare codon left in to satisfy a GC
+        window costs a little translation speed and leaves this True; a
+        restriction site that survived optimisation blocks the strategy and
+        makes it False. Severity follows consequence.
+        """
         return not self.problems
 
 
@@ -583,7 +600,7 @@ def optimise(
         changed = len(codons)
 
     for enzyme in constraints.avoid_enzymes:
-        if enzyme in RESTRICTION_ENZYMES and find_sites(
+        if enzyme in ALL_ENZYMES and find_sites(
             optimised, enzyme, circular=False
         ):
             warnings.append(

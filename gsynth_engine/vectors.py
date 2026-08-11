@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
-from gsynth_engine.constants import RESTRICTION_ENZYMES
+from gsynth_engine.constants import ALL_ENZYMES
 from gsynth_engine.sequence import clean_dna
 
 #: Where bundled sequences live. A vector earns a place here only when its
@@ -106,6 +106,14 @@ class VectorSpec:
 
     @property
     def has_sequence(self) -> bool:
+        """This backbone ships with its own verified sequence.
+
+        False does not mean the vector is unusable — it means the sequence
+        must be imported and will be checked against this entry. Only
+        sequences from an authoritative file are bundled, because a
+        transcription error in 5 000 bases is invisible and would poison
+        every design made against the backbone.
+        """
         return bool(self.bundled)
 
     @property
@@ -440,7 +448,7 @@ def validate(sequence: str, spec: VectorSpec, *, length_tolerance: int = 0) -> V
     }
 
     for enzyme in spec.unique_sites:
-        if enzyme not in RESTRICTION_ENZYMES:
+        if enzyme not in ALL_ENZYMES:
             continue
         count = len(find_sites(seq, enzyme, circular=True))
         if count == 0 and enzyme in essential:

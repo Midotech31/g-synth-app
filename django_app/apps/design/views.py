@@ -45,6 +45,7 @@ from gsynth_engine.codon import (
     optimise,
 )
 from gsynth_engine.constants import (
+    ALL_ENZYMES,
     CLEAVAGE_SITES,
     COMMON_ENZYME_PAIRS,
     RESTRICTION_ENZYMES,
@@ -184,8 +185,8 @@ def _assembly_payload(plan: AssemblyPlan, construct_name: str) -> dict:
     }
 
 
-#: Enzymes worth marking on a recombinant map. Every one G-Synth knows,
-#: because "does anything else cut here" is the question that decides
+#: Enzymes worth marking on a recombinant map — every one with verified cut
+#: geometry, because "does anything else cut here" is the question that decides
 #: whether a diagnostic digest will work.
 def _restriction_annotations(plasmid: str, highlight: tuple[str, ...]) -> list[dict]:
     """Every single-cutter, plus the pair used, as drawable features.
@@ -196,14 +197,14 @@ def _restriction_annotations(plasmid: str, highlight: tuple[str, ...]) -> list[d
     user needs to see.
     """
     out: list[dict] = []
-    for enzyme in sorted(RESTRICTION_ENZYMES):
+    for enzyme in sorted(ALL_ENZYMES):
         sites = find_sites(plasmid, enzyme, circular=True)
         if not sites:
             continue
         used = enzyme in highlight
         if len(sites) > 1 and not used:
             continue
-        site = str(RESTRICTION_ENZYMES[enzyme]["recognition"])
+        site = str(ALL_ENZYMES[enzyme]["recognition"])
         for position in sites:
             end = position + len(site)
             out.append({
@@ -922,16 +923,18 @@ class EnzymeCatalogueView(APIView):
 
     def get(self, request):
         enzymes = []
-        for name in sorted(RESTRICTION_ENZYMES):
+        for name in sorted(ALL_ENZYMES):
             sequence, kind = overhang(name)
             enzymes.append({
                 "name": name,
-                "recognition": RESTRICTION_ENZYMES[name]["recognition"],
+                "recognition": ALL_ENZYMES[name]["recognition"],
+                # The set this lab keeps in the freezer, offered first.
+                "common": name in RESTRICTION_ENZYMES,
                 "overhang": sequence,
                 "overhang_type": kind,
                 # NdeI's site contains the ATG, which changes how the insert
                 # is built — the UI should say so next to the option.
-                "supplies_start_codon": "ATG" in str(RESTRICTION_ENZYMES[name]["recognition"]),
+                "supplies_start_codon": "ATG" in str(ALL_ENZYMES[name]["recognition"]),
             })
         return Response({
             "enzymes": enzymes,

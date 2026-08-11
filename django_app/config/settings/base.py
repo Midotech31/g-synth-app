@@ -62,6 +62,7 @@ LOCAL_APPS = [
     "apps.projects",
     "apps.sequences",
     "apps.design",
+    "apps.tutor",
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -117,6 +118,12 @@ AUTH_PASSWORD_VALIDATORS = [
      "OPTIONS": {"min_length": 8}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    # Blocks a password derived from the address or name the account already
+    # publishes. Those are the first two guesses anyone makes, and the other
+    # three validators accept them: "merzoug2024" is long enough, is not on
+    # the common-password list, and is not all digits.
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+     "OPTIONS": {"user_attributes": ("email", "name")}},
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -157,6 +164,10 @@ REST_FRAMEWORK = {
         "register": "5/hour",
         "login": "10/min",
         "design": "300/hour",
+        # A model's answer can tie up a worker for tens of seconds — much
+        # longer than any engine call — so it gets its own, tighter scope
+        # rather than sharing "design"'s budget.
+        "tutor": "60/hour",
     },
 }
 
@@ -176,6 +187,17 @@ SIMPLE_JWT = {
 # ─────────────────────────────────────────────────────────────────────────────
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CORS_ALLOW_CREDENTIALS = True
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Study assistant — a local Ollama model, not a hosted API. Best-effort: if
+# nothing is listening at OLLAMA_BASE_URL the endpoint answers with a clear
+# 503 rather than the app failing to boot, because this is the one feature
+# that depends on a process outside Django's own control, and the rest of
+# G-Synth has no reason to be unusable because a chat model is not running.
+# ─────────────────────────────────────────────────────────────────────────────
+OLLAMA_BASE_URL = env("OLLAMA_BASE_URL", default="http://localhost:11434")
+OLLAMA_MODEL = env("OLLAMA_MODEL", default="llama3.1")
+OLLAMA_TIMEOUT_SECONDS = env.int("OLLAMA_TIMEOUT_SECONDS", default=60)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Static files

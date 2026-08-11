@@ -15,6 +15,7 @@ REST_FRAMEWORK = {
         "register": "10000/hour",
         "login": "10000/min",
         "design": "10000/hour",
+        "tutor": "10000/hour",
     },
 }
 

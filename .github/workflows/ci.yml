@@ -1,0 +1,124 @@
+# Everything that must not regress, run on every push.
+#
+# This replaces a workflow that ran the Django tests alone. The engine holds
+# the biology — the assembly verification, the codon invariants, the enzyme
+# geometry — and those 900-odd tests were the ones CI did not execute, so a
+# regression in the part that decides what goes in the tubes could reach the
+# default branch with a green tick. The three suites run as separate jobs so a
+# failure names the layer it happened in.
+
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+
+jobs:
+  engine:
+    name: Engine (the biology)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        # The engine itself is standard library only; installing it as a
+        # package also proves the wheel's data files (BLOSUM62, the vector
+        # sequences) are declared, which importing from the source tree does
+        # not — a matrix that fails to ship is a wrong answer, not an error.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+
+      - name: Test
+        run: pytest gsynth_engine/tests -q
+
+      - name: Coverage gate
+        # The engine sits at 98%. The floor is set just below that so a real
+        # drop fails the build while ordinary refactoring does not.
+        run: pytest gsynth_engine/tests -q --cov=gsynth_engine --cov-fail-under=95
+
+  api:
+    name: API (the HTTP layer)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: django_app
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: gsynth
+          POSTGRES_PASSWORD: gsynth
+          POSTGRES_DB: gsynth
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gsynth"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: django_app/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        # Run from the repository root so the shared ruff.toml applies to the
+        # engine and the app alike; a second config under django_app/ once
+        # meant root-level runs silently fell back to defaults.
+        working-directory: .
+        run: ruff check .
+
+      - name: Migrations are complete
+        env:
+          DJANGO_SECRET_KEY: ci
+          DATABASE_URL: postgresql://gsynth:gsynth@localhost:5432/gsynth
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Test
+        env:
+          DJANGO_SECRET_KEY: ci
+        run: pytest -q
+
+  web:
+    name: Web (the interface)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 22, not 20: jsdom's undici calls `webidl.util.markAsUncloneable`,
+          # which is absent on 20, so every test file failed to start its
+          # worker before a single test ran. 20 is also on GitHub's
+          # deprecation path.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        # A build failure is a shipping failure even when every test passes:
+        # the production bundle is compiled differently from the dev server.
+        run: npm run build

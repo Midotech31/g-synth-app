@@ -21,7 +21,8 @@ export type IconName =
   | "check"
   | "cross"
   | "arrowLeft"
-  | "arrowRight";
+  | "arrowRight"
+  | "book";
 
 type Props = {
   name: IconName;
@@ -92,6 +93,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
   cross: <path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6" />,
   arrowLeft: <path d="M19 12H5m0 0 5.6-5.6M5 12l5.6 5.6" />,
   arrowRight: <path d="M5 12h14m0 0-5.6-5.6M19 12l-5.6 5.6" />,
+  book: (
+    <>
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15Z" />
+      <path d="M8 7h8M8 11h5" opacity="0.55" />
+    </>
+  ),
 };
 
 export default function Icon({ name, size = 20, className, title }: Props) {
