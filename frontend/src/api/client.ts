@@ -242,6 +242,77 @@ export type CloneResult = {
   project_id?: number;
 };
 
+/** One PCR primer. `tail` is the 5' addition; `anneals` binds template. */
+export type PcrPrimer = {
+  name: string;
+  sequence: string;
+  tail: string;
+  anneals: string;
+  direction: number;
+  start: number;
+  end: number;
+  length: number;
+  anneal_length: number;
+  /** Tm of the annealing part — what the annealing temperature comes from. */
+  tm: number;
+  /** Tm of the whole oligo, which only applies once the tail is copied. */
+  tm_full: number;
+  gc: number;
+  enzyme: string | null;
+  has_gc_clamp: boolean;
+  warnings: string[];
+};
+
+export type DigestEnd = {
+  sequence: string;
+  strand: string;
+  side: string;
+  /** "5'", "3'" or "blunt" — polarity follows the side, not the strand. */
+  kind: string;
+};
+
+/** The product after both ends are cut: the insert that goes into a vector. */
+export type PcrDigest = {
+  top: string;
+  bottom: string;
+  length: number;
+  left_end: DigestEnd;
+  right_end: DigestEnd;
+  trimmed_left: number;
+  trimmed_right: number;
+};
+
+export type PcrResult = {
+  forward: PcrPrimer;
+  reverse: PcrPrimer;
+  product: string;
+  product_length: number;
+  amplified_region: string;
+  template_start: number;
+  template_end: number;
+  annealing_temperature: number;
+  left_enzyme: string | null;
+  right_enzyme: string | null;
+  insert_orf_start: number | null;
+  /** Empty means the product can be cut into the insert as designed. */
+  problems: string[];
+  warnings: string[];
+  is_clean: boolean;
+  /** Null for conventional PCR, and when a problem blocks the digest. */
+  digest: PcrDigest | null;
+};
+
+export type PcrParams = {
+  template: string;
+  target_start?: number;
+  target_end?: number | null;
+  left_enzyme?: string | null;
+  right_enzyme?: string | null;
+  clamp?: number;
+  keep_frame?: boolean;
+  name?: string;
+};
+
 export type OptimiseParams = {
   sequence: string;
   is_protein?: boolean;
@@ -457,6 +528,11 @@ export type VectorCheck = {
 };
 
 export type CloneParams = DesignParams & {
+  /** Ligate the fragment as supplied instead of designing an insert around
+   *  it. Requires `insert_reverse`: the stagger between the two strands is
+   *  the overhang, so one strand alone cannot show both ends. */
+  pre_digested?: boolean;
+  insert_reverse?: string;
   vector_key?: string;
   vector?: string;
   vector_name?: string;
@@ -790,6 +866,9 @@ export const api = {
     is_protein?: boolean;
     try_reverse?: boolean;
   }) => request<AlignResult>("/api/design/align/", { method: "POST", body: params }),
+
+  pcr: (params: PcrParams) =>
+    request<PcrResult>("/api/design/pcr/", { method: "POST", body: params }),
 
   clone: (params: CloneParams) =>
     request<CloneResult>("/api/design/clone/", { method: "POST", body: params }),
