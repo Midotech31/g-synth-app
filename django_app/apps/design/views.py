@@ -20,6 +20,7 @@ from apps.design.serializers import (
     CloneRequestSerializer,
     LigationRequestSerializer,
     OptimiseRequestSerializer,
+    PcrRequestSerializer,
     PrimerRequestSerializer,
     SaveableAssemblyRequestSerializer,
     SSDRequestSerializer,
@@ -55,6 +56,7 @@ from gsynth_engine.duplex import DuplexView, construct_duplex, junction_view
 from gsynth_engine.genbank import oligos_to_fasta, to_fasta, to_genbank
 from gsynth_engine.ligation import ligation_series, plan_ligation
 from gsynth_engine.merzoug import AssemblyPlan, design_merzoug_assembly
+from gsynth_engine.pcr import design_pcr
 from gsynth_engine.primers import design_sequencing_primers
 from gsynth_engine.protocol import bench_protocol, order_sheet, order_sheet_csv
 from gsynth_engine.sequence import SequenceError, gc_content
@@ -286,7 +288,7 @@ def _validation(result: CloningResult, duplex_mismatches: list[int]) -> list[dic
     ]
 
 
-def _clone_payload(result: CloningResult, ssd: SSDResult, plan) -> dict:
+def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan) -> dict:
     """The recombinant plasmid, shaped for a map viewer.
 
     The insert is sent as one more annotation so the client can draw the
@@ -384,7 +386,10 @@ def _clone_payload(result: CloningResult, ssd: SSDResult, plan) -> dict:
         # Empty means these two molecules really do join.
         "problems": result.problems,
         "is_clonable": result.is_clonable,
-        "insert": _ssd_payload(ssd),
+        # None when the caller supplied an insert that was already cut: there
+        # was no SSD design, and inventing one to fill the field would
+        # describe a construct nobody asked for.
+        "insert": _ssd_payload(ssd) if ssd is not None else None,
         "assembly": _assembly_payload(plan, result.name) if plan else None,
     }
 
@@ -1027,7 +1032,16 @@ class CloneView(APIView):
         name = data["name"]
 
         try:
-            if data["fragment"]:
+            if data.get("pre_digested"):
+                # Already an insert. Designing one around it would add a
+                # second set of sites and tags outside ends that are already
+                # sticky, and the plasmid that came back would not be the one
+                # the bench is building.
+                plan = None
+                ssd = None
+                insert_forward = data["sequence"]
+                insert_reverse = data["insert_reverse"]
+            elif data["fragment"]:
                 plan = design_merzoug_assembly(
                     data["sequence"], **serializer.engine_kwargs
                 )
@@ -1055,7 +1069,7 @@ class CloneView(APIView):
                 name=name,
                 vector_annotations=annotations,
                 vector_spec=spec,
-                orf_start=ssd.orf_start,
+                orf_start=ssd.orf_start if ssd is not None else None,
             )
         except SequenceError as error:
             return _bad_request(error)
@@ -1110,7 +1124,14 @@ class CloneExportView(APIView):
 
         try:
             vector_sequence, vector_name, annotations, spec = resolve_vector(data)
-            if data["fragment"]:
+            if data.get("pre_digested"):
+                # Checked before `fragment`, which defaults to True and would
+                # otherwise win. Same reasoning as CloneView: the fragment is
+                # already an insert, and rebuilding one here would export a
+                # different plasmid from the one the page showed.
+                ssd = None
+                forward, reverse = data["sequence"], data["insert_reverse"]
+            elif data["fragment"]:
                 plan = design_merzoug_assembly(
                     data["sequence"], **serializer.engine_kwargs
                 )
@@ -1128,7 +1149,7 @@ class CloneExportView(APIView):
                 left_enzyme=data["left_enzyme"], right_enzyme=data["right_enzyme"],
                 circular=data["vector_is_circular"], name=name,
                 vector_annotations=annotations, vector_spec=spec,
-                orf_start=ssd.orf_start,
+                orf_start=ssd.orf_start if ssd is not None else None,
             )
         except SequenceError as error:
             return _bad_request(error)
@@ -1259,3 +1280,93 @@ class ProtocolView(APIView):
         safe_name = name.replace(" ", "_") or "construct"
         response["Content-Disposition"] = f'attachment; filename="{safe_name}_protocol.txt"'
         return response
+
+
+def _primer_payload(primer) -> dict:
+    """One primer, with both Tm figures kept distinct.
+
+    `tm` is the annealing portion and is what the annealing temperature was
+    derived from; `tm_full` is the whole oligo and only applies once the tail
+    has been copied. Collapsing them into one number is what makes a tailed
+    primer look like it should anneal ten degrees hotter than it does.
+    """
+    return {
+        "name": primer.name,
+        "sequence": primer.sequence,
+        "tail": primer.tail,
+        "anneals": primer.anneals,
+        "direction": primer.direction,
+        "start": primer.start,
+        "end": primer.end,
+        "length": primer.length,
+        "anneal_length": primer.anneal_length,
+        "tm": primer.tm,
+        "tm_full": primer.tm_full,
+        "gc": primer.gc,
+        "enzyme": primer.enzyme,
+        "has_gc_clamp": primer.has_gc_clamp,
+        "warnings": list(primer.warnings),
+    }
+
+
+def _end_payload(end) -> dict:
+    return {"sequence": end.sequence, "strand": end.strand,
+            "side": end.side, "kind": end.kind}
+
+
+class PcrView(APIView):
+    """POST /api/design/pcr/ — design a PCR and simulate its product.
+
+    With no enzymes this is conventional PCR. Name a pair and each primer
+    gains a tail carrying a site, the product is cut, and the insert that
+    comes back is ready for `clone()`.
+    """
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = PcrRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result = design_pcr(
+                data["template"],
+                target_start=data["target_start"],
+                target_end=data["target_end"],
+                left_enzyme=data["left_enzyme"],
+                right_enzyme=data["right_enzyme"],
+                clamp=data["clamp"],
+                keep_frame=data["keep_frame"],
+                name=data["name"],
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        payload = {
+            "forward": _primer_payload(result.forward),
+            "reverse": _primer_payload(result.reverse),
+            "product": result.product,
+            "product_length": result.product_length,
+            "amplified_region": result.amplified_region,
+            "template_start": result.template_start,
+            "template_end": result.template_end,
+            "annealing_temperature": result.annealing_temperature,
+            "left_enzyme": result.left_enzyme,
+            "right_enzyme": result.right_enzyme,
+            "insert_orf_start": result.insert_orf_start,
+            "problems": result.problems,
+            "warnings": result.warnings,
+            "is_clean": result.is_clean,
+            "digest": None,
+        }
+        if result.digest is not None:
+            payload["digest"] = {
+                "top": result.digest.top,
+                "bottom": result.digest.bottom,
+                "length": result.digest.length,
+                "left_end": _end_payload(result.digest.left_end),
+                "right_end": _end_payload(result.digest.right_end),
+                "trimmed_left": result.digest.trimmed_left,
+                "trimmed_right": result.digest.trimmed_right,
+            }
+        return Response(payload)

@@ -10,7 +10,7 @@ not compose.
 import pytest
 
 from gsynth_engine import cloning, vectors
-from gsynth_engine.cloning import translate
+from gsynth_engine.cloning import _observed_insert_ends, translate
 from gsynth_engine.pcr import (
     DEFAULT_CLAMP,
     MAX_ANNEAL,
@@ -186,9 +186,29 @@ class TestTheDigest:
             r.product_length - r.digest.length
         )
 
-    def test_both_strands_are_written_five_to_three(self):
+    def test_the_two_strands_are_staggered_not_a_plain_reverse_complement(self):
+        """The stagger between the strands *is* the overhang. Returning the
+        bottom strand as the plain reverse complement of the top describes a
+        blunt fragment whatever the enzymes leave — and it stays hidden for
+        exactly as long as the ends are passed around instead of measured."""
         r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI")
-        assert r.digest.bottom == reverse_complement(r.digest.top)
+        assert r.digest.bottom != reverse_complement(r.digest.top)
+        # NdeI leaves 2 and XhoI leaves 4, both on the strand that protrudes.
+        assert len(r.digest.bottom) - len(r.digest.top) == 4 - 2
+
+    def test_the_ends_can_be_measured_back_off_the_two_strands(self):
+        """`clone()` re-reads the ends from the strands it is handed rather
+        than trusting the ones it is told. This asserts the strands alone
+        carry the same answer, because that is the path a caller who passes
+        only `top` and `bottom` will take."""
+        r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI")
+        left, right = _observed_insert_ends(r.digest.top, r.digest.bottom, "NdeI")
+        assert (left.sequence, left.strand) == (
+            r.digest.left_end.sequence, r.digest.left_end.strand
+        )
+        assert (right.sequence, right.strand) == (
+            r.digest.right_end.sequence, r.digest.right_end.strand
+        )
 
     def test_a_product_the_enzyme_does_not_cut_is_refused(self):
         with pytest.raises(SequenceError, match="does not cut"):

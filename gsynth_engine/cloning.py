@@ -392,10 +392,13 @@ def digest_linear(
             f"these primers — swap them, or swap the tails."
         )
 
-    start = min(left_top, left_bottom)
-    stop = max(right_top, right_bottom)
-    top = working[start:stop]
-    bottom = reverse_complement(top)
+    # The two strands are cut at different columns, and that stagger *is* the
+    # overhang — so they span different stretches and have different lengths.
+    # Returning one as the plain reverse complement of the other would
+    # describe a blunt fragment whatever the enzymes actually leave, and
+    # `_observed_insert_ends` would then measure blunt ends off it.
+    top = working[left_top:right_top]
+    bottom = reverse_complement(working[left_bottom:right_bottom])
 
     return Digest(
         top=top,
@@ -404,8 +407,10 @@ def digest_linear(
         # is the piece between them.
         left_end=_end_at(working, left_top, left_bottom, side="downstream"),
         right_end=_end_at(working, right_top, right_bottom, side="upstream"),
-        trimmed_left=start,
-        trimmed_right=len(working) - stop,
+        # Measured on the top strand, which is the one the insert's own
+        # coordinates are quoted in.
+        trimmed_left=left_top,
+        trimmed_right=len(working) - right_top,
     )
 
 

@@ -236,7 +236,8 @@ export type CloneResult = {
   /** Empty means these two molecules really do join. */
   problems: string[];
   is_clonable: boolean;
-  insert: SSDResult;
+  /** Null when the insert was supplied already cut — there was no SSD design. */
+  insert: SSDResult | null;
   assembly: AssemblyResult | null;
   project_id?: number;
 };

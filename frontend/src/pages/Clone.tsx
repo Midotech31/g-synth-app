@@ -756,12 +756,12 @@ export default function Clone() {
                   </div>
                 )}
 
-                {(result.warnings.length > 0 || result.insert.warnings.length > 0) && (
+                {(result.warnings.length > 0 || (result.insert?.warnings.length ?? 0) > 0) && (
                   <div className="card">
                     <div className="card-head"><h2>Notes</h2></div>
                     <div className="card-body">
                       <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--ink-soft)" }}>
-                        {[...new Set([...result.insert.warnings, ...result.warnings])].map((note) => (
+                        {[...new Set([...(result.insert?.warnings ?? []), ...result.warnings])].map((note) => (
                           <li key={note} style={{ marginBottom: "0.35rem", lineHeight: 1.5 }}>
                             {note}
                           </li>
