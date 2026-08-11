@@ -135,11 +135,20 @@ export default function Home() {
               <Link to="/projects" className="label">all projects →</Link>
             </div>
             {error ? (
-              <div className="card-body" style={{ color: "var(--muted)", fontSize: "0.88rem" }}>
+              <div
+                className="card-body"
+                style={{ color: "var(--muted)", fontSize: "0.88rem" }}
+                role="alert"
+              >
                 Could not load your projects.
               </div>
             ) : projects === null ? (
-              <div className="card-body" style={{ color: "var(--muted)", fontSize: "0.88rem" }}>
+              <div
+                className="card-body"
+                style={{ color: "var(--muted)", fontSize: "0.88rem" }}
+                role="status"
+                aria-busy="true"
+              >
                 <span className="spinner" /> Loading…
               </div>
             ) : recent.length === 0 ? (

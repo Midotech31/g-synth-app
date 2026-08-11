@@ -4,6 +4,7 @@ import { SeqViz } from "seqviz";
 
 import { ApiError, api, type Annotation, type Project } from "../api/client";
 import Icon from "../components/Icon";
+import LiveStatus from "../components/LiveStatus";
 
 /**
  * Find the annotation a map click landed on.
@@ -42,6 +43,7 @@ export default function Viewer() {
   const [error, setError] = useState("");
   const [mode, setMode] = useState<ViewMode>("circular");
   const [selected, setSelected] = useState<Annotation | null>(null);
+  const [status, setStatus] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +83,18 @@ export default function Viewer() {
   useEffect(() => {
     // A circular view of a linear fragment is misleading — follow the record.
     if (project?.data?.topology === "linear") setMode("linear");
+  }, [project]);
+
+  useEffect(() => {
+    // Set a render after the record lands, not with it: a live region that
+    // arrives already holding its sentence is never announced, only one
+    // already on the page whose contents then change.
+    if (project) {
+      setStatus(
+        `${project.name} opened. ${project.sequence.length.toLocaleString()} bases, ` +
+        `${project.data?.annotations?.length ?? 0} features.`,
+      );
+    }
   }, [project]);
 
   if (error) {
@@ -130,6 +144,8 @@ export default function Viewer() {
 
   return (
     <>
+      <LiveStatus message={status} />
+
       <div className="topbar">
         <div className="grow">
           <h1>{project.name}</h1>
@@ -137,12 +153,13 @@ export default function Viewer() {
             {project.notes || `${topology} sequence`}
           </p>
         </div>
-        <div style={{ display: "flex", gap: "0.4rem" }}>
+        <div style={{ display: "flex", gap: "0.4rem" }} role="group" aria-label="Map view">
           {(["circular", "linear", "both"] as ViewMode[]).map((m) => (
             <button
               key={m}
               className={`btn ${mode === m ? "btn-primary" : "btn-outline"}`}
               onClick={() => setMode(m)}
+              aria-pressed={mode === m}
               disabled={m === "circular" && topology === "linear"}
               title={
                 m === "circular" && topology === "linear"
@@ -273,6 +290,7 @@ export default function Viewer() {
                     className="btn btn-ghost"
                     onClick={() => setSelected(null)}
                     title="Clear selection"
+                    aria-label="Clear selection"
                   >
                     <Icon name="cross" size={14} />
                   </button>

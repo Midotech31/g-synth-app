@@ -74,7 +74,16 @@ export default function Learn() {
       </div>
 
       <div className="chat-area">
-        <div className="chat-messages">
+        {/* A transcript that grows at the bottom is what `log` describes, and
+            it is announced without interrupting whatever is being read. */}
+        <div
+          className="chat-messages"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-busy={loading}
+          aria-label="Conversation"
+        >
           {messages.length === 0 && !loading && (
             <div className="chat-empty">
               <Icon name="book" size={40} />
@@ -125,7 +134,7 @@ export default function Learn() {
           )}
 
           {error && (
-            <div className="notice notice-error" style={{ margin: "0.5rem 0" }}>
+            <div className="notice notice-error" style={{ margin: "0.5rem 0" }} role="alert">
               {error}
             </div>
           )}
@@ -138,6 +147,7 @@ export default function Learn() {
             ref={inputRef}
             className="chat-input"
             placeholder="Ask a question…"
+            aria-label="Your question"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKey}
@@ -149,6 +159,7 @@ export default function Learn() {
             className="btn btn-primary chat-send"
             onClick={() => void send()}
             disabled={!input.trim() || loading}
+            aria-label="Send question"
           >
             <Icon name="arrowRight" size={18} />
           </button>

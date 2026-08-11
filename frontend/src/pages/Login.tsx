@@ -62,7 +62,9 @@ export default function Login() {
                 />
               </div>
 
-              {error && <div className="notice notice-error">{error}</div>}
+              {/* A failed sign-in is the one thing on this page a reader must
+                  be told about, and it appears without the focus moving. */}
+              {error && <div className="notice notice-error" role="alert">{error}</div>}
 
               <button className="btn btn-primary" type="submit" disabled={busy}>
                 {busy && <span className="spinner" />}

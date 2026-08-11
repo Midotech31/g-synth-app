@@ -1,19 +1,33 @@
-import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
+import { Suspense, lazy } from "react";
+import {
+  BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useLocation,
+} from "react-router-dom";
 
 import { AuthProvider, useAuth } from "./auth/AuthContext";
-import Align from "./pages/Align";
-import Clone from "./pages/Clone";
-import Dashboard from "./pages/Dashboard";
-import Design from "./pages/Design";
-import Help from "./pages/Help";
+import ErrorBoundary from "./components/ErrorBoundary";
+import { Logo } from "./components/Logo";
 import Home from "./pages/Home";
-import Learn from "./pages/Learn";
-import Optimise from "./pages/Optimise";
-import Verify from "./pages/Verify";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-import Viewer from "./pages/Viewer";
-import { Logo } from "./components/Logo";
+
+/**
+ * The workspaces load on demand.
+ *
+ * Eagerly importing all of them put the sequence viewer and the trace
+ * renderer — the two heaviest things here — into the bundle that every
+ * signed-in user waits for, including on the pages that draw neither. Home,
+ * Login and Signup stay eager: they are the first thing anyone sees, and
+ * splitting them would trade a smaller bundle for a spinner on arrival.
+ */
+const Align = lazy(() => import("./pages/Align"));
+const Clone = lazy(() => import("./pages/Clone"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Design = lazy(() => import("./pages/Design"));
+const Help = lazy(() => import("./pages/Help"));
+const Learn = lazy(() => import("./pages/Learn"));
+const Optimise = lazy(() => import("./pages/Optimise"));
+const Verify = lazy(() => import("./pages/Verify"));
+const Viewer = lazy(() => import("./pages/Viewer"));
 
 function Rail() {
   const { user, signOut } = useAuth();
@@ -72,6 +86,10 @@ function Rail() {
 /** Renders the app shell, or bounces to /login when signed out. */
 function Protected() {
   const { user, loading } = useAuth();
+  // Read before the early returns below: a hook called after a conditional
+  // return runs on some renders and not others, which is exactly the
+  // ordering React forbids.
+  const { pathname } = useLocation();
 
   if (loading) {
     return (
@@ -93,7 +111,22 @@ function Protected() {
       </a>
       <Rail />
       <main className="canvas" id="main" role="main" tabIndex={-1}>
-        <Outlet />
+        {/* Inside the shell, so a page that fails to render leaves the rail
+            standing and the reader can move somewhere else. Keyed on the
+            path: without that, the boundary stays latched after a
+            navigation and the next page renders as the previous error. */}
+        <ErrorBoundary key={pathname}>
+          <Suspense
+            fallback={
+              <div className="center-note" role="status" aria-live="polite">
+                <span className="spinner" />
+                <span>Loading…</span>
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
+        </ErrorBoundary>
       </main>
     </div>
   );
