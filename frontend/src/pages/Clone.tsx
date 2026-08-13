@@ -7,6 +7,7 @@ import {
   api,
   type Annotation,
   type Catalogue,
+  type CloneParams,
   type CloneResult,
   type DesignParams,
   type VectorSpec,
@@ -196,30 +197,7 @@ export default function Clone() {
     setError("");
     setSaved("");
     try {
-      const data = await api.clone({
-        ...params,
-        // A cut PCR product is an insert, not a gene: designing one around
-        // it would add a second set of sites and tags outside ends that are
-        // already sticky.
-        ...(preDigested
-          ? {
-              sequence: preDigested.top,
-              insert_reverse: preDigested.bottom,
-              pre_digested: true,
-              left_enzyme: preDigested.leftEnzyme ?? params.left_enzyme,
-              right_enzyme: preDigested.rightEnzyme ?? params.right_enzyme,
-            }
-          : {}),
-        vector_key: vector.key,
-        // A bundled sequence is already on the server; sending it back would
-        // just be a megabyte of round trip.
-        vector: vector.bundled ? "" : vector.sequence,
-        vector_name: vector.name,
-        vector_annotations: vector.bundled ? undefined : vector.annotations,
-        vector_is_circular: vector.circular,
-        fragment,
-        save_as_project: saveAsProject,
-      });
+      const data = await api.clone(clonePayload(saveAsProject));
       setResult(data);
       setSelected(null);        // a stale selection would name a feature from the last plasmid
       if (data.project_id) setSaved(`Saved to your projects (#${data.project_id}).`);
@@ -231,21 +209,43 @@ export default function Clone() {
     }
   }
 
+  /** The exact molecule represented by the current inputs. Clone, save and
+   * export all use this builder so a PCR-derived insert cannot silently turn
+   * back into the ordinary insert form on one of those paths. */
+  function clonePayload(saveAsProject = false): CloneParams {
+    return {
+      ...params,
+      // A cut PCR product is an insert, not a gene: designing one around it
+      // would add a second set of sites and tags outside ends that are already
+      // sticky.
+      ...(preDigested
+        ? {
+            sequence: preDigested.top,
+            insert_reverse: preDigested.bottom,
+            pre_digested: true,
+            left_enzyme: preDigested.leftEnzyme ?? params.left_enzyme,
+            right_enzyme: preDigested.rightEnzyme ?? params.right_enzyme,
+          }
+        : {}),
+      vector_key: vector.key,
+      // A bundled sequence is already on the server; sending it back would
+      // just be a megabyte of round trip.
+      vector: vector.bundled ? "" : vector.sequence,
+      vector_name: vector.name,
+      vector_annotations: vector.bundled ? undefined : vector.annotations,
+      vector_is_circular: vector.circular,
+      fragment,
+      save_as_project: saveAsProject,
+    };
+  }
+
   /** Take the plasmid out of G-Synth: GenBank keeps the features. */
   async function exportPlasmid(filetype: "genbank" | "fasta") {
     const safe = (params.name || "construct").replace(/\s+/g, "_");
     try {
       await api.download(
         `/api/design/clone/export/?filetype=${filetype}`,
-        {
-          ...params,
-          vector_key: vector.key,
-          vector: vector.bundled ? "" : vector.sequence,
-          vector_name: vector.name,
-          vector_annotations: vector.bundled ? undefined : vector.annotations,
-          vector_is_circular: vector.circular,
-          fragment,
-        },
+        clonePayload(),
         `${safe}.${filetype === "fasta" ? "fasta" : "gb"}`,
       );
     } catch {
@@ -306,7 +306,10 @@ export default function Clone() {
   }, [result, showSites, visibleSites]);
 
   const vectorLength = vector.sequence.replace(/[^ACGTacgt]/g, "").length;
-  const ready = vectorLength > 0 && params.sequence.trim().length > 0;
+  const insertReady = preDigested
+    ? preDigested.top.trim().length > 0 && preDigested.bottom.trim().length > 0
+    : params.sequence.trim().length > 0;
+  const ready = vectorLength > 0 && insertReady;
   const spec = vectors.find((v) => v.key === vector.key) ?? null;
 
   const status = busy
@@ -471,7 +474,13 @@ export default function Clone() {
                   <button
                     className="btn btn-ghost"
                     style={{ padding: "0.1rem 0.4rem", fontSize: "0.8rem" }}
-                    onClick={() => setPreDigested(null)}
+                    onClick={() => {
+                      setPreDigested(null);
+                      setResult(null);
+                      setSelected(null);
+                      setSaved("");
+                      setError("");
+                    }}
                   >
                     Design an insert instead
                   </button>
