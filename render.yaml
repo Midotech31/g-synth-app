@@ -58,7 +58,9 @@ services:
         fromService:
           type: web
           name: gsynth-app
-          property: url
+          # Render exposes service references as hostnames, not full URLs.
+          # prod.py turns this into an HTTPS origin before Django validates it.
+          property: host
 
       # Postgres connection string. Render asks for this when you create the
       # blueprint: paste the Supabase "Session pooler" URL. Required —
@@ -94,4 +96,5 @@ services:
         fromService:
           type: web
           name: gsynth-api
-          property: url
+          # The client adds https:// when Render supplies a bare hostname.
+          property: host

@@ -105,6 +105,19 @@ class TestProductionRefusesUnsafeConfig:
         r = boot_prod(CORS_ALLOWED_ORIGINS=None)
         assert r.returncode != 0
 
+    def test_render_host_is_normalised_to_https_origin(self):
+        snippet = _BOOT_SNIPPET + "\nprint('CORS', settings.CORS_ALLOWED_ORIGINS)\n"
+        env = {k: v for k, v in os.environ.items()
+               if not k.startswith(("DJANGO_", "ALLOWED_", "CORS_", "DATABASE_"))}
+        env.update(_COMPLETE_PROD_ENV)
+        env["CORS_ALLOWED_ORIGINS"] = "gsynth-app.onrender.com"
+        r = subprocess.run(
+            [sys.executable, "-c", snippet], cwd=BASE_DIR, env=env,
+            capture_output=True, text=True, timeout=90,
+        )
+        assert r.returncode == 0, r.stderr
+        assert "https://gsynth-app.onrender.com" in r.stdout
+
 
 @pytest.mark.skipif(DOTENV_PRESENT, reason="a local .env would supply the withheld variables")
 def test_health_endpoint_is_exempt_from_ssl_redirect():

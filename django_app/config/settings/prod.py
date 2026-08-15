@@ -14,7 +14,18 @@ DEBUG = False
 # ─── Required configuration — no defaults, missing value = hard failure ─────
 SECRET_KEY = env("DJANGO_SECRET_KEY")               # noqa: F405
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")           # noqa: F405
-CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS")  # noqa: F405
+
+
+def _https_origin(value):
+    """Accept Render's bare service host while keeping explicit origins."""
+    origin = value.strip().rstrip("/")
+    return origin if "://" in origin else f"https://{origin}"
+
+
+CORS_ALLOWED_ORIGINS = [
+    _https_origin(origin)
+    for origin in env.list("CORS_ALLOWED_ORIGINS")  # noqa: F405
+]
 
 # Requiring DATABASE_URL is what stops production from falling back to a
 # SQLite file on a container's ephemeral disk — where every redeploy would
