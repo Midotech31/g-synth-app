@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { ApiError, api, type Catalogue, type PcrResult } from "../api/client";
@@ -92,6 +92,10 @@ export default function Pcr() {
   const [result, setResult] = useState<PcrResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Incremented whenever the inputs change or a new request starts. If an
+  // older request finishes after an edit, its primers belong to the previous
+  // form state and must not be put back on screen.
+  const requestVersion = useRef(0);
 
   useEffect(() => {
     api.catalogue().then(setCatalogue).catch(() => setCatalogue(null));
@@ -101,20 +105,30 @@ export default function Pcr() {
     () => template.replace(/[^A-Za-z]/g, "").length, [template],
   );
 
+  function inputsChanged() {
+    requestVersion.current += 1;
+    setResult(null);
+    setError("");
+  }
+
   async function run() {
+    const version = ++requestVersion.current;
     setBusy(true);
     setError("");
     setResult(null);
     try {
-      setResult(await api.pcr({
+      const next = await api.pcr({
         template,
         left_enzyme: mode === "cloning" ? leftEnzyme : null,
         right_enzyme: mode === "cloning" ? rightEnzyme : null,
         clamp,
         keep_frame: mode === "cloning" && keepFrame,
-      }));
+      });
+      if (requestVersion.current === version) setResult(next);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The design could not be run.");
+      if (requestVersion.current === version) {
+        setError(err instanceof ApiError ? err.message : "The design could not be run.");
+      }
     } finally {
       setBusy(false);
     }
@@ -164,7 +178,10 @@ export default function Pcr() {
               <textarea
                 id="template"
                 value={template}
-                onChange={(e) => setTemplate(e.target.value)}
+                onChange={(e) => {
+                  inputsChanged();
+                  setTemplate(e.target.value);
+                }}
                 rows={7}
                 placeholder="Paste the gene or region you want to amplify"
                 aria-describedby="template-count"
@@ -178,7 +195,10 @@ export default function Pcr() {
                 <button
                   type="button"
                   className={`mode ${mode === "conventional" ? "on" : ""}`}
-                  onClick={() => setMode("conventional")}
+                  onClick={() => {
+                    inputsChanged();
+                    setMode("conventional");
+                  }}
                   aria-pressed={mode === "conventional"}
                 >
                   <strong>Conventional</strong>
@@ -187,7 +207,10 @@ export default function Pcr() {
                 <button
                   type="button"
                   className={`mode ${mode === "cloning" ? "on" : ""}`}
-                  onClick={() => setMode("cloning")}
+                  onClick={() => {
+                    inputsChanged();
+                    setMode("cloning");
+                  }}
                   aria-pressed={mode === "cloning"}
                 >
                   <strong>Cloning</strong>
@@ -201,7 +224,14 @@ export default function Pcr() {
                 <div className="row-2">
                   <div className="field">
                     <label htmlFor="left-enzyme">5&prime; enzyme</label>
-                    <select id="left-enzyme" value={leftEnzyme} onChange={(e) => setLeftEnzyme(e.target.value)}>
+                    <select
+                      id="left-enzyme"
+                      value={leftEnzyme}
+                      onChange={(e) => {
+                        inputsChanged();
+                        setLeftEnzyme(e.target.value);
+                      }}
+                    >
                       {enzymes.map((e) => (
                         <option key={e.name} value={e.name}>{e.name} &middot; {e.recognition}</option>
                       ))}
@@ -209,7 +239,14 @@ export default function Pcr() {
                   </div>
                   <div className="field">
                     <label htmlFor="right-enzyme">3&prime; enzyme</label>
-                    <select id="right-enzyme" value={rightEnzyme} onChange={(e) => setRightEnzyme(e.target.value)}>
+                    <select
+                      id="right-enzyme"
+                      value={rightEnzyme}
+                      onChange={(e) => {
+                        inputsChanged();
+                        setRightEnzyme(e.target.value);
+                      }}
+                    >
                       {enzymes.map((e) => (
                         <option key={e.name} value={e.name}>{e.name} &middot; {e.recognition}</option>
                       ))}
@@ -221,7 +258,10 @@ export default function Pcr() {
                   <label htmlFor="clamp">Clamp bases outside each site</label>
                   <input
                     id="clamp" type="number" min={0} max={20} value={clamp}
-                    onChange={(e) => setClamp(Number(e.target.value))}
+                    onChange={(e) => {
+                      inputsChanged();
+                      setClamp(Number(e.target.value));
+                    }}
                     aria-describedby="clamp-note"
                   />
                   <span id="clamp-note" className="note">
@@ -231,7 +271,14 @@ export default function Pcr() {
 
                 <div className="checks">
                   <label>
-                    <input type="checkbox" checked={keepFrame} onChange={(e) => setKeepFrame(e.target.checked)} />
+                    <input
+                      type="checkbox"
+                      checked={keepFrame}
+                      onChange={(e) => {
+                        inputsChanged();
+                        setKeepFrame(e.target.checked);
+                      }}
+                    />
                     Keep the vector&rsquo;s reading frame
                   </label>
                 </div>
