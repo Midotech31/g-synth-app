@@ -73,7 +73,6 @@ services:
   - type: web
     name: gsynth-app
     runtime: static
-    plan: free
     rootDir: frontend
     branch: main
 
