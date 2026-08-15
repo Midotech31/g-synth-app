@@ -432,6 +432,15 @@ describe("API_BASE", () => {
     expect(calls[0].url).toBe("https://api.gsynth.test/api/design/enzymes/");
   });
 
+  it("turns Render's bare service host into an HTTPS origin", async () => {
+    client = await loadClient("gsynth-api.onrender.com");
+    serve(() => json(200, { enzymes: [], common_pairs: [], cleavage_sites: [] }));
+
+    await client.api.catalogue();
+
+    expect(calls[0].url).toBe("https://gsynth-api.onrender.com/api/design/enzymes/");
+  });
+
   it("keeps the path relative when no base is set, which is what the dev proxy needs", async () => {
     client = await loadClient("");
     serve(() => json(200, { enzymes: [], common_pairs: [], cleavage_sites: [] }));

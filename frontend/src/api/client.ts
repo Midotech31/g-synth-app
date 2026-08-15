@@ -18,7 +18,17 @@
  * build time. Trailing slashes are stripped so `${BASE}/api/...` never
  * doubles one.
  */
-const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
+function normaliseApiBase(value: string): string {
+  const base = value.trim().replace(/\/+$/, "");
+  if (!base || /^https?:\/\//i.test(base)) return base;
+
+  // Render's Blueprint service references expose `host` but not `url`.
+  // Production services are HTTPS, so turn the supplied hostname into the
+  // absolute origin fetch() needs. Local development keeps the empty value.
+  return `https://${base}`;
+}
+
+const API_BASE = normaliseApiBase(import.meta.env.VITE_API_BASE ?? "");
 
 const ACCESS_KEY = "gsynth.access";
 const REFRESH_KEY = "gsynth.refresh";
