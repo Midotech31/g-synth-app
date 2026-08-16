@@ -45,14 +45,14 @@ services:
         generateValue: true
 
       # Keep the verified public hostname explicit. Render's Blueprint
-      # `fromService.envVarKey` lookup left this value empty on the first
-      # deployment, so Django rejected every internal health probe with 400.
+      # `fromService.envVarKey` lookup left this value empty during deployment,
+      # so Django rejected every internal health probe with 400.
       - key: ALLOWED_HOSTS
         value: gsynth-api-c2p9.onrender.com
 
-      # The workspace's origin, resolved from the static site below. The API
-      # rejects a browser request from anywhere else, so this is the one
-      # value that decides whether the app works at all in production.
+      # The workspace's verified public origin. The API rejects a browser
+      # request from anywhere else, so this is the one value that decides
+      # whether the app works at all in production.
       - key: CORS_ALLOWED_ORIGINS
         value: https://gsynth-app.onrender.com
 
