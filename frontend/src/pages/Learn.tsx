@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, api } from "../api/client";
 import Icon from "../components/Icon";
+import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
 type Message = { role: "user" | "assistant"; content: string };
 
 export default function Learn() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
+  const [messages, setMessages, clearMessages] = useWorkspaceState<Message[]>("learn.messages", []);
+  const [input, setInput, clearInput] = useWorkspaceState("learn.input", "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -51,7 +52,8 @@ export default function Learn() {
   };
 
   const clear = () => {
-    setMessages([]);
+    clearMessages();
+    clearInput();
     setError("");
     inputRef.current?.focus();
   };

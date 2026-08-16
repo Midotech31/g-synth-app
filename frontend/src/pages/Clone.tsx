@@ -16,6 +16,7 @@ import InsertForm from "../components/InsertForm";
 import JunctionDuplex from "../components/JunctionDuplex";
 import Icon from "../components/Icon";
 import LiveStatus from "../components/LiveStatus";
+import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
 
@@ -65,26 +66,25 @@ type PreDigested = {
 
 export default function Clone() {
   const location = useLocation() as { state?: { preDigested?: PreDigested } | null };
-  const [preDigested, setPreDigested] = useState<PreDigested | null>(
-    location.state?.preDigested ?? null,
-  );
+  const [preDigested, setPreDigested, clearPreDigested] = useWorkspaceState<PreDigested | null>("clone.preDigested", null);
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
-  const [params, setParams] = useState<DesignParams>(DEFAULTS);
+  const [params, setParams, clearParams] = useWorkspaceState<DesignParams>("clone.params", DEFAULTS);
   const [vectors, setVectors] = useState<VectorSpec[]>([]);
-  const [vector, setVector] = useState<Vector>(EMPTY_VECTOR);
-  const [result, setResult] = useState<CloneResult | null>(null);
-  const [fragment, setFragment] = useState(true);
-  const [mapView, setMapView] = useState<"circular" | "linear" | "both">("circular");
-  const [showSites, setShowSites] = useState(true);
-  const [onlyUsedSites, setOnlyUsedSites] = useState(false);
-  const [selected, setSelected] = useState<{
+  const [vector, setVector] = useWorkspaceState<Vector>("clone.vector", EMPTY_VECTOR);
+  const [vectorLoaded, setVectorLoaded] = useWorkspaceState("clone.vectorLoaded", false);
+  const [result, setResult, clearResult] = useWorkspaceState<CloneResult | null>("clone.result", null);
+  const [fragment, setFragment, clearFragment] = useWorkspaceState("clone.fragment", true);
+  const [mapView, setMapView, clearMapView] = useWorkspaceState<"circular" | "linear" | "both">("clone.mapView", "circular");
+  const [showSites, setShowSites, clearShowSites] = useWorkspaceState("clone.showSites", true);
+  const [onlyUsedSites, setOnlyUsedSites, clearOnlyUsedSites] = useWorkspaceState("clone.onlyUsedSites", false);
+  const [selected, setSelected, clearSelected] = useWorkspaceState<{
     name: string; start: number; end: number; direction: number; color: string;
     kind: "feature" | "site"; recognition?: string; cuts?: number; used?: boolean;
-  } | null>(null);
-  const [showEnds, setShowEnds] = useState(true);
+  } | null>("clone.selected", null);
+  const [showEnds, setShowEnds, clearShowEnds] = useWorkspaceState("clone.showEnds", true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState("");
+  const [saved, setSaved, clearSaved] = useWorkspaceState("clone.saved", "");
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -92,6 +92,12 @@ export default function Clone() {
       setError("Could not load the enzyme catalogue.");
     });
   }, []);
+
+  useEffect(() => {
+    if (!location.state?.preDigested) return;
+    setPreDigested(location.state.preDigested);
+    setResult(null);
+  }, [location.state?.preDigested, setPreDigested, setResult]);
 
   // Load the vector list, then the default vector's own sequence, so the
   // page is usable without importing anything.
@@ -102,7 +108,10 @@ export default function Clone() {
         const list = await api.vectors();
         if (cancelled) return;
         setVectors(list.vectors);
-        await selectVector(list.default, list.vectors);
+        if (!vectorLoaded) {
+          await selectVector(list.default, list.vectors);
+          setVectorLoaded(true);
+        }
       } catch {
         if (!cancelled) setError("Could not load the vector catalogue.");
       }
@@ -110,7 +119,8 @@ export default function Clone() {
     return () => {
       cancelled = true;
     };
-    // selectVector is stable for the page's lifetime.
+    // Capture the restored flag once per mount. Updating it after the first
+    // catalogue load must not fetch the same catalogue a second time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -320,6 +330,20 @@ export default function Clone() {
         ? `Clonable: ${result.length.toLocaleString()} bp plasmid, ${result.validation.filter((c) => c.passed).length} of ${result.validation.length} checks passed.`
         : "This will not clone. Read the reasons above the result.";
 
+  function clearWorkspace() {
+    clearPreDigested();
+    clearParams();
+    clearResult();
+    clearFragment();
+    clearMapView();
+    clearShowSites();
+    clearOnlyUsedSites();
+    clearSelected();
+    clearShowEnds();
+    clearSaved();
+    setError("");
+  }
+
   return (
     <>
       <LiveStatus message={status} />
@@ -332,6 +356,9 @@ export default function Clone() {
             up with — junctions, reading frame and all.
           </p>
         </div>
+        <button className="btn btn-outline" onClick={clearWorkspace} disabled={busy}>
+          Clear
+        </button>
         <button
           className="btn btn-primary"
           onClick={() => runClone(false)}

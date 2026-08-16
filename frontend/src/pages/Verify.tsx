@@ -12,6 +12,7 @@ import {
 import Icon from "../components/Icon";
 import LiveStatus from "../components/LiveStatus";
 import TraceView from "../components/TraceView";
+import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
 /**
  * The end of the workflow: you built it, now check it is what you designed.
@@ -26,18 +27,18 @@ type Tab = "reads" | "primers" | "ligation";
 
 export default function Verify() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [project, setProject] = useState<Project | null>(null);
-  const [tab, setTab] = useState<Tab>("reads");
+  const [project, setProject, clearProject] = useWorkspaceState<Project | null>("verify.project", null);
+  const [tab, setTab, clearTab] = useWorkspaceState<Tab>("verify.tab", "reads");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const [reads, setReads] = useState("");
-  const [traceFiles, setTraceFiles] = useState<File[]>([]);
-  const [report, setReport] = useState<VerifyReport | null>(null);
-  const [primers, setPrimers] = useState<PrimerSet | null>(null);
-  const [ligation, setLigation] = useState<LigationReaction[] | null>(null);
-  const [vectorNg, setVectorNg] = useState(50);
-  const [trim, setTrim] = useState(30);
+  const [reads, setReads, clearReads] = useWorkspaceState("verify.reads", "");
+  const [traceFiles, setTraceFiles, clearTraceFiles] = useWorkspaceState<File[]>("verify.traceFiles", []);
+  const [report, setReport, clearReport] = useWorkspaceState<VerifyReport | null>("verify.report", null);
+  const [primers, setPrimers, clearPrimers] = useWorkspaceState<PrimerSet | null>("verify.primers", null);
+  const [ligation, setLigation, clearLigation] = useWorkspaceState<LigationReaction[] | null>("verify.ligation", null);
+  const [vectorNg, setVectorNg, clearVectorNg] = useWorkspaceState("verify.vectorNg", 50);
+  const [trim, setTrim, clearTrim] = useWorkspaceState("verify.trim", 30);
 
   useEffect(() => {
     api.listProjects()
@@ -208,6 +209,19 @@ export default function Verify() {
         : "Working out the amounts…"
     : verdict();
 
+  function clearWorkspace() {
+    clearProject();
+    clearTab();
+    clearReads();
+    clearTraceFiles();
+    clearReport();
+    clearPrimers();
+    clearLigation();
+    clearVectorNg();
+    clearTrim();
+    setError("");
+  }
+
   return (
     <>
       <LiveStatus message={status} />
@@ -220,6 +234,9 @@ export default function Verify() {
             they come back — all against one saved construct.
           </p>
         </div>
+        <button className="btn btn-outline" onClick={clearWorkspace} disabled={busy}>
+          Clear
+        </button>
       </div>
 
       <div

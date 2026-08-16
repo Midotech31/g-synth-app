@@ -9,6 +9,7 @@ import {
 } from "../api/client";
 import Icon from "../components/Icon";
 import LiveStatus from "../components/LiveStatus";
+import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
 const SAMPLE =
   "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGGTATATTGGAAATAATGGAGCACATATGGGA" +
@@ -32,8 +33,8 @@ const DEFAULTS: OptimiseParams = {
 const COMMON = ["NdeI", "XhoI", "BamHI", "EcoRI", "HindIII", "NotI", "SalI", "SacI", "XbaI", "NcoI"];
 
 export default function Optimise() {
-  const [params, setParams] = useState<OptimiseParams>(DEFAULTS);
-  const [result, setResult] = useState<OptimiseResult | null>(null);
+  const [params, setParams, clearParams] = useWorkspaceState<OptimiseParams>("optimise.params", DEFAULTS);
+  const [result, setResult, clearResult] = useWorkspaceState<OptimiseResult | null>("optimise.result", null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
@@ -72,6 +73,12 @@ export default function Optimise() {
 
   const inputLength = params.sequence.replace(/\s/g, "").length;
 
+  function clearWorkspace() {
+    clearParams();
+    clearResult();
+    setError("");
+  }
+
   const status = busy
     ? "Optimising…"
     : result === null
@@ -92,6 +99,9 @@ export default function Optimise() {
             never changes — everything else does.
           </p>
         </div>
+        <button className="btn btn-outline" onClick={clearWorkspace} disabled={busy}>
+          Clear
+        </button>
         <button className="btn btn-primary" onClick={() => void run()} disabled={busy || !inputLength}>
           {busy && <span className="spinner" />}
           {busy ? "Optimising…" : "Optimise"}

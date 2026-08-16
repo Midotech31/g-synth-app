@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ApiError, api, type AlignResult } from "../api/client";
 import Icon from "../components/Icon";
 import LiveStatus from "../components/LiveStatus";
+import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
 /**
  * Comparing two sequences that are not assumed to be the same thing.
@@ -22,12 +23,12 @@ const SAMPLE_A = "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGGTATATTGGAAATAATGGAGCACATATGGG
 const SAMPLE_B = "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGGTATATTGGTAATAATGGAGCACATATGGGA";
 
 export default function Align() {
-  const [first, setFirst] = useState(SAMPLE_A);
-  const [second, setSecond] = useState(SAMPLE_B);
-  const [mode, setMode] = useState<(typeof MODES)[number]["key"]>("global");
-  const [isProtein, setIsProtein] = useState(false);
-  const [tryReverse, setTryReverse] = useState(true);
-  const [result, setResult] = useState<AlignResult | null>(null);
+  const [first, setFirst, clearFirst] = useWorkspaceState("align.first", SAMPLE_A);
+  const [second, setSecond, clearSecond] = useWorkspaceState("align.second", SAMPLE_B);
+  const [mode, setMode, clearMode] = useWorkspaceState<(typeof MODES)[number]["key"]>("align.mode", "global");
+  const [isProtein, setIsProtein, clearIsProtein] = useWorkspaceState("align.isProtein", false);
+  const [tryReverse, setTryReverse, clearTryReverse] = useWorkspaceState("align.tryReverse", true);
+  const [result, setResult, clearResult] = useWorkspaceState<AlignResult | null>("align.result", null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -48,6 +49,16 @@ export default function Align() {
 
   const clean = (text: string) => text.replace(/[^A-Za-z]/g, "").length;
 
+  function clearWorkspace() {
+    clearFirst();
+    clearSecond();
+    clearMode();
+    clearIsProtein();
+    clearTryReverse();
+    clearResult();
+    setError("");
+  }
+
   const status = busy
     ? "Aligning…"
     : result === null
@@ -66,6 +77,9 @@ export default function Align() {
             its homologue. Gaps are scored the way biology makes them.
           </p>
         </div>
+        <button className="btn btn-outline" onClick={clearWorkspace} disabled={busy}>
+          Clear
+        </button>
         <button
           className="btn btn-primary"
           onClick={() => void run()}
