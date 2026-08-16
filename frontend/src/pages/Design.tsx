@@ -38,6 +38,8 @@ export default function Design() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved, clearSaved] = useWorkspaceState("design.saved", "");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const location = useLocation();
 
   // The optimiser hands its gene over rather than making the user copy it.
@@ -114,6 +116,15 @@ export default function Design() {
     clearResult();
     clearSaved();
     setError("");
+    setExportOpen(false);
+    setCopied(false);
+  }
+
+  async function copyConstruct() {
+    if (!result) return;
+    await navigator.clipboard.writeText(result.construct_forward);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
   }
 
   // The verdict is the reason for the wait, so it is what gets said. The
@@ -130,25 +141,58 @@ export default function Design() {
     <>
       <LiveStatus message={status} />
 
-      <div className="topbar">
-        <div className="grow">
+      <div className="topbar design-topbar">
+        <div className="grow design-heading">
           <h1>Design a construct</h1>
-          <p className="sub">
-            Insert → annealed oligo pairs with 4–8 nt junction overhangs, ligated
-            in order. No PCR.
-          </p>
+          <div className="design-steps" aria-label="Design progress">
+            <div className="design-step active"><span>1</span>Insert</div>
+            <i aria-hidden="true" />
+            <div className={`design-step ${result ? "complete" : ""}`}><span>2</span>Configure</div>
+            <i aria-hidden="true" />
+            <div className={`design-step ${result ? "complete" : ""}`}><span>3</span>Review</div>
+          </div>
         </div>
-        <button className="btn btn-outline" onClick={clearWorkspace} disabled={busy}>
-          Clear
+        <button
+          className="btn btn-primary design-save"
+          onClick={() => design(true)}
+          disabled={busy || !verified}
+        >
+          <Icon name="check" size={18} />
+          Save project
         </button>
-        <button className="btn btn-primary" onClick={() => design(false)} disabled={busy}>
-          {busy && <span className="spinner" />}
-          {busy ? "Designing…" : "Design"}
+        <div className="design-export">
+          <button
+            className="btn btn-outline"
+            onClick={() => setExportOpen((open) => !open)}
+            disabled={!verified}
+            aria-expanded={exportOpen}
+            aria-controls="design-export-menu"
+          >
+            <Icon name="arrowRight" size={17} />
+            Export
+          </button>
+          {exportOpen && (
+            <div
+              className="design-export-menu"
+              id="design-export-menu"
+              role="menu"
+              aria-label="Export formats"
+            >
+              <button role="menuitem" onClick={() => void download("order-sheet")}>Oligo CSV</button>
+              <button role="menuitem" onClick={() => void exportConstruct("oligos")}>Oligo FASTA</button>
+              <button role="menuitem" onClick={() => void download("protocol")}>Protocol</button>
+              <button role="menuitem" onClick={() => void exportConstruct("genbank")}>GenBank</button>
+            </div>
+          )}
+        </div>
+        <button className="btn btn-outline" onClick={() => void copyConstruct()} disabled={!result}>
+          <Icon name="book" size={17} />
+          {copied ? "Copied" : "Copy"}
         </button>
       </div>
 
       <div
-        className="content"
+        className="content design-content"
         style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}
         aria-busy={busy}
       >
@@ -157,15 +201,24 @@ export default function Design() {
 
         <div className="design-layout">
           {/* ── Inputs ─────────────────────────────────────────────────── */}
-          <div className="card">
+          <div className="card design-input-card">
             <div className="card-head"><h2>Insert</h2></div>
             <div className="card-body">
               <InsertForm params={params} catalogue={catalogue} onChange={set} />
             </div>
+            <div className="design-form-actions">
+              <button className="btn btn-outline" onClick={clearWorkspace} disabled={busy}>
+                Clear
+              </button>
+              <button className="btn btn-primary" onClick={() => design(false)} disabled={busy}>
+                {busy && <span className="spinner" />}
+                {busy ? "Designing…" : result ? "Update design" : "Design"}
+              </button>
+            </div>
           </div>
 
           {/* ── Results ────────────────────────────────────────────────── */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+          <div className="design-results">
             {!result ? (
               <div className="card">
                 <div className="empty">
@@ -176,39 +229,55 @@ export default function Design() {
               </div>
             ) : (
               <>
-                <div className={`notice ${verified ? "notice-ok" : "notice-error"}`}>
+                <div className={`design-verdict ${verified ? "verified" : "failed"}`}>
+                  <div className="design-verdict-icon" aria-hidden="true">
+                    <Icon name={verified ? "check" : "cross"} size={28} />
+                  </div>
                   {verified ? (
-                    <>
-                      <strong>Verified.</strong> Annealing these oligo pairs and
-                      ligating them in order reproduces the construct exactly, on
-                      both strands.
-                    </>
+                    <div className="design-verdict-copy">
+                      <strong>Verified</strong>
+                      <span>Annealing these oligo pairs and ligating them in order reproduces the construct exactly, on both strands.</span>
+                    </div>
                   ) : (
-                    <>
-                      <strong>Do not order.</strong> {result.verification.join(" ")}
-                    </>
+                    <div className="design-verdict-copy">
+                      <strong>Do not order</strong>
+                      <span>{result.verification.join(" ")}</span>
+                    </div>
+                  )}
+                  {verified && (
+                    <div className="design-verdict-date">
+                      <span>Verified on</span>
+                      <strong>{new Intl.DateTimeFormat("en-GB", {
+                        day: "2-digit", month: "short", year: "numeric",
+                      }).format(new Date())}</strong>
+                    </div>
                   )}
                 </div>
 
-                <div className="card">
+                <div className="card design-stats">
                   <div className="card-body stat-row">
                     <div className="stat">
+                      <Icon name="helix" size={19} />
                       <div className="k">Construct</div>
                       <div className="v">{result.construct_length}<small>bp</small></div>
                     </div>
                     <div className="stat">
+                      <Icon name="target" size={19} />
                       <div className="k">GC</div>
                       <div className="v">{result.construct_gc}<small>%</small></div>
                     </div>
                     <div className="stat">
+                      <Icon name="plate" size={19} />
                       <div className="k">Fragments</div>
                       <div className="v">{result.fragment_count}</div>
                     </div>
                     <div className="stat">
+                      <Icon name="book" size={19} />
                       <div className="k">Oligos</div>
                       <div className="v">{result.oligo_count}</div>
                     </div>
                     <div className="stat">
+                      <Icon name="scales" size={19} />
                       <div className="k">Longest oligo</div>
                       <div className="v">{result.longest_oligo}<small>nt</small></div>
                     </div>
@@ -216,6 +285,7 @@ export default function Design() {
                         supply, so the design widens them. The form still shows
                         what was asked for; this shows what was built. */}
                     <div className="stat">
+                      <Icon name="target" size={19} />
                       <div className="k">Overhang</div>
                       <div className="v">
                         {result.overhang_length}<small>nt</small>
@@ -296,29 +366,7 @@ export default function Design() {
                 <div className="card">
                   <div className="card-head">
                     <h2 style={{ flex: 1 }}>Oligos to order</h2>
-                    <button className="btn btn-outline" onClick={() => download("order-sheet")}
-                            disabled={!verified} title="The order sheet as a spreadsheet">
-                      CSV
-                    </button>
-                    <button className="btn btn-outline"
-                            onClick={() => void exportConstruct("oligos")}
-                            disabled={!verified}
-                            title="One FASTA entry per oligo — most suppliers take an upload">
-                      Oligo FASTA
-                    </button>
-                    <button className="btn btn-outline" onClick={() => download("protocol")}
-                            disabled={!verified}>
-                      Protocol
-                    </button>
-                    <button className="btn btn-outline"
-                            onClick={() => void exportConstruct("genbank")}
-                            disabled={!verified}
-                            title="The construct with its cassette labelled">
-                      GenBank
-                    </button>
-                    <button className="btn btn-primary" onClick={() => design(true)} disabled={busy}>
-                      Save project
-                    </button>
+                    <span className="label">Use Export for supplier files and protocol</span>
                   </div>
                   <div className="table-scroll">
                     <table className="data">
@@ -374,3 +422,4 @@ export default function Design() {
     </>
   );
 }
+
