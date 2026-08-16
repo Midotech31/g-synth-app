@@ -5,6 +5,7 @@ import {
 
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import ErrorBoundary from "./components/ErrorBoundary";
+import Icon, { type IconName } from "./components/Icon";
 import { Logo } from "./components/Logo";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -33,55 +34,86 @@ const Viewer = lazy(() => import("./pages/Viewer"));
 
 function Rail() {
   const { user, signOut } = useAuth();
+  const initials = (user?.name || user?.email || "GS")
+    .split(/\s+|@/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+  const groups: Array<{
+    label: string;
+    items: Array<{ to: string; label: string; icon: IconName }>;
+  }> = [
+    {
+      label: "Design",
+      items: [
+        { to: "/design", label: "Design", icon: "helix" },
+        { to: "/optimise", label: "Optimise", icon: "target" },
+      ],
+    },
+    {
+      label: "Build",
+      items: [
+        { to: "/pcr", label: "PCR", icon: "microscope" },
+        { to: "/clone", label: "Clone", icon: "plate" },
+      ],
+    },
+    {
+      label: "Verify",
+      items: [
+        { to: "/verify", label: "Check", icon: "check" },
+        { to: "/align", label: "Compare", icon: "scales" },
+        { to: "/learn", label: "Learn", icon: "book" },
+      ],
+    },
+  ];
+
   return (
     <aside className="rail">
-      <div className="brand">
+      <NavLink to="/" end className="brand" aria-label="G-Synth home">
         <Logo size={30} tagline={false} />
         <span className="ver">v3</span>
-      </div>
+      </NavLink>
 
       <nav aria-label="Workspace">
-        <NavLink to="/" end className={({ isActive }) => (isActive ? "active" : "")}>
-          Home
-        </NavLink>
-        <NavLink to="/design" className={({ isActive }) => (isActive ? "active" : "")}>
-          Design
-        </NavLink>
-        <NavLink to="/optimise" className={({ isActive }) => (isActive ? "active" : "")}>
-          Optimise
-        </NavLink>
-        <NavLink to="/pcr" className={({ isActive }) => (isActive ? "active" : "")}>
-          PCR
-        </NavLink>
-        <NavLink to="/clone" className={({ isActive }) => (isActive ? "active" : "")}>
-          Clone
-        </NavLink>
-        <NavLink to="/verify" className={({ isActive }) => (isActive ? "active" : "")}>
-          Check
-        </NavLink>
-        <NavLink to="/align" className={({ isActive }) => (isActive ? "active" : "")}>
-          Compare
-        </NavLink>
-        <NavLink to="/learn" className={({ isActive }) => (isActive ? "active" : "")}>
-          Learn
-        </NavLink>
-        <NavLink to="/projects" className={({ isActive }) => (isActive ? "active" : "")}>
-          Projects
-        </NavLink>
-        <NavLink to="/help" className={({ isActive }) => (isActive ? "active" : "")}>
-          Help
-        </NavLink>
+        {groups.map((group) => (
+          <div className="rail-group" key={group.label}>
+            <div className="rail-group-label">{group.label}</div>
+            {group.items.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => (isActive ? "active" : "")}
+              >
+                <Icon name={item.icon} size={20} />
+                <span>{item.label}</span>
+              </NavLink>
+            ))}
+          </div>
+        ))}
+        <div className="rail-utilities">
+          <NavLink to="/projects" className={({ isActive }) => (isActive ? "active" : "")}>
+            <Icon name="book" size={20} />
+            <span>Projects</span>
+          </NavLink>
+          <NavLink to="/help" className={({ isActive }) => (isActive ? "active" : "")}>
+            <Icon name="target" size={20} />
+            <span>Help</span>
+          </NavLink>
+        </div>
       </nav>
 
       <div className="spacer" />
 
       <div className="account">
+        <div className="account-avatar" aria-hidden="true">{initials || "GS"}</div>
         <div className="who">
           <div className="n">{user?.name || "Signed in"}</div>
           <div className="e">{user?.email}</div>
         </div>
-        <button className="btn btn-rail" onClick={() => void signOut()}>
-          Sign out
+        <button className="rail-signout" onClick={() => void signOut()} title="Sign out">
+          <span className="sr-only">Sign out</span>
+          <Icon name="arrowRight" size={18} />
         </button>
       </div>
     </aside>
@@ -187,3 +219,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+
