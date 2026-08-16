@@ -49,7 +49,7 @@ services:
         fromService:
           type: web
           name: gsynth-api
-          property: host
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
 
       # The workspace's origin, resolved from the static site below. The API
       # rejects a browser request from anywhere else, so this is the one
@@ -58,9 +58,7 @@ services:
         fromService:
           type: web
           name: gsynth-app
-          # Render exposes service references as hostnames, not full URLs.
-          # prod.py turns this into an HTTPS origin before Django validates it.
-          property: host
+          envVarKey: RENDER_EXTERNAL_URL
 
       # Postgres connection string. Render asks for this when you create the
       # blueprint: paste the Supabase "Session pooler" URL. Required —
@@ -95,5 +93,4 @@ services:
         fromService:
           type: web
           name: gsynth-api
-          # The client adds https:// when Render supplies a bare hostname.
-          property: host
+          envVarKey: RENDER_EXTERNAL_URL
