@@ -9,6 +9,7 @@ import { Logo } from "./components/Logo";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import { WorkspaceStateProvider } from "./state/WorkspaceStateContext";
 
 /**
  * The workspaces load on demand.
@@ -106,7 +107,8 @@ function Protected() {
   if (!user) return <Navigate to="/login" replace />;
 
   return (
-    <div className="shell">
+    <WorkspaceStateProvider>
+      <div className="shell">
       {/* First thing in the tab order, so the nine rail links can be passed
           over. `tabIndex` on the target because following a fragment moves
           the caret but not focus in several browsers. */}
@@ -132,7 +134,8 @@ function Protected() {
           </Suspense>
         </ErrorBoundary>
       </main>
-    </div>
+      </div>
+    </WorkspaceStateProvider>
   );
 }
 

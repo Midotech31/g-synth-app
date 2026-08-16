@@ -13,6 +13,7 @@ import InsertForm from "../components/InsertForm";
 import { segmentColour } from "../components/segmentColour";
 import Icon from "../components/Icon";
 import LiveStatus from "../components/LiveStatus";
+import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
 
@@ -32,11 +33,11 @@ const DEFAULTS: DesignParams = {
 
 export default function Design() {
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
-  const [params, setParams] = useState<DesignParams>(DEFAULTS);
-  const [result, setResult] = useState<AssemblyResult | null>(null);
+  const [params, setParams, clearParams] = useWorkspaceState<DesignParams>("design.params", DEFAULTS);
+  const [result, setResult, clearResult] = useWorkspaceState<AssemblyResult | null>("design.result", null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState("");
+  const [saved, setSaved, clearSaved] = useWorkspaceState("design.saved", "");
   const location = useLocation();
 
   // The optimiser hands its gene over rather than making the user copy it.
@@ -108,6 +109,13 @@ export default function Design() {
 
   const verified = result !== null && result.verification.length === 0;
 
+  function clearWorkspace() {
+    clearParams();
+    clearResult();
+    clearSaved();
+    setError("");
+  }
+
   // The verdict is the reason for the wait, so it is what gets said. The
   // error has its own alert; repeating it here would announce it twice.
   const status = busy
@@ -130,6 +138,9 @@ export default function Design() {
             in order. No PCR.
           </p>
         </div>
+        <button className="btn btn-outline" onClick={clearWorkspace} disabled={busy}>
+          Clear
+        </button>
         <button className="btn btn-primary" onClick={() => design(false)} disabled={busy}>
           {busy && <span className="spinner" />}
           {busy ? "Designing…" : "Design"}

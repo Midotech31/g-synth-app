@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { ApiError, api, type Catalogue, type PcrResult } from "../api/client";
 import Icon from "../components/Icon";
+import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
 /**
  * PCR, and what cutting the product leaves.
@@ -81,15 +82,15 @@ export default function Pcr() {
   const navigate = useNavigate();
   const location = useLocation() as { state?: { sequence?: string } | null };
 
-  const [template, setTemplate] = useState(location.state?.sequence ?? "");
-  const [mode, setMode] = useState<"conventional" | "cloning">("cloning");
-  const [leftEnzyme, setLeftEnzyme] = useState("NdeI");
-  const [rightEnzyme, setRightEnzyme] = useState("XhoI");
-  const [clamp, setClamp] = useState(6);
-  const [keepFrame, setKeepFrame] = useState(true);
+  const [template, setTemplate, clearTemplate] = useWorkspaceState("pcr.template", "");
+  const [mode, setMode, clearMode] = useWorkspaceState<"conventional" | "cloning">("pcr.mode", "cloning");
+  const [leftEnzyme, setLeftEnzyme, clearLeftEnzyme] = useWorkspaceState("pcr.leftEnzyme", "NdeI");
+  const [rightEnzyme, setRightEnzyme, clearRightEnzyme] = useWorkspaceState("pcr.rightEnzyme", "XhoI");
+  const [clamp, setClamp, clearClamp] = useWorkspaceState("pcr.clamp", 6);
+  const [keepFrame, setKeepFrame, clearKeepFrame] = useWorkspaceState("pcr.keepFrame", true);
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
 
-  const [result, setResult] = useState<PcrResult | null>(null);
+  const [result, setResult, clearResult] = useWorkspaceState<PcrResult | null>("pcr.result", null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // Incremented whenever the inputs change or a new request starts. If an
@@ -101,6 +102,12 @@ export default function Pcr() {
     api.catalogue().then(setCatalogue).catch(() => setCatalogue(null));
   }, []);
 
+  useEffect(() => {
+    if (!location.state?.sequence) return;
+    setTemplate(location.state.sequence);
+    setResult(null);
+  }, [location.state?.sequence, setResult, setTemplate]);
+
   const cleanLength = useMemo(
     () => template.replace(/[^A-Za-z]/g, "").length, [template],
   );
@@ -108,6 +115,18 @@ export default function Pcr() {
   function inputsChanged() {
     requestVersion.current += 1;
     setResult(null);
+    setError("");
+  }
+
+  function clearWorkspace() {
+    requestVersion.current += 1;
+    clearTemplate();
+    clearMode();
+    clearLeftEnzyme();
+    clearRightEnzyme();
+    clearClamp();
+    clearKeepFrame();
+    clearResult();
     setError("");
   }
 
@@ -163,6 +182,9 @@ export default function Pcr() {
             into an insert.
           </p>
         </div>
+        <button className="btn btn-outline" onClick={clearWorkspace} disabled={busy}>
+          Clear
+        </button>
         <button className="btn btn-primary" onClick={() => void run()} disabled={busy || !cleanLength}>
           {busy && <span className="spinner" />}
           {busy ? "Designing…" : "Design PCR"}
