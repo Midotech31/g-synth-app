@@ -401,4 +401,83 @@ export default function Viewer() {
 
             {junctions.length > 0 && (
               <div className="card">
-    
+                <div className="card-head"><h2>Junctions</h2></div>
+                <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+                  {junctions.map((j) => (
+                    <div key={j.name} className="junction">
+                      <div className="junction-head">
+                        <strong>{j.name}</strong>
+                        <span className="label">
+                          {j.enzyme} · {j.kind} {j.overhang || "blunt"}
+                        </span>
+                        <span className="grow" />
+                        <span className={j.site_regenerated ? "pill pill-ok" : "pill"}>
+                          {j.site_regenerated ? "site regenerated" : "site lost"}
+                        </span>
+                      </div>
+                      <div className="junction-seq">
+                        <span>{j.context.slice(0, 12)}</span>
+                        <span className="seam" />
+                        <span>{j.context.slice(12)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {allOligos.length > 0 && (
+              <div className="card">
+                <div className="card-head">
+                  <h2 style={{ flex: 1 }}>Oligos</h2>
+                  <span className="label">{allOligos.length}</span>
+                </div>
+                <div className="table-scroll">
+                  <table className="data">
+                    <thead>
+                      <tr><th>Name</th><th>Sequence (5'→3')</th><th>Length</th><th>Tm</th></tr>
+                    </thead>
+                    <tbody>
+                      {allOligos.map((oligo) => (
+                        <tr key={String(oligo.Name)}>
+                          <td className="mono">{oligo.Name}</td>
+                          <td className="mono seq-cell">{oligo["Sequence (5\'->3\')"]}</td>
+                          <td className="num">{oligo["Length (nt)"]}</td>
+                          <td className="num">{oligo["Tm (°C)"]}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="card">
+              <div className="card-head">
+                <h2 style={{ flex: 1 }}>Sequence</h2>
+                <button
+                  className="btn btn-outline"
+                  onClick={() => void api.downloadUrl(
+                    `/api/projects/${project.id}/export/`,
+                    `${project.name.replace(/\s+/g, "_")}.gb`,
+                  )}
+                >
+                  GenBank
+                </button>
+              </div>
+              <div className="card-body">
+                <div className="seq-block">{project.sequence}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p>
+          <Link to="/projects" className="back-link">
+            <Icon name="arrowLeft" size={15} /> Back to projects
+          </Link>
+        </p>
+      </div>
+    </>
+  );
+}

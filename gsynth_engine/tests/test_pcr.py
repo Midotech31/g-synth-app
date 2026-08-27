@@ -342,4 +342,114 @@ class TestReadingFrame:
                        keep_frame=True)
         assert any("whole number of codons" in w for w in r.warnings)
 
-    def test_a_well_formed_design_is_not_flagged_for_frame(s
+    def test_a_well_formed_design_is_not_flagged_for_frame(self):
+        """A warning that fires on every design is one the reader learns to
+        skip past. The insert carries an overhang at each end that belongs to
+        no codon, so its own length is never a multiple of three — testing
+        that instead of the region would flag everything."""
+        r = design_pcr(GENE, left_enzyme="BamHI", right_enzyme="XhoI",
+                       keep_frame=True)
+        assert not any("whole number of codons" in w for w in r.warnings)
+
+    def test_an_internal_stop_is_reported(self):
+        gene = GENE[:30] + "TAA" + GENE[33:]
+        r = design_pcr(gene, left_enzyme="BamHI", right_enzyme="XhoI",
+                       keep_frame=True)
+        assert any("stop codon" in w for w in r.warnings)
+
+
+class TestPrimerQuality:
+    """Each check is asserted on an input that trips it *and* on one that does
+    not. A quality check only ever tested against the case it fires on cannot
+    be distinguished from one that fires on everything."""
+
+    def test_a_weak_three_prime_end_is_reported(self):
+        notes = _primer_warnings("GGCACCGGTGTTGTTCCGATTCTAA", label="forward")
+        assert any("ends in A or T" in n for n in notes)
+
+    def test_a_strong_three_prime_end_is_not_reported(self):
+        notes = _primer_warnings("GAAGAATTGTTCACCGGTGTTGTTC", label="forward")
+        assert not any("ends in A or T" in n for n in notes)
+
+    def test_a_gc_clamp_that_is_too_strong_is_reported(self):
+        notes = _primer_warnings("ATGAAAGGTGAAGAATTGGCGCC", label="forward")
+        assert any("last five bases" in n for n in notes)
+
+    def test_an_at_rich_region_is_reported(self):
+        notes = _primer_warnings("ATATATATATATATATATAT", label="forward")
+        assert any("Below 40%" in n for n in notes)
+
+    def test_a_gc_rich_region_is_reported(self):
+        notes = _primer_warnings("GCGCGGCCGCGGCCGCGGCC", label="forward")
+        assert any("Above 65%" in n for n in notes)
+
+    def test_a_long_homopolymer_is_reported(self):
+        notes = _primer_warnings("ATGAAAAAAAAGGTCACCGGTGTT", label="forward")
+        assert any("identical bases" in n for n in notes)
+
+    def test_a_balanced_primer_draws_no_complaint(self):
+        assert _primer_warnings("GAAGAATTGTTCACCGGTGTTGTTC", label="forward") == []
+
+    def test_primer_dimer_between_the_pair_is_detected(self):
+        """Two primers complementary at their 3' ends extend one another into
+        a short product that then amplifies far better than the template."""
+        forward = "ATGCGTACGTTGACCGGGCCCAAAGGGCC"
+        reverse = "GGCCCTTTGGGCCCGGTCAACGTACGCAT"
+        assert _cross_dimer(forward, reverse) >= 5
+
+    def test_an_unrelated_pair_is_not_called_a_dimer(self):
+        assert _cross_dimer("ATGAAAGGTGAAGAATTGTT", "TTTCAGGGTCAGTTTACCGT") < 5
+
+    def test_the_gc_clamp_property_reads_the_three_prime_end(self):
+        r = design_pcr(GENE)
+        assert r.forward.has_gc_clamp == any(b in "GC" for b in r.forward.anneals[-2:])
+
+
+class TestTheWholeJourney:
+    """Amplify, cut, ligate. Each step can be right on its own and still not
+    compose — this is the only test that says the three of them do."""
+
+    def test_a_pcr_product_clones_into_pet21a(self):
+        r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI", name="gene")
+        assert r.is_clean
+
+        record = vectors.sequence_of("pET-21a")
+        result = cloning.clone(
+            record["sequence"], r.digest.top,
+            left_enzyme="NdeI", right_enzyme="XhoI",
+            vector_spec=vectors.get("pET-21a"),
+            insert_reverse=r.digest.bottom,
+            insert_left_end=r.digest.left_end,
+            insert_right_end=r.digest.right_end,
+            name="pET21a-gene",
+        )
+        assert result.is_clonable
+        assert result.problems == []
+
+    def test_the_cloned_insert_is_the_gene_that_was_amplified(self):
+        """Round trip: what comes back out of the plasmid is what went into
+        the reaction."""
+        r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI")
+        record = vectors.sequence_of("pET-21a")
+        result = cloning.clone(
+            record["sequence"], r.digest.top,
+            left_enzyme="NdeI", right_enzyme="XhoI",
+            insert_reverse=r.digest.bottom,
+            insert_left_end=r.digest.left_end,
+            insert_right_end=r.digest.right_end,
+        )
+        plasmid = result.plasmid
+        # The cassette reads on the minus strand in pET-21a, so look on both.
+        assert GENE in plasmid + plasmid or GENE in reverse_complement(plasmid) * 2
+
+    def test_recutting_the_plasmid_returns_an_insert_of_the_right_length(self):
+        r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI")
+        record = vectors.sequence_of("pET-21a")
+        result = cloning.clone(
+            record["sequence"], r.digest.top,
+            left_enzyme="NdeI", right_enzyme="XhoI",
+            insert_reverse=r.digest.bottom,
+            insert_left_end=r.digest.left_end,
+            insert_right_end=r.digest.right_end,
+        )
+        assert result.insert_length == r.digest.length

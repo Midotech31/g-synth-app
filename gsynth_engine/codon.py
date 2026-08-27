@@ -417,3 +417,266 @@ def _fix_near(
 
     Candidates are compared on a *window* of the sequence rather than the
     whole of it. Every candidate differs from the others in the same three
+    bases, so the terms outside that neighbourhood are identical and cancel —
+    comparing them is the same decision at a fraction of the cost. Repeats
+    are the exception, since a repeat's partner can be anywhere, so a breach
+    of that kind falls back to scoring the whole sequence.
+    """
+    first = max(0, position // 3 - 2)
+    last = min(len(codons) - 1, (position + width) // 3 + 2)
+
+    # Wide enough that every GC window and every motif touching the edited
+    # codons lies inside it.
+    radius = constraints.gc_window + max(
+        (len(m) for m in constraints.motifs()), default=0
+    ) + constraints.max_homopolymer + 6
+    span = (
+        (first * 3 - radius, (last + 1) * 3 + radius) if local else None
+    )
+    kwargs = {"window": span, "with_repeats": not local}
+
+    sequence = "".join(codons)
+    baseline = _cost(sequence, constraints, table, **kwargs)
+    best_cost, best_at, best_codon = baseline, -1, ""
+
+    for index in range(first, last + 1):
+        current = codons[index]
+        for candidate in table.ranked(protein[index]):
+            if candidate == current:
+                continue
+            codons[index] = candidate
+            cost = _cost("".join(codons), constraints, table, **kwargs)
+            if cost < best_cost:
+                best_cost, best_at, best_codon = cost, index, candidate
+        codons[index] = current
+
+    if best_at < 0:
+        return False
+    codons[best_at] = best_codon
+    return True
+
+
+def _perturb(
+    codons: list[str],
+    position: int,
+    width: int,
+    protein: str,
+    table: CodonTable,
+    rng: random.Random,
+) -> None:
+    """Take a sideways step so a plateau does not end the repair pass."""
+    first = max(0, position // 3 - 2)
+    last = min(len(codons) - 1, (position + width) // 3 + 2)
+    if last < first:
+        return
+    index = rng.randint(first, last)
+    alternatives = [c for c in SYNONYMS[protein[index]] if c != codons[index]]
+    if alternatives:
+        codons[index] = rng.choice(alternatives)
+
+
+def optimise(
+    sequence: str,
+    *,
+    table: CodonTable = ECOLI,
+    constraints: Constraints | None = None,
+    is_protein: bool = False,
+    keep_stop: bool = True,
+    seed: int = 0,
+    max_rounds: int = 40,
+) -> OptimisationResult:
+    """Rewrite a gene for the host, keeping the protein identical.
+
+    Args:
+        sequence: a coding sequence, or a protein when `is_protein` is set.
+        table: the host's codon usage. Build your own with `build_table` when
+            the CAI matters.
+        constraints: what the result must avoid. Pass the cloning enzymes in
+            `avoid_enzymes` — a gene carrying an internal NdeI site cannot be
+            cloned NdeI/XhoI however well it translates.
+        keep_stop: append the host's preferred stop codon. Turn it off for an
+            insert destined for a C-terminal vector tag, where a stop would
+            silently remove the tag.
+        seed: choices are deterministic. The same input gives the same gene,
+            which matters when a sequence has been ordered and someone wants
+            to know it was this design that produced it.
+
+    Returns:
+        An :class:`OptimisationResult`. `problems` lists anything the repair
+        pass could not fix — a stretch where no synonymous codon removes a
+        site, for instance.
+
+    Raises:
+        SequenceError: for input that cannot be read as a gene or a protein.
+    """
+    constraints = constraints or Constraints()
+    rng = random.Random(seed)
+
+    if is_protein:
+        protein = "".join(sequence.split()).upper()
+        invalid = sorted(set(protein) - set(SYNONYMS) - {"*"})
+        if invalid:
+            raise SequenceError(
+                "The protein contains characters that are not amino acids: "
+                + ", ".join(invalid)
+            )
+        if not protein:
+            raise SequenceError("The protein is empty.")
+        original = None
+    else:
+        original = validate_dna(sequence, field="sequence")
+        if len(original) % 3:
+            raise SequenceError(
+                f"The coding sequence is {len(original)} nt, which is not a "
+                f"multiple of three. Trim it to whole codons first."
+            )
+        protein = translate(original)
+
+    protein = protein.rstrip("*")
+    if not protein:
+        raise SequenceError("There is nothing to optimise: the protein is empty.")
+
+    # ── Stage one: choose by adaptiveness ───────────────────────────────────
+    codons = [table.best(aa) for aa in protein]
+
+    # ── Stage two: repair against the constraints ───────────────────────────
+    # A hill-climb on the cost above: fix the worst breach, re-measure, repeat.
+    # Sideways steps break plateaus; giving up is reported, never silent.
+    problems: list[str] = []
+    stalled = 0
+    for _ in range(max_rounds):
+        breaches = _violations("".join(codons), constraints, table)
+        if not breaches:
+            break
+        position, width, reason = breaches[0]
+        # A repeat's partner can be anywhere, so that one breach is the one
+        # kind a local comparison cannot judge.
+        locally = not reason.startswith("repeat")
+        if _fix_near(
+            codons, position, width, protein, table, constraints, local=locally,
+        ):
+            stalled = 0
+            continue
+        stalled += 1
+        if stalled > 4:
+            problems.append(
+                f"Could not remove: {reason} at position {position + 1}. No "
+                f"synonymous codon in that stretch helps — the residues there "
+                f"may have only one codon each."
+            )
+            break
+        _perturb(codons, position, width, protein, table, rng)
+
+    optimised = "".join(codons)
+    if keep_stop:
+        optimised += table.best("*")
+
+    # Severity is about consequence, not about which constraint was set. A
+    # site left in cannot be cloned around; a rare codon left in costs a
+    # little translation speed, and calling both "problems" would train the
+    # user to ignore the word.
+    warnings: list[str] = []
+    blocking = tuple(constraints.motifs())
+    for position, _width, reason in _violations(optimised, constraints, table):
+        message = f"{reason} at position {position + 1}."
+        if any(motif in reason for motif in blocking):
+            if message not in problems:
+                problems.append(message)
+        elif message not in warnings:
+            warnings.append(message)
+
+    # ── What changed ────────────────────────────────────────────────────────
+    rare = table.rare(constraints.rare_threshold)
+    sites_removed = [
+        motif for motif in constraints.motifs()
+        if original and motif in original and motif not in optimised
+    ]
+    if original and len(original) == len(optimised):
+        changed = sum(
+            1 for i in range(0, len(original), 3)
+            if original[i : i + 3] != optimised[i : i + 3]
+        )
+    else:
+        changed = len(codons)
+
+    return OptimisationResult(
+        sequence=optimised,
+        protein=protein,
+        table=table.name,
+        cai_before=codon_adaptation_index(original, table) if original else None,
+        cai_after=codon_adaptation_index(optimised, table),
+        gc_before=round(gc_content(original), 1) if original else None,
+        gc_after=round(gc_content(optimised), 1),
+        sites_removed=sites_removed,
+        rare_codons_before=(
+            sum(
+                1 for i in range(0, len(original) - 2, 3)
+                if original[i : i + 3] in rare
+            ) if original else 0
+        ),
+        rare_codons_after=sum(
+            1 for i in range(0, len(optimised) - 2, 3)
+            if optimised[i : i + 3] in rare
+        ),
+        changed_codons=changed,
+        problems=problems,
+        warnings=warnings,
+    )
+
+
+def _swap(
+    codons: list[str],
+    index: int,
+    protein: str,
+    table: CodonTable,
+    constraints: Constraints,
+    rng: random.Random,
+) -> bool:
+    """Try a different synonymous codon at `index`. True when it helped.
+
+    Candidates are tried best-first, so the sequence gives up as little
+    adaptiveness as it has to. A swap is kept only if it reduces the number
+    of breaches; otherwise the codon is put back, which stops the repair pass
+    from wandering.
+    """
+    if not 0 <= index < len(codons):
+        return False
+
+    amino_acid = protein[index]
+    alternatives = [c for c in table.ranked(amino_acid) if c != codons[index]]
+    if not alternatives:
+        return False
+
+    before = len(_violations("".join(codons), constraints, table))
+    original = codons[index]
+
+    for candidate in alternatives:
+        codons[index] = candidate
+        after = len(_violations("".join(codons), constraints, table))
+        if after < before:
+            return True
+
+    codons[index] = original
+    # A last resort when no single swap improves the count: take a random
+    # alternative anyway, so a stuck position can still move.
+    if len(alternatives) > 1:
+        codons[index] = rng.choice(alternatives)
+        return True
+    return False
+
+
+def back_translate(protein: str, *, table: CodonTable = ECOLI) -> str:
+    """The host's preferred codon for each residue, with no constraints.
+
+    Kept separate from `optimise` because it is a different thing: this is
+    what "reverse translate" means in a sequence editor, and it makes no
+    claim about being clonable.
+    """
+    residues = "".join(protein.split()).upper()
+    invalid = sorted(set(residues) - set(SYNONYMS))
+    if invalid:
+        raise SequenceError(
+            "The protein contains characters that are not amino acids: "
+            + ", ".join(invalid)
+        )
+    return "".join(table.best(aa) for aa in residues)

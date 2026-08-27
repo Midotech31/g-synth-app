@@ -424,4 +424,1047 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan) -> dict:
         "problems": result.problems,
         "is_clonable": result.is_clonable,
         # None when the caller supplied an insert that was already cut: there
-        # was no SSD design, and inventing
+        # was no SSD design, and inventing one to fill the field would
+        # describe a construct nobody asked for.
+        "insert": _ssd_payload(ssd) if ssd is not None else None,
+        "assembly": _assembly_payload(plan, result.name) if plan else None,
+    }
+
+
+def _spec_payload(spec) -> dict:
+    """One catalogue entry, as the dropdown needs it."""
+    return {
+        "key": spec.key,
+        "name": spec.name,
+        "length": spec.length,
+        "resistance": spec.resistance,
+        "promoter": spec.promoter,
+        "host": spec.host,
+        "supplier": spec.supplier,
+        "summary": spec.summary,
+        "unique_sites": list(spec.unique_sites),
+        "recommended_pairs": list(spec.recommended_pairs),
+        "tags": [
+            {"name": tag.name, "end": tag.end, "note": tag.note}
+            for tag in spec.tags
+        ],
+        "notes": list(spec.notes),
+        "reference": spec.reference,
+        # Without a sequence the user has to import their own copy first.
+        "has_sequence": spec.has_sequence,
+        "supplies_translation_start": spec.supplies_translation_start,
+        "tag_summary": spec.tag_summary,
+    }
+
+
+def _vector_payload(spec, sequence: str) -> dict:
+    """Which vector was cut, and whether the sequence matches what it claims."""
+    if spec is None:
+        return {"recognised": False, "check": None, "spec": None}
+
+    check = vector_catalogue.validate(sequence, spec)
+    return {
+        "recognised": True,
+        "spec": _spec_payload(spec),
+        "check": {
+            "matches": check.matches,
+            "length": check.length,
+            "problems": check.problems,
+            "notes": check.notes,
+            "found_motifs": check.found_motifs,
+            "missing_motifs": check.missing_motifs,
+        },
+    }
+
+
+class VectorCatalogueView(APIView):
+    """GET /api/design/vectors/ — the backbones G-Synth knows about.
+
+    Public, like the enzyme table: it is reference data, and the cloning page
+    needs it to build its dropdown before anything has been designed.
+    """
+
+    permission_classes = (AllowAny,)
+
+    def get(self, request):
+        return Response({
+            "vectors": [_spec_payload(spec) for spec in vector_catalogue.CATALOGUE],
+            "default": vector_catalogue.DEFAULT_VECTOR.key,
+        })
+
+
+class VectorSequenceView(APIView):
+    """GET /api/design/vectors/<key>/ — a bundled sequence and its features."""
+
+    permission_classes = (AllowAny,)
+
+    def get(self, request, key: str):
+        spec = vector_catalogue.get(key)
+        if spec is None:
+            return Response(
+                {"detail": f"No vector called {key}."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        record = vector_catalogue.sequence_of(spec.key)
+        if record is None:
+            return Response(
+                {"detail": f"{spec.name} has no bundled sequence. Import your "
+                           f"own copy — G-Synth will check it against the entry."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response({**record, "spec": _spec_payload(spec)})
+
+
+def _optimisation_payload(result: OptimisationResult) -> dict:
+    return {
+        "sequence": result.sequence,
+        "protein": result.protein,
+        "length": result.length,
+        "table": result.table,
+        "cai_before": result.cai_before,
+        "cai_after": result.cai_after,
+        "gc_before": result.gc_before,
+        "gc_after": result.gc_after,
+        "sites_removed": result.sites_removed,
+        "rare_codons_before": result.rare_codons_before,
+        "rare_codons_after": result.rare_codons_after,
+        "changed_codons": result.changed_codons,
+        # Empty problems means the gene can be built and cut as asked.
+        "problems": result.problems,
+        "warnings": result.warnings,
+        "is_clean": result.is_clean,
+    }
+
+
+class OptimiseView(APIView):
+    """POST /api/design/optimise/ — rewrite a gene for the expression host.
+
+    The protein is invariant; everything else is negotiable. Pass the cloning
+    enzymes in `avoid_enzymes` so the result does not carry a site that would
+    make the construct impossible to cut.
+    """
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = OptimiseRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        table = ECOLI
+        if data["reference_genes"]:
+            try:
+                table = build_table(
+                    data["reference_genes"],
+                    name="your reference set",
+                    source=f"{len(data['reference_genes'])} genes you supplied",
+                )
+            except SequenceError as error:
+                return _bad_request(error)
+
+        constraints = Constraints(
+            avoid_enzymes=tuple(data["avoid_enzymes"]),
+            avoid_motifs=tuple(data["avoid_motifs"]),
+            max_homopolymer=data["max_homopolymer"],
+            gc_min=data["gc_min"],
+            gc_max=data["gc_max"],
+            gc_window=data["gc_window"],
+            max_repeat=data["max_repeat"],
+            avoid_rare=data["avoid_rare"],
+        )
+        try:
+            result = optimise(
+                data["sequence"],
+                table=table,
+                constraints=constraints,
+                is_protein=data["is_protein"],
+                keep_stop=data["keep_stop"],
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        payload = _optimisation_payload(result)
+        payload["table_source"] = table.source
+        payload["preflight"] = optimisation_preflight(result).to_dict()
+        payload["provenance"] = _provenance(
+            "codon_optimisation", data, result.sequence,
+        )
+        return Response(payload)
+
+
+class AlignView(APIView):
+    """POST /api/design/align/ — compare two sequences.
+
+    Separate from verification, which assumes the read is the construct and
+    exploits that. This makes no such assumption: two genes from different
+    strains, a design against what a supplier returned, a protein against
+    its homologue.
+    """
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = AlignRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        scoring = Scoring(
+            match=data["match"],
+            mismatch=data["mismatch"],
+            gap_open=data["gap_open"],
+            gap_extend=data["gap_extend"],
+            matrix=blosum62() if data["is_protein"] else None,
+        )
+        try:
+            result = align(
+                data["first"], data["second"],
+                mode=data["mode"], is_protein=data["is_protein"],
+                scoring=scoring, try_reverse=data["try_reverse"],
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        return Response({
+            "top": result.top,
+            "marks": result.marks,
+            "bottom": result.bottom,
+            "rows": result.rows(60),
+            "text": result.to_text(60),
+            "score": result.score,
+            "mode": result.mode,
+            "length": result.length,
+            "identity": result.identity,
+            "similarity": result.similarity,
+            "identities": result.identities,
+            "similarities": result.similarities,
+            "gaps": result.gaps,
+            "start_a": result.start_a,
+            "end_a": result.end_a,
+            "start_b": result.start_b,
+            "end_b": result.end_b,
+            "reverse_complemented": result.reverse_complemented,
+            "is_protein": result.is_protein,
+            "warnings": result.warnings,
+        })
+
+
+class PrimerExportView(APIView):
+    """POST /api/design/primers/export/?filetype=csv|fasta
+
+    A primer set is ordered, not read on screen. CSV goes into a supplier's
+    spreadsheet; FASTA into the ones that take an upload.
+    """
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = PrimerRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result = design_sequencing_primers(
+                data["template"],
+                target_start=data["target_start"], target_end=data["target_end"],
+                circular=data["circular"], name=data["name"],
+                tm_min=data["tm_min"], tm_max=data["tm_max"],
+                margin=data["margin"], read_length=data["read_length"],
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        safe = (data["name"] or "seq").replace(" ", "_")
+        if request.query_params.get("filetype") == "fasta":
+            return _attachment(
+                oligos_to_fasta(result.as_rows),
+                f"{safe}_primers.fasta", "text/plain; charset=utf-8",
+            )
+
+        import csv
+        import io
+
+        buffer = io.StringIO()
+        rows = result.as_rows
+        if rows:
+            writer = csv.DictWriter(buffer, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+        return _attachment(buffer.getvalue(), f"{safe}_primers.csv", "text/csv")
+
+
+class LigationView(APIView):
+    """POST /api/design/ligation/ — masses to pipette, at several ratios.
+
+    Nobody runs one ligation, so the response is the whole series.
+    """
+
+    def post(self, request):
+        serializer = LigationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        common = {
+            "vector_length": data["vector_length"],
+            "insert_length": data["insert_length"],
+            "vector_ng": data["vector_ng"],
+            "ends": data["ends"],
+        }
+        try:
+            plans = (
+                ligation_series(**common, ratios=tuple(data["ratios"]))
+                if data["ratios"]
+                else [plan_ligation(**common, total_volume_uL=data["total_volume_uL"])]
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        return Response({
+            "reactions": [
+                {
+                    "ratio": plan.ratio,
+                    "vector_ng": plan.vector_ng,
+                    "insert_ng": plan.insert_ng,
+                    "vector_fmol": plan.vector_fmol,
+                    "insert_fmol": plan.insert_fmol,
+                    "total_ng": plan.total_ng,
+                    "rows": plan.as_rows(),
+                    "warnings": plan.warnings,
+                }
+                for plan in plans
+            ],
+            "vector_length": data["vector_length"],
+            "insert_length": data["insert_length"],
+            "ends": data["ends"],
+            "total_volume_uL": data["total_volume_uL"],
+        })
+
+
+class SequencingPrimerView(APIView):
+    """POST /api/design/primers/ — primers that read across a region."""
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = PrimerRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result = design_sequencing_primers(
+                data["template"],
+                target_start=data["target_start"],
+                target_end=data["target_end"],
+                circular=data["circular"],
+                name=data["name"],
+                tm_min=data["tm_min"],
+                tm_max=data["tm_max"],
+                margin=data["margin"],
+                read_length=data["read_length"],
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        return Response({
+            "primers": [
+                {
+                    "name": p.name,
+                    "sequence": p.sequence,
+                    "length": p.length,
+                    "start": p.start,
+                    "direction": p.direction,
+                    "tm": p.tm,
+                    "gc": p.gc,
+                    "reads_from": p.reads_from,
+                    "reads_to": p.reads_to,
+                }
+                for p in result.primers
+            ],
+            "rows": result.as_rows,
+            "target_start": result.target_start,
+            "target_end": result.target_end,
+            "gaps": result.gaps,
+            "covers_target": result.covers_target,
+            "warnings": result.warnings,
+        })
+
+
+def _difference_payload(d) -> dict:
+    return {
+        "kind": d.kind,
+        "position": d.position,
+        "expected": d.expected,
+        "found": d.found,
+        "residue": d.residue,
+        "from_residue": d.from_residue,
+        "to_residue": d.to_residue,
+        "silent": d.silent,
+        "description": d.description,
+        # None when the read came as letters. False means the trace does not
+        # support it — noise, not a mutation.
+        "quality": d.quality,
+        "confident": d.confident,
+        "read_index": d.read_index,
+    }
+
+
+def _read_payload(r) -> dict:
+    return {
+        "name": r.name,
+        "length": r.length,
+        "start": r.start,
+        "end": r.end,
+        "covered": r.covered,
+        "reverse_complemented": r.reverse_complemented,
+        "identity": r.identity,
+        "matched": r.matched,
+        "difference_count": len(r.differences),
+        "is_clean": r.is_clean,
+        "warnings": r.warnings,
+        "mean_quality": r.mean_quality,
+        "trimmed_start": r.trimmed_start,
+        "trimmed_end": r.trimmed_end,
+    }
+
+
+class TraceVerifyView(APIView):
+    """POST /api/design/verify/traces/ — the reads, with their peaks.
+
+    The same comparison as `/verify/`, except the reads arrive as .ab1 files.
+    That buys two things the letters cannot give: the ends are trimmed by
+    quality rather than by a fixed count, and every difference is returned
+    with the confidence of the base that produced it — plus the slice of
+    trace around it, so the drawing can show the peak that was called.
+    """
+
+    throttle_scope = "design"
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        serializer = TraceUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        traces, summaries = {}, []
+        for upload in data["traces"]:
+            name = upload.name or f"trace {len(traces) + 1}"
+            try:
+                trace = read_ab1(upload.read(), name=name)
+            except SequenceError as error:
+                return _bad_request(error)
+            traces[name] = trace
+            s = summarise(trace, data["trim_quality"])
+            summaries.append({
+                "name": s.name, "length": s.length,
+                "mean_quality": s.mean_quality,
+                "trim_start": s.trim_start, "trim_stop": s.trim_stop,
+                "trimmed_length": s.trimmed_length,
+                "high_quality_bases": s.high_quality_bases,
+                "sample_count": s.sample_count, "usable": s.usable,
+            })
+
+        region = None
+        if data.get("region_start") is not None and data.get("region_end") is not None:
+            region = (data["region_start"], data["region_end"])
+
+        try:
+            report = verify(
+                data["design"], {n: t.sequence for n, t in traces.items()},
+                circular=data["circular"],
+                coding_start=data.get("coding_start"),
+                coding_end=data.get("coding_end"),
+                region=region, traces=traces,
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        # The peaks around each difference, so it can be looked at rather
+        # than taken on trust. Only these windows travel, never whole traces.
+        windows = []
+        for read in report.reads:
+            trace = traces.get(read.name)
+            if trace is None:
+                continue
+            for d in read.differences:
+                if d.read_index is None:
+                    continue
+                windows.append({
+                    "read": read.name,
+                    "position": d.position,
+                    **trace.window(d.read_index),
+                })
+
+        preflight = verification_preflight(report)
+        return Response({
+            "design_length": report.design_length,
+            "region_start": region[0] if region else 0,
+            "region_end": region[1] if region else report.design_length,
+            "coverage": report.coverage,
+            "gaps": report.gaps,
+            "fully_covered": report.fully_covered,
+            "is_verified": report.is_verified,
+            "verification_state": verification_state(report),
+            "preflight": preflight.to_dict(),
+            "provenance": _provenance("sequence_verification", data, data["design"]),
+            "differences": [_difference_payload(d) for d in report.differences],
+            "reads": [_read_payload(r) for r in report.reads],
+            "traces": summaries,
+            "trace_windows": windows,
+            "warnings": report.warnings,
+        })
+
+
+class VerifyView(APIView):
+    """POST /api/design/verify/ — do the reads say you built the design?"""
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = VerifyRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        region = None
+        if data.get("region_start") is not None and data.get("region_end") is not None:
+            region = (data["region_start"], data["region_end"])
+
+        try:
+            report = verify(
+                data["design"], data["reads"],
+                circular=data["circular"], trim=data["trim"],
+                coding_start=data.get("coding_start"),
+                coding_end=data.get("coding_end"),
+                region=region,
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        preflight = verification_preflight(report)
+        return Response({
+            "design_length": report.design_length,
+            "region_start": region[0] if region else 0,
+            "region_end": region[1] if region else report.design_length,
+            "coverage": report.coverage,
+            "gaps": report.gaps,
+            "fully_covered": report.fully_covered,
+            # Verification requires agreement over the complete requested region.
+            "is_verified": report.is_verified,
+            "verification_state": verification_state(report),
+            "preflight": preflight.to_dict(),
+            "provenance": _provenance("sequence_verification", data, data["design"]),
+            "differences": [_difference_payload(d) for d in report.differences],
+            "reads": [
+                {
+                    "name": r.name,
+                    "length": r.length,
+                    "start": r.start,
+                    "end": r.end,
+                    "covered": r.covered,
+                    "reverse_complemented": r.reverse_complemented,
+                    "identity": r.identity,
+                    "matched": r.matched,
+                    "difference_count": len(r.differences),
+                    "is_clean": r.is_clean,
+                    "warnings": r.warnings,
+                }
+                for r in report.reads
+            ],
+            "warnings": report.warnings,
+        })
+
+
+class EnzymeCatalogueView(APIView):
+    """GET /api/design/enzymes/ — what the UI needs to build its dropdowns.
+
+    Public: it is a reference table, and the sign-up screen may want to show
+    it before anyone has an account.
+    """
+
+    permission_classes = (AllowAny,)
+
+    def get(self, request):
+        enzymes = []
+        for name in sorted(ALL_ENZYMES):
+            sequence, kind = overhang(name)
+            enzymes.append({
+                "name": name,
+                "recognition": ALL_ENZYMES[name]["recognition"],
+                # The set this lab keeps in the freezer, offered first.
+                "common": name in RESTRICTION_ENZYMES,
+                "overhang": sequence,
+                "overhang_type": kind,
+                # This is derived from the retained top-strand remainder.
+                # An ATG elsewhere in the recognition site may be cut away
+                # or followed by frame-shifting bases.
+                "supplies_start_codon": supplies_start_codon(name),
+            })
+        return Response({
+            "enzymes": enzymes,
+            "common_pairs": list(COMMON_ENZYME_PAIRS),
+            "cleavage_sites": [
+                {"name": name, "sequence": CLEAVAGE_SITES[name]} for name in CLEAVAGE_NAMES
+            ],
+        })
+
+
+class SSDDesignView(APIView):
+    """POST /api/design/ssd/ — one insert, two oligos."""
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = SSDRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = design_small_sequence(
+                serializer.validated_data["sequence"], **serializer.engine_kwargs
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        payload = _ssd_payload(result)
+        payload["provenance"] = _provenance(
+            "ssd", serializer.validated_data, result.forward,
+        )
+
+        if serializer.validated_data["save_as_project"]:
+            project = Project.objects.create(
+                user=request.user,
+                name=serializer.validated_data["name"],
+                module="ssd",
+                sequence=result.forward,
+                notes=f"{result.left_enzyme}/{result.right_enzyme}"
+                      + (f" · {result.cleavage_site}" if result.cleavage_site else ""),
+                data=payload,
+                provenance=payload["provenance"],
+            )
+            payload["project_id"] = project.id
+        return Response(payload)
+
+
+class MerzougAssemblyView(APIView):
+    """POST /api/design/assembly/ — one insert, an ordered set of oligo pairs."""
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = SaveableAssemblyRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        name = serializer.validated_data["name"]
+        try:
+            plan = design_merzoug_assembly(
+                serializer.validated_data["sequence"], **serializer.engine_kwargs
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        payload = _assembly_payload(plan, name)
+        payload["provenance"] = _provenance(
+            "merzoug_assembly", serializer.validated_data, plan.construct_forward,
+        )
+
+        if serializer.validated_data["save_as_project"]:
+            project = Project.objects.create(
+                user=request.user,
+                name=name,
+                module="merzoug_assembly",
+                sequence=plan.construct_forward,
+                notes=f"{plan.fragment_count} fragments · "
+                      f"{plan.oligo_count} oligos · "
+                      f"{plan.overhang_length} nt overhangs",
+                data=payload,
+                provenance=payload["provenance"],
+            )
+            payload["project_id"] = project.id
+        return Response(payload)
+
+
+def _run_clone(data: dict, engine_kwargs: dict):
+    """Build exactly one cloning result for preview, export and worksheet."""
+    if data.get("pre_digested"):
+        plan = None
+        ssd = None
+        insert_forward = data["sequence"]
+        insert_reverse = data["insert_reverse"]
+    elif data["fragment"]:
+        plan = design_merzoug_assembly(data["sequence"], **engine_kwargs)
+        ssd = plan.ssd
+        insert_forward = plan.construct_forward
+        insert_reverse = plan.construct_reverse
+    else:
+        plan = None
+        ssd = design_small_sequence(
+            data["sequence"],
+            **{key: value for key, value in engine_kwargs.items()
+               if key not in ("target_oligo_length", "overhang_length")},
+        )
+        insert_forward = ssd.forward
+        insert_reverse = ssd.reverse
+
+    vector_sequence, vector_name, annotations, spec = resolve_vector(data)
+    result = clone(
+        vector_sequence,
+        insert_forward,
+        insert_reverse=insert_reverse,
+        left_enzyme=data["left_enzyme"],
+        right_enzyme=data["right_enzyme"],
+        circular=data["vector_is_circular"],
+        name=data["name"],
+        vector_annotations=annotations,
+        vector_spec=spec,
+        orf_start=ssd.orf_start if ssd is not None else None,
+    )
+    return result, ssd, plan, vector_sequence, vector_name, spec
+
+
+class CloneView(APIView):
+    """POST /api/design/clone/ — design an insert and put it in a vector.
+
+    Returns the recombinant plasmid: sequence, junctions, the protein that
+    will be expressed, and the vector's annotations at their new coordinates.
+    A design that cannot be cloned comes back with `problems` filled in and
+    HTTP 200 — the user needs to see what does not fit, not an error page.
+    """
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = CloneRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        name = data["name"]
+
+        try:
+            result, ssd, plan, vector_sequence, vector_name, spec = _run_clone(
+                data, serializer.engine_kwargs,
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        payload = _clone_payload(result, ssd, plan)
+        payload["vector_name"] = vector_name
+        payload["vector"] = _vector_payload(spec, vector_sequence)
+        payload["provenance"] = _provenance(
+            "cloning", data, result.plasmid, vector=vector_sequence,
+        )
+
+        if data["save_as_project"] and result.is_clonable:
+            project = Project.objects.create(
+                user=request.user,
+                name=name,
+                module="cloning",
+                sequence=result.plasmid,
+                notes=f"{result.length} bp in {vector_name} · "
+                      f"{result.left_enzyme}/{result.right_enzyme}",
+                data=payload,
+                provenance=payload["provenance"],
+            )
+            payload["project_id"] = project.id
+        return Response(payload)
+
+
+def _attachment(text: str, filename: str, content_type: str) -> HttpResponse:
+    response = HttpResponse(text, content_type=content_type)
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def _today() -> str:
+    """GenBank's date field. Taken here rather than in the engine, so the
+    engine's own output stays byte-identical between runs."""
+    from django.utils import timezone
+
+    return timezone.now().strftime("%d-%b-%Y").upper()
+
+
+class CloneExportView(APIView):
+    """POST /api/design/clone/export/?filetype=genbank|fasta — as a file.
+
+    GenBank by default, because that is what carries the features across to
+    SnapGene, Benchling or ApE. A design that only exists inside G-Synth is
+    not finished.
+    """
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = CloneRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        name = data["name"]
+
+        try:
+            result, ssd, plan, vector_sequence, vector_name, _spec = _run_clone(
+                data, serializer.engine_kwargs,
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        safe = (name or "construct").replace(" ", "_")
+        if request.query_params.get("filetype") == "fasta":
+            return _attachment(
+                to_fasta(
+                    result.plasmid, name=safe,
+                    description=f"{result.length} bp in {vector_name}",
+                ),
+                f"{safe}.fasta", "text/plain; charset=utf-8",
+            )
+
+        payload = _clone_payload(result, ssd, plan)
+        return _attachment(
+            to_genbank(
+                result.plasmid,
+                name=safe,
+                description=f"{name} cloned into {vector_name} "
+                            f"({result.left_enzyme}/{result.right_enzyme})",
+                features=payload["annotations"],
+                circular=True,
+                date=_today(),
+            ),
+            f"{safe}.gb", "chemical/seq-na-genbank",
+        )
+
+
+class CloneWorksheetView(APIView):
+    """POST /api/design/clone/worksheet/ — printable release-to-bench record."""
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = CloneRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result, _ssd, _plan, vector_sequence, vector_name, _spec = _run_clone(
+                data, serializer.engine_kwargs,
+            )
+            if not result.is_clonable:
+                raise SequenceError(
+                    "A bench worksheet cannot be released for a blocked cloning design."
+                )
+            primers = design_sequencing_primers(
+                result.plasmid,
+                target_start=result.insert_start,
+                target_end=result.insert_end,
+                circular=True,
+                name=(data["name"] or "clone").replace(" ", "_")[:20],
+            )
+            reactions = ligation_series(
+                vector_length=result.backbone_length,
+                insert_length=result.insert_length,
+                ends=result.junctions[0].kind if result.junctions else "5'",
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        preflight = cloning_preflight(result)
+        provenance = _provenance(
+            "cloning", data, result.plasmid, vector=vector_sequence,
+        )
+        text = cloning_worksheet(
+            result,
+            vector_name=vector_name,
+            primer_set=primers,
+            ligation_plans=reactions,
+            preflight=preflight,
+            provenance=provenance,
+        )
+        safe = (data["name"] or "construct").replace(" ", "_")
+        return _attachment(
+            text, f"{safe}_bench_worksheet.txt", "text/plain; charset=utf-8",
+        )
+
+
+class ConstructExportView(APIView):
+    """POST /api/design/assembly/export/ — the construct, or its oligos.
+
+    `filetype=oligos` gives one FASTA entry per oligo, which is what a supplier
+    accepts as an upload. Retyping thirty oligo names into a web form is
+    where transcription errors come from.
+    """
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = SaveableAssemblyRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        name = serializer.validated_data["name"]
+        try:
+            plan = design_merzoug_assembly(
+                serializer.validated_data["sequence"], **serializer.engine_kwargs
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        safe = (name or "construct").replace(" ", "_")
+        wanted = request.query_params.get("filetype", "genbank")
+
+        if wanted == "oligos":
+            return _attachment(
+                oligos_to_fasta(
+                    [o.as_row for o in order_sheet(plan, construct_name=name)]
+                ),
+                f"{safe}_oligos.fasta", "text/plain; charset=utf-8",
+            )
+        if wanted == "fasta":
+            return _attachment(
+                to_fasta(plan.construct_forward, name=safe),
+                f"{safe}.fasta", "text/plain; charset=utf-8",
+            )
+
+        features = [
+            {"name": s.name, "type": "misc_feature", "start": s.start,
+             "end": s.end, "direction": 1}
+            for s in plan.ssd.segments
+        ] + [
+            {"name": f.name, "type": "misc_feature", "start": f.top_start,
+             "end": f.top_end, "direction": 1}
+            for f in plan.fragments
+        ]
+        return _attachment(
+            to_genbank(
+                plan.construct_forward, name=safe,
+                description=f"{name}: {plan.fragment_count} fragments, "
+                            f"{plan.oligo_count} oligos",
+                features=features, circular=False, date=_today(),
+            ),
+            f"{safe}.gb", "chemical/seq-na-genbank",
+        )
+
+
+class OrderSheetView(APIView):
+    """POST /api/design/assembly/order-sheet/ — the oligo list as CSV."""
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = SaveableAssemblyRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        name = serializer.validated_data["name"]
+        try:
+            plan = design_merzoug_assembly(
+                serializer.validated_data["sequence"], **serializer.engine_kwargs
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        csv_text = order_sheet_csv(plan, construct_name=name)
+        response = HttpResponse(csv_text, content_type="text/csv")
+        safe_name = name.replace(" ", "_") or "construct"
+        response["Content-Disposition"] = f'attachment; filename="{safe_name}_oligos.csv"'
+        return response
+
+
+class ProtocolView(APIView):
+    """POST /api/design/assembly/protocol/ — the bench protocol as text."""
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = SaveableAssemblyRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        name = serializer.validated_data["name"]
+        try:
+            plan = design_merzoug_assembly(
+                serializer.validated_data["sequence"], **serializer.engine_kwargs
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        text = bench_protocol(plan, construct_name=name)
+        response = HttpResponse(text, content_type="text/plain; charset=utf-8")
+        safe_name = name.replace(" ", "_") or "construct"
+        response["Content-Disposition"] = f'attachment; filename="{safe_name}_protocol.txt"'
+        return response
+
+
+def _primer_payload(primer) -> dict:
+    """One primer, with both Tm figures kept distinct.
+
+    `tm` is the annealing portion and is what the annealing temperature was
+    derived from; `tm_full` is the whole oligo and only applies once the tail
+    has been copied. Collapsing them into one number is what makes a tailed
+    primer look like it should anneal ten degrees hotter than it does.
+    """
+    return {
+        "name": primer.name,
+        "sequence": primer.sequence,
+        "tail": primer.tail,
+        "anneals": primer.anneals,
+        "direction": primer.direction,
+        "start": primer.start,
+        "end": primer.end,
+        "length": primer.length,
+        "anneal_length": primer.anneal_length,
+        "tm": primer.tm,
+        "tm_full": primer.tm_full,
+        "gc": primer.gc,
+        "enzyme": primer.enzyme,
+        "has_gc_clamp": primer.has_gc_clamp,
+        "warnings": list(primer.warnings),
+    }
+
+
+def _end_payload(end) -> dict:
+    return {"sequence": end.sequence, "strand": end.strand,
+            "side": end.side, "kind": end.kind}
+
+
+class PcrView(APIView):
+    """POST /api/design/pcr/ — design a PCR and simulate its product.
+
+    With no enzymes this is conventional PCR. Name a pair and each primer
+    gains a tail carrying a site, the product is cut, and the insert that
+    comes back is ready for `clone()`.
+    """
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = PcrRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result = design_pcr(
+                data["template"],
+                target_start=data["target_start"],
+                target_end=data["target_end"],
+                left_enzyme=data["left_enzyme"],
+                right_enzyme=data["right_enzyme"],
+                clamp=data["clamp"],
+                keep_frame=data["keep_frame"],
+                start_codon_mode=data["start_codon_mode"],
+                name=data["name"],
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        payload = {
+            "forward": _primer_payload(result.forward),
+            "reverse": _primer_payload(result.reverse),
+            "product": result.product,
+            "product_length": result.product_length,
+            "amplified_region": result.amplified_region,
+            "template_start": result.template_start,
+            "template_end": result.template_end,
+            "annealing_temperature": result.annealing_temperature,
+            "left_enzyme": result.left_enzyme,
+            "right_enzyme": result.right_enzyme,
+            "insert_orf_start": result.insert_orf_start,
+            "problems": result.problems,
+            "warnings": result.warnings,
+            "is_clean": result.is_clean,
+            "digest": None,
+            "preflight": pcr_preflight(
+                result, keep_frame=data["keep_frame"],
+            ).to_dict(),
+            "provenance": _provenance("pcr", data, result.product),
+        }
+        if result.digest is not None:
+            payload["digest"] = {
+                "top": result.digest.top,
+                "bottom": result.digest.bottom,
+                "length": result.digest.length,
+                "left_end": _end_payload(result.digest.left_end),
+                "right_end": _end_payload(result.digest.right_end),
+                "trimmed_left": result.digest.trimmed_left,
+                "trimmed_right": result.digest.trimmed_right,
+            }
+        return Response(payload)

@@ -387,4 +387,612 @@ def digest_linear(
 
     if min(left_top, left_bottom) >= min(right_top, right_bottom):
         raise SequenceError(
-            f"The {l
+            f"The {left_enzyme} site is not to the left of the {right_enzyme} "
+            f"site in this product. The enzymes are the wrong way round for "
+            f"these primers — swap them, or swap the tails."
+        )
+
+    # The two strands are cut at different columns, and that stagger *is* the
+    # overhang — so they span different stretches and have different lengths.
+    # Returning one as the plain reverse complement of the other would
+    # describe a blunt fragment whatever the enzymes actually leave, and
+    # `_observed_insert_ends` would then measure blunt ends off it.
+    top = working[left_top:right_top]
+    bottom = reverse_complement(working[left_bottom:right_bottom])
+
+    return Digest(
+        top=top,
+        bottom=bottom,
+        # Downstream of the left cut, upstream of the right one: the insert
+        # is the piece between them.
+        left_end=_end_at(working, left_top, left_bottom, side="downstream"),
+        right_end=_end_at(working, right_top, right_bottom, side="upstream"),
+        # Measured on the top strand, which is the one the insert's own
+        # coordinates are quoted in.
+        trimmed_left=left_top,
+        trimmed_right=len(working) - right_top,
+    )
+
+
+# ── Ligation ────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class Junction:
+    """One of the two seams between vector and insert."""
+
+    name: str
+    enzyme: str
+    overhang: str
+    kind: str                 #: 5', 3' or blunt
+    position: int             #: in the recombinant plasmid, 0-based
+    context: str              #: sequence either side, for eyeballing
+    site_regenerated: bool    #: whether the enzyme can cut here again
+
+
+@dataclass(frozen=True)
+class TagOutcome:
+    """Whether one of the vector's tags ends up on the protein.
+
+    Answered by looking at the translated product rather than by a rule
+    about the enzyme, because the answer depends on the reading frame and on
+    whether the insert stops — and because a lab's own copy of a vector may
+    not place its tags where the catalogue says.
+    """
+
+    name: str
+    end: str            #: "N" or "C", where the vector places it
+    present: bool
+    position: int | None = None   #: residue index in the protein, 1-based
+    note: str = ""
+
+
+@dataclass
+class CloningResult:
+    """The plasmid you get, and why you should believe it."""
+
+    plasmid: str                       #: recombinant top strand, circular
+    name: str
+    insert_start: int                  #: in the plasmid, 0-based
+    insert_end: int
+    backbone_length: int
+    removed_length: int
+    left_enzyme: str
+    right_enzyme: str
+    junctions: list[Junction] = field(default_factory=list)
+    annotations: list[dict] = field(default_factory=list)
+    protein: str = ""
+    #: True when the insert reads on the minus strand of the vector's own
+    #: numbering, which is how every pET expression cassette is arranged.
+    reversed_insert: bool = False
+    tags: list[TagOutcome] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    problems: list[str] = field(default_factory=list)
+
+    @property
+    def length(self) -> int:
+        return len(self.plasmid)
+
+    @property
+    def gc(self) -> float:
+        return round(gc_content(self.plasmid), 1)
+
+    @property
+    def insert_length(self) -> int:
+        return self.insert_end - self.insert_start
+
+    @property
+    def is_clonable(self) -> bool:
+        """Empty problems means these two molecules really do join."""
+        return not self.problems
+
+
+def _flip_annotations(annotations: list[dict], length: int) -> list[dict]:
+    """Mirror features onto the reverse complement of a circular sequence."""
+    flipped: list[dict] = []
+    for feature in annotations:
+        entry = dict(feature)
+        start, end = int(feature.get("start", 0)), int(feature.get("end", 0))
+        entry["start"] = length - end
+        entry["end"] = length - start
+        entry["direction"] = -int(feature.get("direction", 1) or 1)
+        flipped.append(entry)
+    return flipped
+
+
+def _remap_annotations(
+    annotations: list[dict], backbone: Backbone, plasmid_length: int
+) -> list[dict]:
+    """Move the vector's features onto the recombinant plasmid.
+
+    Features inside the removed stretch are dropped — they are not in the
+    molecule any more, and drawing them would be a lie. Features that merely
+    straddle a junction are kept and flagged, because a truncated promoter is
+    something the user needs to see rather than have silently deleted.
+
+    When the vector was flipped so the insert reads left to right, the
+    features are mirrored first — otherwise every one of them lands on the
+    wrong side of the plasmid, which looks like a plausible map and is not.
+    """
+    if not backbone.circular_source:
+        return []
+
+    if backbone.reversed_insert:
+        annotations = _flip_annotations(
+            annotations, backbone.length + backbone.removed_length
+        )
+
+    moved: list[dict] = []
+    span = backbone.length
+    for feature in annotations:
+        start = int(feature.get("start", 0))
+        end = int(feature.get("end", 0))
+        # Position relative to the backbone's own start.
+        new_start = (start - backbone.vector_start) % (span + backbone.removed_length)
+        new_end = new_start + (end - start)
+
+        if new_start >= span:
+            continue                       # entirely in the removed stretch
+        entry = dict(feature)
+        entry["start"] = new_start
+        if new_end > span:
+            entry["end"] = span
+            entry["truncated"] = True
+        else:
+            entry["end"] = new_end
+        entry["end"] = min(entry["end"], plasmid_length)
+        moved.append(entry)
+    return moved
+
+
+def clone(
+    vector: str,
+    insert: str,
+    *,
+    left_enzyme: str,
+    right_enzyme: str,
+    circular: bool = True,
+    name: str = "recombinant",
+    vector_annotations: list[dict] | None = None,
+    vector_spec: VectorSpec | None = None,
+    insert_reverse: str | None = None,
+    insert_left_end: End | None = None,
+    insert_right_end: End | None = None,
+    orf_start: int | None = None,
+) -> CloningResult:
+    """Ligate an insert into a digested vector.
+
+    Args:
+        insert: the insert's top strand, including the bases the enzymes
+            leave behind. For a G-Synth design this is `SSDResult.forward`
+            or `AssemblyPlan.construct_forward` — they are built to fit.
+        insert_reverse: the insert's reverse strand, 5'→3'. Supply it
+            whenever you have it: both sticky ends can then be read off the
+            actual duplex rather than assumed from the enzyme, which is the
+            only way the compatibility check catches anything.
+        insert_left_end / insert_right_end: the ends, when they are already
+            known. Overrides both of the above.
+        vector_spec: the catalogue entry for this vector, if it is a known
+            one. Its declared tags are then checked against the protein that
+            comes out, which is the only way to answer whether a C-terminal
+            His-tag actually appears on this particular construct.
+        orf_start: where the reading frame starts inside the insert, so the
+            protein can be translated and the junction frame checked.
+
+    Returns:
+        A :class:`CloningResult`. Check `is_clonable` before believing the
+        plasmid: incompatible ends produce problems rather than an exception,
+        so the caller can show the user what does not fit.
+    """
+    insert_top = validate_dna(insert, field="insert")
+    backbone = linearise(
+        vector, left_enzyme=left_enzyme, right_enzyme=right_enzyme, circular=circular
+    )
+
+    problems: list[str] = []
+    warnings: list[str] = []
+
+    if insert_left_end and insert_right_end:
+        left, right = insert_left_end, insert_right_end
+    elif insert_reverse:
+        left, right = _observed_insert_ends(insert_top, insert_reverse, left_enzyme)
+        mismatches = insert_duplex_mismatches(insert_top, insert_reverse, left_enzyme)
+        if mismatches:
+            preview = ", ".join(str(position + 1) for position in mismatches[:5])
+            suffix = "…" if len(mismatches) > 5 else ""
+            problems.append(
+                f"The two supplied insert strands do not pair at {len(mismatches)} "
+                f"position(s): {preview}{suffix}."
+            )
+    else:
+        # Only the forward strand was supplied, so half the geometry is
+        # unobservable: at a 5' cut the left overhang is on the top strand and
+        # the right one is not. Check what can be checked and say so.
+        left = _expected_insert_end(left_enzyme, side="left")
+        right = _expected_insert_end(right_enzyme, side="right")
+        for end, enzyme, side in ((left, left_enzyme, "left"), (right, right_enzyme, "right")):
+            if end.strand == "blunt":
+                continue
+            visible = insert_top[: len(end.sequence)] if side == "left" \
+                else insert_top[-len(end.sequence):]
+            if end.strand == "top" and visible != end.sequence:
+                problems.append(
+                    f"The insert's {side} end reads {visible} where "
+                    f"{enzyme} leaves {end.sequence}. This insert was not cut "
+                    f"with {enzyme}."
+                )
+        warnings.append(
+            "Only the forward strand was supplied, so one of the two ends was "
+            "assumed from the enzyme rather than read from the molecule. "
+            "Pass the reverse strand to check both."
+        )
+
+    if not backbone.right_end.anneals_to(left):
+        problems.append(
+            f"The insert's left end ({left.kind} {left.sequence or 'blunt'}) does "
+            f"not match the vector's {left_enzyme} end "
+            f"({backbone.right_end.kind} {backbone.right_end.sequence or 'blunt'})."
+        )
+    if not backbone.left_end.anneals_to(right):
+        problems.append(
+            f"The insert's right end ({right.kind} {right.sequence or 'blunt'}) "
+            f"does not match the vector's {right_enzyme} end "
+            f"({backbone.left_end.kind} {backbone.left_end.sequence or 'blunt'})."
+        )
+
+    # The plasmid, read from the backbone's start so the vector keeps its
+    # familiar layout: backbone, then insert, then round to the beginning.
+    plasmid = backbone.top + insert_top
+    insert_start = backbone.length
+    insert_end = insert_start + len(insert_top)
+
+    # The backbone runs from the right-hand enzyme's cut round to the
+    # left-hand one's, so the seam where the insert begins is the *left*
+    # enzyme's, and the seam where it ends is the right enzyme's.
+    junctions = [
+        _junction(
+            "vector → insert", left_enzyme, backbone.right_end,
+            plasmid, insert_start,
+        ),
+        _junction(
+            "insert → vector", right_enzyme, backbone.left_end,
+            plasmid, insert_end % len(plasmid),
+        ),
+    ]
+
+    for enzyme in (left_enzyme, right_enzyme):
+        internal = [
+            p for p in find_sites(insert_top, enzyme, circular=False)
+        ]
+        if internal:
+            warnings.append(
+                f"The insert contains {len(internal)} internal {enzyme} site"
+                f"{'s' if len(internal) > 1 else ''}. Merzoug assembly never "
+                f"digests the insert, so the build is unaffected — but a "
+                f"diagnostic digest with {enzyme} will cut inside the gene."
+            )
+
+    protein = ""
+    if orf_start is not None and 0 <= orf_start < len(insert_top):
+        # Read the frame in the *plasmid*, not in the insert. A C-terminal
+        # fusion runs off the end of the insert and into the vector, so
+        # stopping at the insert's last base would report a protein nobody
+        # will ever purify.
+        protein, stop_at = _translate_in_plasmid(plasmid, insert_start + orf_start)
+
+        if protein and protein[0] != "M":
+            warnings.append(
+                "The reading frame does not start with a methionine — check "
+                "the ATG and the left-hand enzyme."
+            )
+
+        # Distances are measured along the frame, not in plasmid coordinates:
+        # the frame can run off the end of the sequence and round to the
+        # start, where a raw subtraction produces a negative residue number.
+        frame_start = insert_start + orf_start
+        to_insert_end = insert_end - frame_start
+        last_two_codons = max(0, to_insert_end - 6)
+
+        if stop_at is None:
+            warnings.append(
+                "No stop codon was found in frame anywhere in the plasmid. "
+                "The construct would read around the whole molecule."
+            )
+        else:
+            reached = (stop_at - frame_start) % len(plasmid)
+            if reached < last_two_codons:
+                problems.append(
+                    f"A stop codon appears at residue {reached // 3 + 1}, "
+                    f"{to_insert_end - reached} nt before the end of the "
+                    f"insert. The protein would be truncated there."
+                )
+            elif reached < to_insert_end:
+                # The gene's own terminus. Worth saying out loud: it means a
+                # C-terminal tag offered by the vector is never translated.
+                warnings.append(
+                    "The insert supplies its own stop codon, so nothing "
+                    "downstream in the vector is translated — a C-terminal "
+                    "tag on the vector would not appear on the protein."
+                )
+            elif reached > to_insert_end:
+                extra = reached - to_insert_end
+                residues = extra // 3
+                warnings.append(
+                    f"The reading frame runs {extra} nt past the insert into "
+                    f"the vector before stopping, adding "
+                    f"{residues} vector-encoded residue"
+                    f"{'' if residues == 1 else 's'} to your protein."
+                )
+
+    # Residues the insert encodes, so a vector tag is only credited when it
+    # sits in the stretch the vector actually contributed.
+    frame_start = insert_start + (orf_start or 0)
+    insert_residues = max(0, (insert_end - frame_start)) // 3
+    upstream_residues = max(0, (frame_start - insert_start)) // 3 if orf_start else 0
+
+    tags = (
+        _tag_outcomes(
+            protein, vector_spec,
+            insert_residues=insert_residues,
+            upstream_residues=upstream_residues,
+        )
+        if vector_spec else []
+    )
+    warnings.extend(_tag_warnings(tags, vector_spec, protein))
+
+    return CloningResult(
+        plasmid=plasmid,
+        name=name,
+        insert_start=insert_start,
+        insert_end=insert_end,
+        backbone_length=backbone.length,
+        removed_length=backbone.removed_length,
+        left_enzyme=left_enzyme,
+        right_enzyme=right_enzyme,
+        junctions=junctions,
+        annotations=_remap_annotations(
+            vector_annotations or [], backbone, len(plasmid)
+        ),
+        protein=protein,
+        reversed_insert=backbone.reversed_insert,
+        tags=tags,
+        warnings=warnings,
+        problems=problems,
+    )
+
+
+def _tag_outcomes(
+    protein: str, spec: VectorSpec, *, insert_residues: int, upstream_residues: int,
+) -> list[TagOutcome]:
+    """Which of the vector's tags actually made it onto the protein.
+
+    Read from the translated product, so the answer accounts for the reading
+    frame, for an insert that stops early, and for a lab copy whose tags are
+    not quite where the catalogue says.
+
+    **Where the match has to be** is the load-bearing part. Searching the
+    whole protein finds the *insert's* own 6×His and reports it as the
+    vector's C-terminal tag — a construct that will not bind the column,
+    described as one that will. A vector tag counts only if it lies in the
+    stretch the vector actually contributed: after the insert for a
+    C-terminal tag, before it for an N-terminal one.
+    """
+    outcomes: list[TagOutcome] = []
+    for tag in spec.tags:
+        region = (
+            protein[insert_residues:] if tag.end == "C" else protein[:upstream_residues]
+        )
+        offset = insert_residues if tag.end == "C" else 0
+        at = region.find(tag.motif) if region else -1
+        outcomes.append(
+            TagOutcome(
+                name=tag.name,
+                end=tag.end,
+                present=at >= 0,
+                position=offset + at + 1 if at >= 0 else None,
+                note=tag.note,
+            )
+        )
+    return outcomes
+
+
+def _tag_warnings(
+    outcomes: list[TagOutcome], spec: VectorSpec | None, protein: str,
+) -> list[str]:
+    """Say what the vector did and did not contribute, and where it collides.
+
+    Two things routinely surprise people. A C-terminal tag that is silently
+    absent because the insert carries its own stop codon or leaves the frame
+    — the construct looks right and does not bind the column. And a vector
+    tag that duplicates one the G-Synth cassette already added, giving a
+    protein with two His-tags and two protease sites.
+    """
+    if spec is None:
+        return []
+
+    messages: list[str] = []
+    for outcome in outcomes:
+        end = "C-terminal" if outcome.end == "C" else "N-terminal"
+        motif = _motif_of(spec, outcome.name)
+        if not outcome.present:
+            messages.append(
+                f"{spec.name}'s {end} {outcome.name} is not on this protein."
+                + (f" {outcome.note}" if outcome.note else "")
+            )
+        elif motif and protein.count(motif) > 1:
+            messages.append(
+                f"{outcome.name} appears more than once: the insert already "
+                f"carries one and {spec.name} adds its own. Turn the cassette "
+                f"option off, or use a vector that does not supply it."
+            )
+    return messages
+
+
+def _motif_of(spec: VectorSpec, name: str) -> str:
+    for tag in spec.tags:
+        if tag.name == name:
+            return tag.motif
+    return ""
+
+
+def _translate_in_plasmid(plasmid: str, start: int) -> tuple[str, int | None]:
+    """Translate from `start`, around the circle, to the first in-frame stop.
+
+    Returns the protein (stop excluded) and the plasmid position where the
+    stop codon begins, or None when the frame reads the whole way round
+    without one.
+    """
+    length = len(plasmid)
+    residues: list[str] = []
+    for step in range(length // 3):
+        at = (start + 3 * step) % length
+        codon = "".join(plasmid[(at + i) % length] for i in range(3))
+        if codon in STOP_CODONS:
+            return "".join(residues), at
+        residues.append(_CODONS.get(codon, "X"))
+    return "".join(residues), None
+
+
+def _expected_insert_end(enzyme: str, *, side: str) -> End:
+    """The sticky end an insert cut with this enzyme *should* present.
+
+    The sequence comes from the enzyme rather than from the insert's top
+    strand, because only one of the two ends has its overhang on that strand.
+    At the right-hand end of a 5'-overhang cut the single-stranded bases live
+    on the reverse oligo; reading them off the forward strand returns four
+    unrelated bases that look like a plausible overhang and are not one.
+
+    This is what the insert is *expected* to have. `_observed_insert_ends`
+    reads what it actually has.
+    """
+    sequence, kind = enzyme_overhang(enzyme)
+    if kind == "blunt":
+        return End("", "blunt", side)
+
+    # The insert is the downstream piece of the left-hand cut and the
+    # upstream piece of the right-hand one.
+    if side == "left":
+        return End(sequence, "top" if kind == "5'" else "bottom", "left")
+    return End(sequence, "bottom" if kind == "5'" else "top", "right")
+
+
+def _observed_insert_ends(
+    top: str, reverse: str, left_enzyme: str,
+) -> tuple[End, End]:
+    """Read both ends off the actual duplex the two oligos form.
+
+    This is the only way the end check means anything: derived ends always
+    agree with the enzyme they were derived from, so comparing them to the
+    backbone proves nothing. Reading the molecule catches an insert that was
+    built for a different pair, or truncated, or pasted in by hand.
+
+    The stagger between the strands comes from the left-hand enzyme's own cut
+    geometry, and everything else follows from the two lengths.
+    """
+    info = ALL_ENZYMES[left_enzyme]
+    offset = int(info["cut_bottom"]) - int(info["cut_top"])  # type: ignore[arg-type]
+    bottom = reverse_complement(clean_dna(reverse))
+
+    if offset > 0:
+        left = End(top[:offset], "top", "left")
+    elif offset < 0:
+        left = End(bottom[:-offset], "bottom", "left")
+    else:
+        left = End("", "blunt", "left")
+
+    tail = (offset + len(bottom)) - len(top)
+    if tail > 0:
+        right = End(bottom[-tail:], "bottom", "right")
+    elif tail < 0:
+        right = End(top[tail:], "top", "right")
+    else:
+        right = End("", "blunt", "right")
+
+    return left, right
+
+
+def insert_duplex_mismatches(top: str, reverse: str, left_enzyme: str) -> list[int]:
+    """Top-strand coordinates where the two supplied insert strands disagree.
+
+    Terminal overhangs are intentionally unpaired and excluded. Alignment is
+    determined from the observed left-enzyme cut offset, the same geometry
+    used to read the insert ends.
+    """
+    top_clean = clean_dna(top)
+    bottom_sense = reverse_complement(clean_dna(reverse))
+    info = ALL_ENZYMES[left_enzyme]
+    offset = int(info["cut_bottom"]) - int(info["cut_top"])  # type: ignore[arg-type]
+    overlap_start = max(0, offset)
+    overlap_end = min(len(top_clean), offset + len(bottom_sense))
+    return [
+        position
+        for position in range(overlap_start, overlap_end)
+        if top_clean[position] != bottom_sense[position - offset]
+    ]
+
+
+def _junction(
+    name: str, enzyme: str, end: End, plasmid: str, position: int,
+) -> Junction:
+    """One seam, with enough sequence either side to read it."""
+    window = 12
+    length = len(plasmid)
+    context = "".join(
+        plasmid[(position + offset) % length]
+        for offset in range(-window, window)
+    )
+    site: str = ALL_ENZYMES[enzyme]["recognition"]  # type: ignore[index]
+    return Junction(
+        name=name,
+        enzyme=enzyme,
+        overhang=end.sequence,
+        kind=end.kind,
+        position=position,
+        context=context,
+        # A regenerated site means the construct can be cut back out, which
+        # is how most people verify a clone.
+        site_regenerated=site in context or reverse_complement(site) in context,
+    )
+
+
+def open_reading_frames(
+    sequence: str, *, minimum_codons: int = 30, circular: bool = True,
+) -> list[dict]:
+    """Every ORF on the top strand, longest first.
+
+    Used to sanity-check a recombinant plasmid: the insert's ORF should be
+    there, at the length the design predicted. On a circular molecule the
+    scan wraps — a gene cloned near the end of the sequence still has its
+    stop codon, it is simply on the other side of position 0, and a linear
+    scan would report the construct as having no ORF at all.
+    """
+    seq = clean_dna(sequence)
+    if len(seq) < 6:
+        return []
+
+    # Scanning a doubled sequence lets a frame run past the end and round to
+    # the start; anything beginning past the original length is a repeat.
+    scan = seq + seq if circular else seq
+    found: list[dict] = []
+
+    for frame in range(3):
+        start = None
+        for i in range(frame, len(scan) - 2, 3):
+            codon = scan[i : i + 3]
+            if start is None and codon == "ATG":
+                if i >= len(seq):
+                    break              # past the join: the rest is a repeat
+                start = i
+            elif start is not None and codon in STOP_CODONS:
+                codons = (i + 3 - start) // 3
+                if codons >= minimum_codons:
+                    found.append({
+                        "start": start,
+                        "end": (i + 3) % len(seq) if circular else i + 3,
+                        "frame": frame,
+                        "codons": codons,
+                        "wraps": circular and i + 3 > len(seq),
+                        "protein": translate(scan[start : i + 3]),
+                    })
+                start = None
+    return sorted(found, key=lambda orf: orf["codons"], reverse=True)

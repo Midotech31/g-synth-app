@@ -413,4 +413,271 @@ export default function Verify() {
                       <>
                         <strong>Fully verified.</strong> The complete requested
                         region is covered and agrees with the design.
-              
+                      </>
+                    ) : report.verification_state === "differences_detected" ? (
+                      <>
+                        <strong>{report.differences.length} difference
+                        {report.differences.length === 1 ? "" : "s"}.</strong>{" "}
+                        The covered clone sequence is not what was designed.
+                      </>
+                    ) : report.verification_state === "reads_unplaced" ? (
+                      <><strong>Reads could not be placed.</strong> Check that these reads belong to this construct, then review orientation and trimming.</>
+                    ) : report.verification_state === "not_checked" ? (
+                      <><strong>Not checked.</strong> No usable sequencing evidence was available.</>
+                    ) : (
+                      <>
+                        <strong>Partial match.</strong> The reads agree
+                        wherever they align, but cover only {report.coverage}%
+                        of the requested region. Sequence the remaining gap
+                        {report.gaps.length === 1 ? "" : "s"} before accepting
+                        this clone.
+                      </>
+                    )}
+                  </div>
+
+                  <PreflightPanel report={report.preflight} />
+
+                  {report.differences.length > 0 && (
+                    <div className="card">
+                      <div className="card-head"><h2>What differs</h2></div>
+                      <div className="card-body">
+                        <ul className="difference-list">
+                          {report.differences.map((d) => {
+                            const peaks = report.trace_windows?.find(
+                              (w) => w.position === d.position,
+                            );
+                            return (
+                              <li key={`${d.kind}-${d.position}-${d.found}`}
+                                  className={
+                                    (d.silent ? "silent " : "") +
+                                    (d.confident === false ? "unconfident" : "")
+                                  }>
+                                {d.description}
+                                {peaks && <TraceView window={peaks} />}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                        <p className="note" style={{ marginTop: "0.6rem" }}>
+                          Positions are in the construct, counting from 1.
+                          Silent changes leave the protein alone.
+                          {report.differences.some((d) => d.confident === false) && (
+                            <>
+                              {" "}Differences marked Q&lt;20 sit on a peak the
+                              basecaller was not sure of — read those again
+                              before acting on them.
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="card">
+                    <div className="card-head">
+                      <h2 style={{ flex: 1 }}>Reads</h2>
+                      <span className="label">
+                        {report.coverage}% covered
+                        {report.fully_covered ? "" : ` · ${report.gaps.length} gap(s)`}
+                      </span>
+                    </div>
+                    <div className="table-scroll">
+                      <div className="card-body" style={{ paddingBottom: 0 }}>
+                        <CoverageMap report={report} />
+                      </div>
+                      <table className="data">
+                        <thead>
+                          <tr>
+                            <th>Read</th><th>Length</th><th>Aligned to</th>
+                            <th>Strand</th><th>Identity</th><th>Differences</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {report.reads.map((r) => (
+                            <tr key={r.name}>
+                              <td className="mono">{r.name}</td>
+                              <td className="num">{r.length}</td>
+                              <td className="num">{r.start + 1}–{r.end}</td>
+                              <td>{r.reverse_complemented ? "reverse" : "forward"}</td>
+                              <td className="num">{r.identity}%</td>
+                              <td className="num">{r.difference_count}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {report.warnings.length > 0 && (
+                    <div className="card">
+                      <div className="card-head"><h2>Notes</h2></div>
+                      <div className="card-body">
+                        <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--ink-soft)" }}>
+                          {report.warnings.map((w) => (
+                            <li key={w} style={{ marginBottom: "0.3rem", lineHeight: 1.5 }}>{w}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {report.reads.some((read) => read.warnings.length > 0) && (
+                    <div className="card">
+                      <div className="card-head"><h2>Read quality notes</h2></div>
+                      <div className="card-body">
+                        <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--ink-soft)" }}>
+                          {report.reads.flatMap((read) =>
+                            read.warnings.map((warning) => (
+                              <li key={`${read.name}-${warning}`} style={{ marginBottom: "0.3rem", lineHeight: 1.5 }}>
+                                <strong>{read.name}:</strong> {warning}
+                              </li>
+                            )),
+                          )}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="card">
+                  <div className="empty">
+                    <Icon name="microscope" size={38} className="glyph" />
+                    <strong>No reads compared yet</strong>
+                    <span>
+                      Pick a construct and paste what the sequencing facility
+                      sent back. Either orientation is fine.
+                    </span>
+                  </div>
+                </div>
+              )
+            )}
+
+            {tab === "primers" && (
+              primers ? (
+                <>
+                  <div className={`notice ${primers.covers_target ? "notice-ok" : "notice-error"}`}>
+                    {primers.covers_target ? (
+                      <>
+                        <strong>{primers.primers.length} primers.</strong> Together
+                        they read the whole insert, on both strands.
+                      </>
+                    ) : (
+                      <><strong>Incomplete.</strong> {primers.warnings.join(" ")}</>
+                    )}
+                  </div>
+                  <div className="card">
+                    <div className="card-head">
+                      <h2 style={{ flex: 1 }}>Primers to order</h2>
+                      <button className="btn btn-outline"
+                              onClick={() => void exportPrimers("csv")}>
+                        CSV
+                      </button>
+                      <button className="btn btn-outline"
+                              onClick={() => void exportPrimers("fasta")}
+                              title="For suppliers that take a FASTA upload">
+                        FASTA
+                      </button>
+                    </div>
+                    <div className="table-scroll">
+                      <table className="data">
+                        <thead>
+                          <tr>
+                            <th>Name</th><th>Sequence (5'→3')</th><th>Length</th>
+                            <th>Tm</th><th>GC</th><th>Reads</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {primers.primers.map((p) => (
+                            <tr key={p.name}>
+                              <td className="mono">{p.name}</td>
+                              <td className="mono seq-cell">{p.sequence}</td>
+                              <td className="num">{p.length}</td>
+                              <td className="num">{p.tm}</td>
+                              <td className="num">{p.gc}</td>
+                              <td className="num">
+                                <Icon name={p.direction === 1 ? "arrowRight" : "arrowLeft"} size={14}
+                                      title={p.direction === 1 ? "forward" : "reverse"} />{" "}
+                                {p.reads_from + 1}–{p.reads_to}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="card-body" style={{ paddingTop: 0 }}>
+                      <p className="note" style={{ margin: 0 }}>
+                        Each primer sits back from what it reads: the first
+                        fifty bases after a sequencing primer are noise.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="card">
+                  <div className="empty">
+                    <Icon name="target" size={38} className="glyph" />
+                    <strong>No primers yet</strong>
+                    <span>Pick a construct, then design primers that read its insert.</span>
+                  </div>
+                </div>
+              )
+            )}
+
+            {tab === "ligation" && (
+              ligation ? (
+                <>
+                  <div className="notice notice-info">
+                    Set up all three. Nobody runs one ligation — they run a
+                    small series and pick whichever plate gives colonies.
+                  </div>
+                  <div className="card">
+                    <div className="card-head"><h2>Insert : vector</h2></div>
+                    <div className="table-scroll">
+                      <table className="data">
+                        <thead>
+                          <tr>
+                            <th>Ratio</th><th>Vector</th><th>Insert</th>
+                            <th>Vector</th><th>Insert</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ligation.map((r) => (
+                            <tr key={r.ratio}>
+                              <td className="mono">{r.ratio}:1</td>
+                              <td className="num">{r.vector_ng} ng</td>
+                              <td className="num">{r.insert_ng} ng</td>
+                              <td className="num">{r.vector_fmol} fmol</td>
+                              <td className="num">{r.insert_fmol} fmol</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="card-body" style={{ paddingTop: 0 }}>
+                      <p className="note" style={{ margin: 0 }}>
+                        The ratio is molar, the amounts are mass. At equal
+                        mass a 5.4 kb vector outnumbers a 150 bp insert
+                        thirty-six to one — which is why that plate is empty.
+                      </p>
+                      {ligation[0]?.warnings.map((w) => (
+                        <p key={w} className="note vector-note" style={{ marginTop: "0.5rem" }}>{w}</p>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="card">
+                  <div className="empty">
+                    <Icon name="scales" size={38} className="glyph" />
+                    <strong>No amounts yet</strong>
+                    <span>Pick a construct to work out how much insert to add.</span>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

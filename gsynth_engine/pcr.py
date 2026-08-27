@@ -430,4 +430,196 @@ def design_pcr(
     effective_start = target_start
     left_site = _site_of(left_enzyme) if left_enzyme is not None else ""
     supplies_atg = (
-        supplies_start_codon(left_
+        supplies_start_codon(left_enzyme) if left_enzyme is not None else False
+    )
+    template_supplies_atg = working[target_start:stop].startswith("ATG")
+    if supplies_atg and template_supplies_atg and start_codon_mode == "use_site":
+        effective_start += 3
+        warnings.append(
+            f"The template's first ATG was omitted because {left_enzyme}'s "
+            "restriction site supplies the start codon. The expressed "
+            "protein therefore begins with one methionine."
+        )
+
+    # ── The parts that bind template ────────────────────────────────────
+    fwd_anneal, fwd_lo, fwd_hi = _pick_anneal(working, start=effective_start, direction=1)
+    rev_anneal, rev_lo, rev_hi = _pick_anneal(working, start=stop, direction=-1)
+
+    if fwd_hi > rev_lo:
+        raise SequenceError(
+            "The region to amplify is too short for two primers that do not "
+            f"overlap: {stop - target_start} bases were asked for, and "
+            f"{2 * MIN_ANNEAL} is the minimum."
+        )
+
+    region = working[effective_start:stop]
+
+    # ── The tails ───────────────────────────────────────────────────────
+    fwd_tail = rev_tail = ""
+    if left_enzyme is not None and right_enzyme is not None:
+        right_site = _site_of(right_enzyme)
+        clamp_bases = _clamp_of(clamp)
+
+        fwd_tail = clamp_bases + left_site
+        rev_tail = clamp_bases + reverse_complement(right_site)
+
+        # Where the digest will cut, so frame can be measured on the insert
+        # rather than on the product — they differ by the stub that falls off.
+        left_cut_offset = clamp + int(ALL_ENZYMES[left_enzyme]["cut_top"])  # type: ignore[arg-type]
+        if supplies_atg and template_supplies_atg and start_codon_mode == "keep_both":
+            warnings.append(
+                f"{left_enzyme}'s site carries its own ATG and the region "
+                f"already begins with one, so the protein starts Met-Met. "
+                f"Drop the region's first codon if the extra residue is "
+                f"unwanted — with {left_enzyme} the site supplies the start."
+            )
+
+        if keep_frame and not supplies_atg:
+            # The vector supplies the ATG upstream, so the region must sit a
+            # whole number of codons from the insert's own 5' end. Anchoring
+            # on the product's end instead would be out by the stub the
+            # digest removes.
+            padding = (len(fwd_tail) - left_cut_offset) % 3
+            padding = (3 - padding) % 3
+            fwd_tail += "A" * padding
+            if padding:
+                warnings.append(
+                    f"{padding} base(s) were added between the {left_enzyme} "
+                    f"site and the insert to keep the vector's reading frame. "
+                    f"They are translated as part of the junction."
+                )
+
+        if clamp < DEFAULT_CLAMP:
+            warnings.append(
+                f"Only {clamp} clamp base(s) sit outside each site. Enzymes cut "
+                f"poorly at a fragment's end; {DEFAULT_CLAMP} is the usual "
+                f"minimum, and a digest that under-cuts looks like a ligation "
+                f"that failed."
+            )
+
+    forward_seq = fwd_tail + fwd_anneal
+    reverse_seq = rev_tail + rev_anneal
+
+    # ── The product ─────────────────────────────────────────────────────
+    # Top strand: the forward primer as written, the template between the
+    # primers' inner edges, then the reverse primer's complement. Built from
+    # the primers rather than assembled from the design, so that what is
+    # reported is what those two oligos would actually produce.
+    product = fwd_tail + region + reverse_complement(rev_tail)
+
+    # Validate the molecule that will actually be digested, not just the
+    # template region. Clamp/site and site/insert boundaries can create an
+    # overlapping recognition sequence even when the original gene is clean.
+    if left_enzyme is not None and right_enzyme is not None:
+        expected = {
+            left_enzyme: [clamp],
+            right_enzyme: [len(fwd_tail) + len(region)],
+        }
+        for enzyme in (left_enzyme, right_enzyme):
+            found = find_sites(product, enzyme, circular=False)
+            if found != expected[enzyme]:
+                wanted = expected[enzyme][0] + 1
+                observed = ", ".join(str(position + 1) for position in found) or "none"
+                problems.append(
+                    f"The complete PCR product has {enzyme} sites at {observed}; "
+                    f"only the intended tail site at position {wanted} is "
+                    "allowed. The enzyme cuts inside the amplified region, "
+                    "or a clamp/site junction created an overlapping site. "
+                    "Choose another enzyme or optimise the "
+                    "insert before ordering the primers."
+                )
+
+    fwd_warnings = _primer_warnings(fwd_anneal, label="forward")
+    rev_warnings = _primer_warnings(rev_anneal, label="reverse")
+
+    forward = PcrPrimer(
+        name=f"{name}_F", sequence=forward_seq, tail=fwd_tail, anneals=fwd_anneal,
+        direction=1, start=fwd_lo, end=fwd_hi,
+        tm=_tm(fwd_anneal), tm_full=_tm(forward_seq),
+        gc=round(gc_content(forward_seq), 1), enzyme=left_enzyme,
+        warnings=tuple(fwd_warnings),
+    )
+    reverse = PcrPrimer(
+        name=f"{name}_R", sequence=reverse_seq, tail=rev_tail, anneals=rev_anneal,
+        direction=-1, start=rev_lo, end=rev_hi,
+        tm=_tm(rev_anneal), tm_full=_tm(reverse_seq),
+        gc=round(gc_content(reverse_seq), 1), enzyme=right_enzyme,
+        warnings=tuple(rev_warnings),
+    )
+
+    warnings.extend(fwd_warnings)
+    warnings.extend(rev_warnings)
+
+    # Ta from the annealing portions, which is what binds in cycle one.
+    annealing_temperature = round(min(min(forward.tm, reverse.tm) - TA_OFFSET, MAX_TA), 1)
+
+    if abs(forward.tm - reverse.tm) > MAX_TM_DIFFERENCE:
+        warnings.append(
+            f"The two annealing regions differ by "
+            f"{abs(forward.tm - reverse.tm):.1f} °C ({forward.tm} and "
+            f"{reverse.tm}). One primer will be near its limit at any single "
+            f"annealing temperature; a gradient will find the workable band."
+        )
+
+    dimer = _cross_dimer(forward.sequence, reverse.sequence)
+    if dimer >= 5:
+        warnings.append(
+            f"The two primers are complementary over {dimer} bases at a 3' "
+            f"end. They will extend one another into primer-dimer, which "
+            f"amplifies faster than the template does."
+        )
+
+    result = PcrResult(
+        forward=forward, reverse=reverse,
+        product=product, amplified_region=region,
+        template_start=effective_start, template_end=stop,
+        annealing_temperature=annealing_temperature,
+        left_enzyme=left_enzyme, right_enzyme=right_enzyme,
+        problems=problems, warnings=warnings,
+    )
+
+    # ── The digest ──────────────────────────────────────────────────────
+    if left_enzyme is not None and right_enzyme is not None and not problems:
+        result.digest = digest_linear(
+            product, left_enzyme=left_enzyme, right_enzyme=right_enzyme,
+        )
+        if keep_frame:
+            # Anchored on whichever ATG actually starts translation. With an
+            # enzyme like NdeI that is the one inside the site, and the
+            # region follows it in frame; with any other enzyme the vector
+            # supplies it upstream and the frame begins where the region
+            # does. `clone()` is what checks this against the real vector —
+            # here there is no vector to check against.
+            region_at = len(fwd_tail) - result.digest.trimmed_left
+            if supplies_atg:
+                retained, _ = left_remainders(left_enzyme)
+                result.insert_orf_start = len(retained) - 3
+            else:
+                result.insert_orf_start = region_at
+            _check_frame(result, region)
+
+    return result
+
+
+def _check_frame(result: PcrResult, region: str) -> None:
+    """Warn when an in-frame request cannot be honoured by the region itself.
+
+    Measured on the amplified region, not on the insert. The insert carries a
+    single-stranded overhang at each end that is not part of any codon, so its
+    length is almost never a multiple of three — testing that instead would
+    fire on every well-formed design, and a warning that always fires is one
+    the reader learns to skip past.
+    """
+    if len(region) % 3:
+        result.warnings.append(
+            f"The amplified region is {len(region)} bases, which is not a "
+            f"whole number of codons. Anything fused after it — a C-terminal "
+            f"tag on the vector, for instance — will be read out of frame."
+        )
+
+    protein = translate(region[: len(region) - len(region) % 3])
+    if "*" in protein[:-1]:
+        result.warnings.append(
+            "The amplified region contains an in-frame stop codon before its "
+            "end, so a C-terminal tag on the vector will not be translated."
+        )

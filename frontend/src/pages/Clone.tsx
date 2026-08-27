@@ -449,4 +449,451 @@ export default function Clone() {
                       placeholder="pLab-01"
                     />
                   </div>
-      
+                )}
+
+                <div>
+                  <button
+                    className="btn btn-outline"
+                    onClick={() => fileInput.current?.click()}
+                    style={{ width: "100%" }}
+                  >
+                    {vector.bundled ? "Use my own copy instead…" : "Import SnapGene, GenBank or FASTA…"}
+                  </button>
+                  <input
+                    ref={fileInput}
+                    type="file"
+                    accept=".dna,.gb,.gbk,.genbank,.fa,.fasta,.fna,.txt"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void importFile(file);
+                      e.target.value = "";
+                    }}
+                  />
+                  <p className="note" style={{ marginTop: "0.4rem" }}>
+                    {vector.bundled
+                      ? "Using the sequence that ships with G-Synth. Import your lab's own copy if it differs — it will be checked against this entry."
+                      : "SnapGene .dna and GenBank both keep the vector's features, so they carry over onto the recombinant map. FASTA gives sequence only."}
+                  </p>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="vector-seq">Sequence</label>
+                  <textarea
+                    id="vector-seq"
+                    value={vector.sequence}
+                    onChange={(e) => setVectorField("sequence", e.target.value)}
+                    rows={5}
+                    className="mono"
+                    style={{ fontSize: "0.76rem" }}
+                    placeholder="Paste the vector sequence, or import a file above."
+                  />
+                </div>
+
+                <div className="checks">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={vector.circular}
+                      onChange={(e) => setVectorField("circular", e.target.checked)}
+                    />
+                    Circular plasmid
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-head">
+                <h2 style={{ flex: 1 }}>Insert</h2>
+                <div className="mode-switch" role="group" aria-label="Cloning detail level">
+                  <button className={experience === "guided" ? "active" : ""} onClick={() => {
+                    setExperience("guided");
+                    setParams((current) => ({ ...current, cleavage_site: "Thrombin", include_his_tag: true, include_linkers: true, remove_stop: false, target_oligo_length: 90, overhang_length: 4 }));
+                    setResult(null);
+                  }}>Guided</button>
+                  <button className={experience === "expert" ? "active" : ""} onClick={() => setExperience("expert")}>Expert</button>
+                </div>
+              </div>
+              {preDigested && (
+                /* Without this the page silently ignores the insert form, and
+                   the reader has no way to tell why their edits do nothing. */
+                <div className="notice notice-info" style={{ margin: "0 1.1rem", marginTop: "0.9rem" }}>
+                  <strong>Using a cut PCR product.</strong>{" "}
+                  {preDigested.top.length} bp with {preDigested.leftEnzyme} and{" "}
+                  {preDigested.rightEnzyme} ends, ligated as supplied &mdash; the
+                  options below are not applied to it.{" "}
+                  <button
+                    className="btn btn-ghost"
+                    style={{ padding: "0.1rem 0.4rem", fontSize: "0.8rem" }}
+                    onClick={() => {
+                      setPreDigested(null);
+                      setResult(null);
+                      setSelected(null);
+                      setSaved("");
+                      setError("");
+                    }}
+                  >
+                    Design an insert instead
+                  </button>
+                </div>
+              )}
+              <div className="card-body">
+                {experience === "guided" && !preDigested && (
+                  <div className="notice notice-info compact">
+                    Validated defaults add a 6×His tag, flexible linkers and a Thrombin site, using 90 nt oligos with 4 nt assembly junctions.
+                  </div>
+                )}
+                <InsertForm
+                  params={params}
+                  catalogue={catalogue}
+                  onChange={set}
+                  showFragmentation={fragment}
+                  idPrefix="clone-"
+                  expert={experience === "expert"}
+                />
+                {experience === "expert" && <div className="checks">
+                  <label>
+                    <input type="checkbox" checked={!fragment}
+                           onChange={(e) => { setFragment(!e.target.checked); setResult(null); }} />
+                    Clone the SSD duplex as it is, without fragmenting it
+                  </label>
+                </div>}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Results ────────────────────────────────────────────────── */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+            {!result ? (
+              <div className="card">
+                <div className="empty">
+                  <Icon name="plate" size={38} className="glyph" />
+                  <strong>No plasmid yet</strong>
+                  <span>
+                    {vectorLength === 0
+                      ? "Import or paste a vector to begin."
+                      : "Set the insert and its ends, then press Clone."}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <>
+                {result.vector.check && !result.vector.check.matches && (
+                  <div className="notice notice-error">
+                    <strong>This is not {result.vector.spec?.name}.</strong>{" "}
+                    {result.vector.check.problems.join(" ")}
+                  </div>
+                )}
+                {result.vector.check?.notes.length ? (
+                  <div className="notice notice-info">
+                    {result.vector.check.notes.join(" ")}
+                  </div>
+                ) : null}
+
+                <div className={`notice ${result.is_clonable ? "notice-ok" : "notice-error"}`}>
+                  {result.is_clonable ? (
+                    <>
+                      <strong>Clonable.</strong> {result.left_enzyme} and{" "}
+                      {result.right_enzyme} each cut {result.vector_name} once, the
+                      ends match, and the insert goes in one orientation.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Will not clone.</strong> {result.problems.join(" ")}
+                    </>
+                  )}
+                </div>
+
+                <PreflightPanel report={result.preflight} />
+
+                <div className="card">
+                  <div className="card-body stat-row">
+                    <div className="stat">
+                      <div className="k">Plasmid</div>
+                      <div className="v">{result.length.toLocaleString()}<small>bp</small></div>
+                    </div>
+                    <div className="stat">
+                      <div className="k">Backbone</div>
+                      <div className="v">{result.backbone_length.toLocaleString()}<small>bp</small></div>
+                    </div>
+                    <div className="stat">
+                      <div className="k">Insert</div>
+                      <div className="v">{result.insert_length}<small>bp</small></div>
+                    </div>
+                    <div className="stat">
+                      <div className="k">Removed</div>
+                      <div className="v">{result.removed_length}<small>bp</small></div>
+                    </div>
+                    <div className="stat">
+                      <div className="k">Protein</div>
+                      <div className="v">{result.protein_length || "—"}<small>aa</small></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-head">
+                    <h2 style={{ flex: 1 }}>Map</h2>
+                    <div className="seg-toggle" role="group" aria-label="Map view">
+                      {(["circular", "linear", "both"] as const).map((option) => (
+                        <button key={option} type="button"
+                                className={mapView === option ? "on" : ""}
+                                aria-pressed={mapView === option}
+                                onClick={() => setMapView(option)}>
+                          {option[0].toUpperCase() + option.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="card-body" style={{ paddingBottom: "0.5rem" }}>
+                    <div className="map-filters">
+                      <label>
+                        <input type="checkbox" checked={showSites}
+                               onChange={(e) => setShowSites(e.target.checked)} />
+                        Restriction sites
+                      </label>
+                      <label>
+                        <input type="checkbox" checked={onlyUsedSites}
+                               disabled={!showSites}
+                               onChange={(e) => setOnlyUsedSites(e.target.checked)} />
+                        Only the pair used for cloning
+                      </label>
+                      {showSites && (
+                        <span className="label">
+                          {visibleSites.length} of {chosenSites.length} sites drawn
+                          {chosenSites.length > visibleSites.length && (
+                            <>
+                              {" · "}
+                              {chosenSites.length - visibleSites.length} spans the
+                              origin
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="seq-stage" style={{ minHeight: 460 }}>
+                    <SeqViz
+                      name={result.name}
+                      seq={result.plasmid}
+                      annotations={mapAnnotations}
+                      viewer={mapView}
+                      showIndex
+                      onSelection={(sel) => {
+                        if (sel.type !== "ANNOTATION" || sel.start === undefined || sel.end === undefined) {
+                          return;
+                        }
+                        const covering = clickable.filter(
+                          (a) => a.start <= sel.start! && a.end >= sel.end!,
+                        );
+                        if (!covering.length) return;
+                        const hit = covering.reduce((smallest, a) =>
+                          a.end - a.start < smallest.end - smallest.start ? a : smallest,
+                        );
+                        setSelected(hit);
+                      }}
+                      highlights={
+                        selected ? [{ start: selected.start, end: selected.end, color: selected.color }] : []
+                      }
+                      style={{ height: "100%", width: "100%" }}
+                    />
+                  </div>
+
+                  {/* What was clicked. A restriction site and a vector
+                      feature answer different questions — a site's recognition
+                      sequence and cut count matter more than its strand — so
+                      the panel shows what fits the kind rather than one shape
+                      forced onto both. */}
+                  {selected && (
+                    <div className="card-body feature-detail" style={{ borderTop: "1px solid var(--line)" }}>
+                      <div className="card-head" style={{ padding: 0, border: "none", marginBottom: "0.6rem" }}>
+                        <span className="dot" style={{ background: selected.color }} />
+                        {/* Inside the map card, under its own heading. */}
+                        <h3 style={{ flex: 1, fontSize: "1rem" }}>
+                          {selected.name}
+                          {selected.kind === "site" && (
+                            <span className="label" style={{ marginLeft: "0.5rem" }}>restriction site</span>
+                          )}
+                        </h3>
+                        <button className="btn btn-ghost" onClick={() => setSelected(null)}
+                                title="Clear selection" aria-label="Clear selection">
+                          <Icon name="cross" size={14} />
+                        </button>
+                      </div>
+                      <div className="stat-row">
+                        <div className="stat">
+                          <div className="k">Position</div>
+                          <div className="v" style={{ fontSize: "1.05rem" }}>
+                            {(selected.start + 1).toLocaleString()}–{selected.end.toLocaleString()}
+                          </div>
+                        </div>
+                        <div className="stat">
+                          <div className="k">Length</div>
+                          <div className="v">
+                            {(selected.end - selected.start).toLocaleString()}<small>bp</small>
+                          </div>
+                        </div>
+                        {selected.kind === "feature" ? (
+                          <div className="stat">
+                            <div className="k">Strand</div>
+                            <div className="v" style={{ fontSize: "1.05rem" }}>
+                              {selected.direction === -1 ? "reverse" : "forward"}
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="stat">
+                              <div className="k">Recognition</div>
+                              <div className="v mono" style={{ fontSize: "1.05rem" }}>
+                                {selected.recognition}
+                              </div>
+                            </div>
+                            <div className="stat">
+                              <div className="k">Cuts here</div>
+                              <div className="v" style={{ fontSize: "1.05rem" }}>
+                                {selected.cuts}{selected.used ? " · used for cloning" : ""}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <div className="seq-block" style={{ marginTop: "0.6rem" }}>
+                        {selected.direction === -1
+                          ? result.plasmid.slice(selected.start, selected.end)
+                              .split("").reverse()
+                              .map((b) => ({ A: "T", T: "A", G: "C", C: "G" } as Record<string, string>)[b] ?? b)
+                              .join("")
+                          : result.plasmid.slice(selected.start, selected.end)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="card">
+                  <div className="card-head">
+                    <h2 style={{ flex: 1 }}>Checks</h2>
+                    <span className="label">
+                      {result.validation.filter((c) => c.passed).length}
+                      {" of "}{result.validation.length} passed
+                    </span>
+                  </div>
+                  <div className="card-body">
+                    <ul className="check-list">
+                      {result.validation.map((row) => (
+                        <li key={row.check} className={row.passed ? "ok" : "bad"}>
+                          <Icon name={row.passed ? "check" : "cross"} size={16} className="mark" />
+                          <span>
+                            <strong>{row.check}</strong>
+                            <span className="detail">{row.detail}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-head">
+                    <h2 style={{ flex: 1 }}>Junctions</h2>
+                    <label className="inline-check">
+                      <input type="checkbox" checked={showEnds}
+                             onChange={(e) => setShowEnds(e.target.checked)} />
+                      Show the ends before ligation
+                    </label>
+                    <button className="btn btn-outline"
+                            onClick={() => void exportPlasmid("genbank")}
+                            disabled={!result.is_clonable || result.preflight?.can_export === false}
+                            title="Opens in SnapGene, Benchling or ApE with its features">
+                      GenBank
+                    </button>
+                    <button className="btn btn-outline"
+                            onClick={() => void exportPlasmid("fasta")}
+                            disabled={!result.is_clonable || result.preflight?.can_export === false}>
+                      FASTA
+                    </button>
+                    <button className="btn btn-outline"
+                            onClick={() => void downloadWorksheet()}
+                            disabled={!result.is_clonable || result.preflight?.can_export === false}>
+                      Bench worksheet
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => runClone(true)}
+                      disabled={busy || !result.is_clonable || result.preflight?.can_export === false}
+                    >
+                      Save plasmid
+                    </button>
+                  </div>
+                  <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+                    {result.junction_views.map((view) => (
+                      <JunctionDuplex key={view.name} view={view} showEnds={showEnds} />
+                    ))}
+                    <p className="note" style={{ margin: 0 }}>
+                      Coloured bases are the overhang. Both pieces carry it, on
+                      opposite strands — that is what lets them anneal, and a
+                      site that survives the join is how the clone gets
+                      verified on a gel.
+                    </p>
+                  </div>
+                </div>
+
+                {result.protein && (
+                  <div className="card">
+                    <div className="card-head">
+                      <h2 style={{ flex: 1 }}>Protein</h2>
+                      <span className="label">{result.protein_length} residues</span>
+                    </div>
+                    <div className="card-body">
+                      <div className="seq-block">{result.protein}</div>
+                      {result.tags.length > 0 && (
+                        <div className="tag-outcomes">
+                          {result.tags.map((tag) => (
+                            <div
+                              key={`${tag.name}-${tag.end}`}
+                              className={tag.present ? "tag-row on" : "tag-row"}
+                            >
+                              <span className="pill">
+                                {tag.end}-term {tag.name}
+                              </span>
+                              <span>
+                                {tag.present
+                                  ? `on the protein at residue ${tag.position}`
+                                  : "not on this protein"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <p className="note" style={{ marginTop: "0.6rem" }}>
+                        Translated from the insert's ATG through the junction and
+                        into the vector, to the first in-frame stop.
+                        {result.reversed_insert &&
+                          " The insert reads on the minus strand of the vector's own numbering, as every pET cassette does."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {(result.warnings.length > 0 || (result.insert?.warnings.length ?? 0) > 0) && (
+                  <div className="card">
+                    <div className="card-head"><h2>Notes</h2></div>
+                    <div className="card-body">
+                      <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--ink-soft)" }}>
+                        {[...new Set([...(result.insert?.warnings ?? []), ...result.warnings])].map((note) => (
+                          <li key={note} style={{ marginBottom: "0.35rem", lineHeight: 1.5 }}>
+                            {note}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
