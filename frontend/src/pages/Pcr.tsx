@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { ApiError, api, type Catalogue, type PcrResult } from "../api/client";
 import Icon from "../components/Icon";
+import PreflightPanel from "../components/PreflightPanel";
 import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
 /**
@@ -88,6 +89,8 @@ export default function Pcr() {
   const [rightEnzyme, setRightEnzyme, clearRightEnzyme] = useWorkspaceState("pcr.rightEnzyme", "XhoI");
   const [clamp, setClamp, clearClamp] = useWorkspaceState("pcr.clamp", 6);
   const [keepFrame, setKeepFrame, clearKeepFrame] = useWorkspaceState("pcr.keepFrame", true);
+  const [startCodonMode, setStartCodonMode, clearStartCodonMode] = useWorkspaceState<"use_site" | "keep_both">("pcr.startCodonMode", "use_site");
+  const [experience, setExperience] = useWorkspaceState<"guided" | "expert">("pcr.experience", "guided");
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
 
   const [result, setResult, clearResult] = useWorkspaceState<PcrResult | null>("pcr.result", null);
@@ -126,6 +129,7 @@ export default function Pcr() {
     clearRightEnzyme();
     clearClamp();
     clearKeepFrame();
+    clearStartCodonMode();
     clearResult();
     setError("");
   }
@@ -142,6 +146,7 @@ export default function Pcr() {
         right_enzyme: mode === "cloning" ? rightEnzyme : null,
         clamp,
         keep_frame: mode === "cloning" && keepFrame,
+        start_codon_mode: startCodonMode,
       });
       if (requestVersion.current === version) setResult(next);
     } catch (err) {
@@ -171,6 +176,8 @@ export default function Pcr() {
   }
 
   const enzymes = catalogue?.enzymes ?? [];
+  const leftSuppliesStart = enzymes.find((enzyme) => enzyme.name === leftEnzyme)
+    ?.supplies_start_codon ?? leftEnzyme === "NdeI";
 
   return (
     <>
@@ -193,7 +200,19 @@ export default function Pcr() {
 
       <div className="content design-layout">
         <div className="card">
-          <div className="card-head"><h2>Template</h2></div>
+          <div className="card-head">
+            <h2 style={{ flex: 1 }}>Template</h2>
+            <div className="mode-switch" role="group" aria-label="PCR detail level">
+              <button className={experience === "guided" ? "active" : ""} onClick={() => {
+                setExperience("guided");
+                setClamp(6);
+                setKeepFrame(true);
+                setStartCodonMode("use_site");
+                inputsChanged();
+              }}>Guided</button>
+              <button className={experience === "expert" ? "active" : ""} onClick={() => setExperience("expert")}>Expert</button>
+            </div>
+          </div>
           <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
             <div className="field">
               <label htmlFor="template">Sequence to amplify (A/C/G/T)</label>
@@ -243,6 +262,11 @@ export default function Pcr() {
 
             {mode === "cloning" && (
               <>
+                {experience === "guided" && (
+                  <div className="notice notice-info compact">
+                    Uses a six-base terminal clamp, preserves the reading frame and avoids a duplicated start codon when the enzyme supplies ATG.
+                  </div>
+                )}
                 <div className="row-2">
                   <div className="field">
                     <label htmlFor="left-enzyme">5&prime; enzyme</label>
@@ -276,7 +300,7 @@ export default function Pcr() {
                   </div>
                 </div>
 
-                <div className="field">
+                {experience === "expert" && <div className="field">
                   <label htmlFor="clamp">Clamp bases outside each site</label>
                   <input
                     id="clamp" type="number" min={0} max={20} value={clamp}
@@ -289,9 +313,31 @@ export default function Pcr() {
                   <span id="clamp-note" className="note">
                     Enzymes cut poorly at a fragment&rsquo;s end. Six is the usual minimum.
                   </span>
-                </div>
+                </div>}
 
-                <div className="checks">
+                {experience === "expert" && leftSuppliesStart && (
+                  <div className="field">
+                    <label htmlFor="start-codon-mode">Start codon</label>
+                    <select
+                      id="start-codon-mode"
+                      value={startCodonMode}
+                      onChange={(e) => {
+                        inputsChanged();
+                        setStartCodonMode(e.target.value as "use_site" | "keep_both");
+                      }}
+                      aria-describedby="start-codon-note"
+                    >
+                      <option value="use_site">Use {leftEnzyme}&rsquo;s ATG (recommended)</option>
+                      <option value="keep_both">Keep both ATGs (adds N-terminal Met)</option>
+                    </select>
+                    <span id="start-codon-note" className="note">
+                      {leftEnzyme}&rsquo;s recognition site supplies ATG. Using it alone
+                      matches the legacy G-Synth logic and avoids a Met-Met start.
+                    </span>
+                  </div>
+                )}
+
+                {experience === "expert" && <div className="checks">
                   <label>
                     <input
                       type="checkbox"
@@ -303,7 +349,7 @@ export default function Pcr() {
                     />
                     Keep the vector&rsquo;s reading frame
                   </label>
-                </div>
+                </div>}
               </>
             )}
           </div>
@@ -332,6 +378,8 @@ export default function Pcr() {
                   </ul>
                 </div>
               )}
+
+              <PreflightPanel report={result.preflight} />
 
               <div className="card">
                 <div className="card-head">
@@ -412,7 +460,7 @@ export default function Pcr() {
                     <div className="seq-block">{result.digest.top}</div>
 
                     <div>
-                      <button className="btn btn-primary" onClick={sendToClone}>
+                      <button className="btn btn-primary" onClick={sendToClone} disabled={result.preflight?.can_export === false}>
                         Clone into a vector <Icon name="arrowRight" size={16} />
                       </button>
                     </div>

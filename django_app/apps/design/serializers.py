@@ -403,6 +403,13 @@ class PcrRequestSerializer(serializers.Serializer):
     # request for a thousand bases of clamp is an oligo nobody can order.
     clamp = serializers.IntegerField(min_value=0, max_value=20, default=DEFAULT_CLAMP)
     keep_frame = serializers.BooleanField(default=False)
+    start_codon_mode = serializers.ChoiceField(
+        choices=("use_site", "keep_both"), default="use_site",
+        help_text=(
+            "When the left site supplies ATG, use that start codon by default "
+            "or deliberately retain the template ATG as well."
+        ),
+    )
     name = serializers.CharField(max_length=60, required=False, default="product")
 
     def validate(self, attrs):
@@ -415,4 +422,12 @@ class PcrRequestSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"right_enzyme": "Choose an enzyme for both ends, or for neither."}
             )
+        if (
+            attrs.get("left_enzyme") is not None
+            and attrs.get("left_enzyme") == attrs.get("right_enzyme")
+        ):
+            raise serializers.ValidationError({
+                "right_enzyme": "The two enzymes must differ, otherwise the "
+                                "insert could ligate in either orientation."
+            })
         return attrs

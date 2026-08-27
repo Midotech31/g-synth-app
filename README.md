@@ -103,9 +103,9 @@ assert plan.verify() == []          # empty means the oligos re-ligate to the de
 ### Tests
 
 ```bash
-python -m pytest gsynth_engine/tests -q     # 901 — the biology
-cd django_app && python -m pytest -q        # 206 — the HTTP layer
-cd frontend && npm test                     # the interface
+python -m pytest gsynth_engine/tests -q     # 1,055 — the biology
+cd django_app && python -m pytest -q        # 230 — the HTTP layer
+cd frontend && npm test                     # 54 — the interface
 ```
 
 All three run in CI on every push. The engine's suite is the definition of
@@ -113,6 +113,15 @@ correctness: it is where the golden examples live, where every one of the 109
 enzymes is checked in both positions, and where the property the whole method
 rests on is asserted — that the designed fragments re-ligate into the
 construct exactly.
+
+Scientific scope and validation materials:
+
+- [`docs/BIOLOGICAL_ASSUMPTIONS.md`](docs/BIOLOGICAL_ASSUMPTIONS.md) — what is checked, and what still requires bench evidence.
+- [`docs/WORKED_CLONING_EXAMPLES.md`](docs/WORKED_CLONING_EXAMPLES.md) — cohesive, mixed-polarity, blunt, and blocking cases.
+- [`docs/SCIENTIFIC_REFERENCES.md`](docs/SCIENTIFIC_REFERENCES.md) — sources behind the assumptions.
+- [`docs/USABILITY_STUDY.md`](docs/USABILITY_STUDY.md) — the human-validation protocol and release criteria.
+- [`docs/WET_LAB_VALIDATION.md`](docs/WET_LAB_VALIDATION.md) — physical construct-to-sequencing evidence and acceptance criteria.
+- [`docs/ACCESSIBILITY_MOBILE_AUDIT_2026-08-27.md`](docs/ACCESSIBILITY_MOBILE_AUDIT_2026-08-27.md) — responsive and WCAG-oriented engineering audit.
 
 ## What is in here
 

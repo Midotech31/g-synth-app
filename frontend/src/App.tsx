@@ -139,7 +139,7 @@ function Protected() {
   if (!user) return <Navigate to="/login" replace />;
 
   return (
-    <WorkspaceStateProvider>
+    <WorkspaceStateProvider identity={String(user.id)}>
       <div className="shell">
       {/* First thing in the tab order, so the nine rail links can be passed
           over. `tabIndex` on the target because following a fragment moves

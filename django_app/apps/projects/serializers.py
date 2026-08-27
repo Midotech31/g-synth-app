@@ -8,9 +8,9 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Project
-        fields = ("id", "name", "module", "sequence", "notes", "data",
+        fields = ("id", "name", "module", "sequence", "notes", "data", "provenance",
                   "created_at", "updated_at")
-        read_only_fields = ("id", "created_at", "updated_at")
+        read_only_fields = ("id", "provenance", "created_at", "updated_at")
 
 
 class ProjectListSerializer(serializers.ModelSerializer):

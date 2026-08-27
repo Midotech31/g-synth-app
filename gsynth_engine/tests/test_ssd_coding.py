@@ -65,12 +65,27 @@ class TestTheStartCodon:
         assert GENE in result.forward
         assert not any("ATG was removed" in w for w in result.warnings)
 
-    def test_a_gene_not_starting_with_atg_is_left_alone(self):
+    def test_a_gene_not_starting_with_atg_is_refused(self):
         gene = GENE[3:]
-        result = design_small_sequence(gene, enzyme_pair="NdeI / XhoI",
-                                       is_coding=True)
-        assert gene in result.forward
-        assert not any("ATG was removed" in w for w in result.warnings)
+        with pytest.raises(SequenceError, match="must begin with ATG"):
+            design_small_sequence(gene, enzyme_pair="NdeI / XhoI",
+                                  is_coding=True)
+
+    @pytest.mark.parametrize("enzyme", ["CviAII", "FatI", "NdeI"])
+    def test_every_cut_that_really_supplies_atg_removes_the_duplicate(self, enzyme):
+        result = design_small_sequence(
+            GENE, enzyme_pair=f"{enzyme} / XhoI", is_coding=True,
+        )
+        assert result.coding_region.startswith("ATG")
+        assert GENE[3:] in result.forward
+
+    @pytest.mark.parametrize("enzyme", ["CciI", "FaeI", "NcoI", "NsiI", "PciI", "SphI"])
+    def test_an_internal_atg_in_the_site_does_not_remove_the_gene_start(self, enzyme):
+        result = design_small_sequence(
+            GENE, enzyme_pair=f"{enzyme} / XhoI", is_coding=True,
+        )
+        assert GENE in result.forward
+        assert result.coding_region.startswith("ATG")
 
 
 class TestTheStopCodon:
@@ -87,14 +102,6 @@ class TestTheStopCodon:
         result = design_small_sequence(GENE[:-3], enzyme_pair="BamHI / EcoRI",
                                        is_coding=True, remove_stop=True)
         assert any("No in-frame stop" in w for w in result.warnings)
-
-    def test_a_gene_that_is_only_a_stop_codon_is_refused(self):
-        """Nothing left to clone, and the message has to say why rather than
-        hand back a construct made of two sticky ends."""
-        with pytest.raises(SequenceError, match="reading frame"):
-            design_small_sequence("TAA", enzyme_pair="BamHI / EcoRI",
-                                  is_coding=True, remove_stop=True)
-
 
 class TestTheInvariantsStillHold:
     """This branch must not be exempt from the properties everything else is

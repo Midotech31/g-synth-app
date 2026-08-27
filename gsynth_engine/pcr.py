@@ -33,7 +33,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from gsynth_engine.cloning import Digest, digest_linear, find_sites, translate
-from gsynth_engine.constants import ALL_ENZYMES
+from gsynth_engine.constants import (
+    ALL_ENZYMES,
+    left_remainders,
+    supplies_start_codon,
+)
 from gsynth_engine.sequence import (
     SequenceError,
     clean_dna,
@@ -42,6 +46,8 @@ from gsynth_engine.sequence import (
     reverse_complement,
 )
 from gsynth_engine.thermo import PCR, melting_temperature
+
+START_CODON_MODES = ("use_site", "keep_both")
 
 #: Primer length bounds for the annealing portion. Below 18 nt specificity
 #: falls away on a genome-sized template; above 30 nt costs synthesis without
@@ -64,9 +70,11 @@ MAX_TM_DIFFERENCE: float = 5.0
 #: pence of synthesis while one that is too short costs the digest.
 DEFAULT_CLAMP: int = 6
 
-#: The clamp bases themselves. GC-rich so the tail does not breathe open, and
-#: deliberately not a palindrome or a homopolymer run.
-_CLAMP_BASES: str = "GCTAGCTAGC"
+#: The clamp bases themselves. Every prefix through the API's 20-base limit
+#: was checked against every supported recognition sequence in both terminal
+#: orientations.  Unlike the old ``GCTAGC`` seed, it is not itself an NheI /
+#: BmtI site and does not create an overlapping copy at a site boundary.
+_CLAMP_BASES: str = "GGAGGTGAAGACAGTAACTG"
 
 #: Ta is set this far below the lower annealing Tm — the usual starting
 #: point, and the number a gradient is centred on.
@@ -78,11 +86,10 @@ MAX_TA: float = 72.0
 
 
 def _clamp_of(length: int) -> str:
-    """Clamp bases for a tail, taken from a fixed non-repeating run."""
+    """Clamp bases for a tail, taken from the validated terminal run."""
     if length <= 0:
         return ""
-    repeats = (length // len(_CLAMP_BASES)) + 1
-    return (_CLAMP_BASES * repeats)[:length]
+    return _CLAMP_BASES[:length]
 
 
 @dataclass(frozen=True)
@@ -348,6 +355,7 @@ def design_pcr(
     right_enzyme: str | None = None,
     clamp: int = DEFAULT_CLAMP,
     keep_frame: bool = False,
+    start_codon_mode: str = "use_site",
     name: str = "product",
 ) -> PcrResult:
     """Design a PCR, with or without cloning tails, and simulate it.
@@ -368,6 +376,10 @@ def design_pcr(
         keep_frame: pad the left tail so the amplified region stays in frame
             with the vector's reading frame downstream of the site. Only
             meaningful for an N-terminal fusion.
+        start_codon_mode: when the left restriction site supplies an ``ATG``
+            and the selected region also begins with ``ATG``, ``use_site``
+            omits the template codon so the protein starts with one
+            methionine. ``keep_both`` preserves both codons deliberately.
 
     Returns:
         A :class:`PcrResult`. Check `is_clean` before ordering: an enzyme
@@ -391,183 +403,31 @@ def design_pcr(
             "cannot open both ends of the product."
         )
 
+    if not 0 <= clamp <= len(_CLAMP_BASES):
+        raise SequenceError(
+            f"Clamp length must be between 0 and {len(_CLAMP_BASES)} bases."
+        )
+
+    if left_enzyme is not None and left_enzyme == right_enzyme:
+        raise SequenceError(
+            "The two enzymes must differ — using one enzyme at both ends "
+            "does not force the insert's orientation."
+        )
+
+    if start_codon_mode not in START_CODON_MODES:
+        raise SequenceError(
+            "Start-codon mode must be 'use_site' or 'keep_both'."
+        )
+
     problems: list[str] = []
     warnings: list[str] = []
 
-    # ── The parts that bind template ────────────────────────────────────
-    fwd_anneal, fwd_lo, fwd_hi = _pick_anneal(working, start=target_start, direction=1)
-    rev_anneal, rev_lo, rev_hi = _pick_anneal(working, start=stop, direction=-1)
-
-    if fwd_hi > rev_lo:
-        raise SequenceError(
-            "The region to amplify is too short for two primers that do not "
-            f"overlap: {stop - target_start} bases were asked for, and "
-            f"{2 * MIN_ANNEAL} is the minimum."
-        )
-
-    region = working[target_start:stop]
-
-    # ── The tails ───────────────────────────────────────────────────────
-    fwd_tail = rev_tail = ""
-    if left_enzyme is not None and right_enzyme is not None:
-        left_site = _site_of(left_enzyme)
-        right_site = _site_of(right_enzyme)
-        clamp_bases = _clamp_of(clamp)
-
-        fwd_tail = clamp_bases + left_site
-        rev_tail = clamp_bases + reverse_complement(right_site)
-
-        # Where the digest will cut, so frame can be measured on the insert
-        # rather than on the product — they differ by the stub that falls off.
-        left_cut_offset = clamp + int(ALL_ENZYMES[left_enzyme]["cut_top"])  # type: ignore[arg-type]
-        supplies_atg = "ATG" in left_site
-
-        if supplies_atg and region.startswith("ATG"):
-            warnings.append(
-                f"{left_enzyme}'s site carries its own ATG and the region "
-                f"already begins with one, so the protein starts Met-Met. "
-                f"Drop the region's first codon if the extra residue is "
-                f"unwanted — with {left_enzyme} the site supplies the start."
-            )
-
-        if keep_frame and not supplies_atg:
-            # The vector supplies the ATG upstream, so the region must sit a
-            # whole number of codons from the insert's own 5' end. Anchoring
-            # on the product's end instead would be out by the stub the
-            # digest removes.
-            padding = (len(fwd_tail) - left_cut_offset) % 3
-            padding = (3 - padding) % 3
-            fwd_tail += "A" * padding
-            if padding:
-                warnings.append(
-                    f"{padding} base(s) were added between the {left_enzyme} "
-                    f"site and the insert to keep the vector's reading frame. "
-                    f"They are translated as part of the junction."
-                )
-
-        if clamp < DEFAULT_CLAMP:
-            warnings.append(
-                f"Only {clamp} clamp base(s) sit outside each site. Enzymes cut "
-                f"poorly at a fragment's end; {DEFAULT_CLAMP} is the usual "
-                f"minimum, and a digest that under-cuts looks like a ligation "
-                f"that failed."
-            )
-
-        # The check that decides whether this strategy works at all.
-        for enzyme, label in ((left_enzyme, "left"), (right_enzyme, "right")):
-            internal = find_sites(region, enzyme, circular=False)
-            if internal:
-                where = ", ".join(str(pos + 1) for pos in internal[:4])
-                problems.append(
-                    f"{enzyme} cuts inside the region being amplified "
-                    f"(position {where}). Digesting the product would cut the "
-                    f"insert in two as well as opening its ends. Choose a "
-                    f"different enzyme for the {label} end, or optimise the "
-                    f"gene to remove the site first."
-                )
-
-    forward_seq = fwd_tail + fwd_anneal
-    reverse_seq = rev_tail + rev_anneal
-
-    # ── The product ─────────────────────────────────────────────────────
-    # Top strand: the forward primer as written, the template between the
-    # primers' inner edges, then the reverse primer's complement. Built from
-    # the primers rather than assembled from the design, so that what is
-    # reported is what those two oligos would actually produce.
-    product = fwd_tail + region + reverse_complement(rev_tail)
-
-    fwd_warnings = _primer_warnings(fwd_anneal, label="forward")
-    rev_warnings = _primer_warnings(rev_anneal, label="reverse")
-
-    forward = PcrPrimer(
-        name=f"{name}_F", sequence=forward_seq, tail=fwd_tail, anneals=fwd_anneal,
-        direction=1, start=fwd_lo, end=fwd_hi,
-        tm=_tm(fwd_anneal), tm_full=_tm(forward_seq),
-        gc=round(gc_content(forward_seq), 1), enzyme=left_enzyme,
-        warnings=tuple(fwd_warnings),
-    )
-    reverse = PcrPrimer(
-        name=f"{name}_R", sequence=reverse_seq, tail=rev_tail, anneals=rev_anneal,
-        direction=-1, start=rev_lo, end=rev_hi,
-        tm=_tm(rev_anneal), tm_full=_tm(reverse_seq),
-        gc=round(gc_content(reverse_seq), 1), enzyme=right_enzyme,
-        warnings=tuple(rev_warnings),
-    )
-
-    warnings.extend(fwd_warnings)
-    warnings.extend(rev_warnings)
-
-    # Ta from the annealing portions, which is what binds in cycle one.
-    annealing_temperature = round(min(min(forward.tm, reverse.tm) - TA_OFFSET, MAX_TA), 1)
-
-    if abs(forward.tm - reverse.tm) > MAX_TM_DIFFERENCE:
-        warnings.append(
-            f"The two annealing regions differ by "
-            f"{abs(forward.tm - reverse.tm):.1f} °C ({forward.tm} and "
-            f"{reverse.tm}). One primer will be near its limit at any single "
-            f"annealing temperature; a gradient will find the workable band."
-        )
-
-    dimer = _cross_dimer(forward.sequence, reverse.sequence)
-    if dimer >= 5:
-        warnings.append(
-            f"The two primers are complementary over {dimer} bases at a 3' "
-            f"end. They will extend one another into primer-dimer, which "
-            f"amplifies faster than the template does."
-        )
-
-    result = PcrResult(
-        forward=forward, reverse=reverse,
-        product=product, amplified_region=region,
-        template_start=target_start, template_end=stop,
-        annealing_temperature=annealing_temperature,
-        left_enzyme=left_enzyme, right_enzyme=right_enzyme,
-        problems=problems, warnings=warnings,
-    )
-
-    # ── The digest ──────────────────────────────────────────────────────
-    if left_enzyme is not None and right_enzyme is not None and not problems:
-        result.digest = digest_linear(
-            product, left_enzyme=left_enzyme, right_enzyme=right_enzyme,
-        )
-        if keep_frame:
-            # Anchored on whichever ATG actually starts translation. With an
-            # enzyme like NdeI that is the one inside the site, and the
-            # region follows it in frame; with any other enzyme the vector
-            # supplies it upstream and the frame begins where the region
-            # does. `clone()` is what checks this against the real vector —
-            # here there is no vector to check against.
-            left_site = _site_of(left_enzyme)
-            region_at = len(fwd_tail) - result.digest.trimmed_left
-            if "ATG" in left_site:
-                site_at = len(fwd_tail) - len(left_site) - result.digest.trimmed_left
-                result.insert_orf_start = site_at + left_site.index("ATG")
-            else:
-                result.insert_orf_start = region_at
-            _check_frame(result, region)
-
-    return result
-
-
-def _check_frame(result: PcrResult, region: str) -> None:
-    """Warn when an in-frame request cannot be honoured by the region itself.
-
-    Measured on the amplified region, not on the insert. The insert carries a
-    single-stranded overhang at each end that is not part of any codon, so its
-    length is almost never a multiple of three — testing that instead would
-    fire on every well-formed design, and a warning that always fires is one
-    the reader learns to skip past.
-    """
-    if len(region) % 3:
-        result.warnings.append(
-            f"The amplified region is {len(region)} bases, which is not a "
-            f"whole number of codons. Anything fused after it — a C-terminal "
-            f"tag on the vector, for instance — will be read out of frame."
-        )
-
-    protein = translate(region[: len(region) - len(region) % 3])
-    if "*" in protein[:-1]:
-        result.warnings.append(
-            "The amplified region contains an in-frame stop codon before its "
-            "end, so a C-terminal tag on the vector will not be translated."
-        )
+    # NdeI's CATATG is the common case: the recognition site already contains
+    # the translation start. The legacy G-Synth primer therefore annealed
+    # after a template-leading ATG. Keeping that codon as well changes the
+    # expressed protein to Met-Met, so it is an explicit opt-in rather than
+    # the default.
+    effective_start = target_start
+    left_site = _site_of(left_enzyme) if left_enzyme is not None else ""
+    supplies_atg = (
+        supplies_start_codon(left_

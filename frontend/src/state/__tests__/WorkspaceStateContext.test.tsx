@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   WorkspaceStateProvider,
@@ -36,6 +36,7 @@ function NavigationHarness() {
 }
 
 describe("workspace state", () => {
+  beforeEach(() => window.sessionStorage.clear());
   it("survives a section unmount and returns to its default only when cleared", () => {
     render(<NavigationHarness />);
 
@@ -48,6 +49,33 @@ describe("workspace state", () => {
     expect(screen.getByLabelText("Sequence")).toHaveValue("my-result");
 
     fireEvent.click(screen.getByRole("button", { name: "Clear workspace" }));
+    expect(screen.getByLabelText("Sequence")).toHaveValue("sample");
+  });
+
+  it("restores a user-scoped draft after the provider remounts", () => {
+    const first = render(
+      <WorkspaceStateProvider identity="user-7"><Workspace /></WorkspaceStateProvider>,
+    );
+    fireEvent.change(screen.getByLabelText("Sequence"), {
+      target: { value: "draft-after-refresh" },
+    });
+    first.unmount();
+
+    render(<WorkspaceStateProvider identity="user-7"><Workspace /></WorkspaceStateProvider>);
+    expect(screen.getByLabelText("Sequence")).toHaveValue("draft-after-refresh");
+  });
+
+  it("does not expose one user's draft to another", () => {
+    const first = render(
+      <WorkspaceStateProvider identity="user-7"><Workspace /></WorkspaceStateProvider>,
+    );
+    fireEvent.change(screen.getByLabelText("Sequence"), {
+      target: { value: "private-sequence" },
+    });
+    first.unmount();
+    cleanup();
+
+    render(<WorkspaceStateProvider identity="user-8"><Workspace /></WorkspaceStateProvider>);
     expect(screen.getByLabelText("Sequence")).toHaveValue("sample");
   });
 });

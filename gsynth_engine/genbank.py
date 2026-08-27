@@ -99,6 +99,7 @@ def to_genbank(
     circular: bool = False,
     date: str = "01-JAN-2000",
     organism: str = "synthetic DNA construct",
+    comments: list[str] | None = None,
 ) -> str:
     """Render a sequence and its features as a GenBank record.
 
@@ -126,11 +127,19 @@ def to_genbank(
         f"SOURCE      {organism}",
         f"  ORGANISM  {organism}",
         "            other sequences; artificial sequences.",
+    ]
+
+    for comment in comments or []:
+        wrapped = textwrap.wrap(str(comment), width=67) or [""]
+        lines.append(f"COMMENT     {wrapped[0]}")
+        lines.extend(f"            {line}" for line in wrapped[1:])
+
+    lines.extend([
         "FEATURES             Location/Qualifiers",
         f"     {'source':<16}1..{length}",
         *_qualifier("organism", organism),
         *_qualifier("mol_type", "other DNA"),
-    ]
+    ])
 
     for feature in entries:
         if feature.end <= feature.start:

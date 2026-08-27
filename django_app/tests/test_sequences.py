@@ -136,6 +136,16 @@ class TestGenBankParsing:
 
         assert _annotations_from(record)[0].direction == 0
 
+    def test_a_feature_crossing_the_circular_origin_keeps_its_true_span(self):
+        text = GENBANK.replace(
+            "     promoter        1..20\n",
+            "     promoter        join(111..120,1..10)\n",
+        )
+        record = parse_sequence_file(text, "wrapped.gb")
+        feature = next(a for a in record.annotations if a.name == "T7 promoter")
+        assert (feature.start, feature.end) == (110, 130)
+        assert feature.end - feature.start == 20
+
 
 class TestFastaParsing:
     def test_extracts_sequence(self):

@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
   type Dispatch,
@@ -23,8 +24,30 @@ const WorkspaceStateContext = createContext<WorkspaceStateContextValue | null>(n
  * and out. The provider deliberately lives inside the protected shell: a
  * sign-out destroys it, so sequences and results cannot cross accounts.
  */
-export function WorkspaceStateProvider({ children }: { children: ReactNode }) {
-  const [store, setStore] = useState<WorkspaceStore>({});
+export function WorkspaceStateProvider({ children, identity = "anonymous" }: { children: ReactNode; identity?: string }) {
+  const storageKey = `gsynth.workspace.${identity}`;
+  const [store, setStore] = useState<WorkspaceStore>(() => {
+    try {
+      const saved = window.sessionStorage.getItem(storageKey);
+      return saved ? JSON.parse(saved) as WorkspaceStore : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    // Results are reproducible outputs, not drafts. Recompute them after a
+    // refresh so an old verdict can never be paired with newly restored input.
+    const draftEntries = Object.entries(store).filter(([key]) => (
+      !/\.(result|report|primers|ligation|saved|selected|traceFiles|project)$/.test(key)
+    ));
+    try {
+      window.sessionStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(draftEntries)));
+    } catch {
+      // Private browsing or a storage quota must not make the workspace fail.
+    }
+  }, [storageKey, store]);
+
   return (
     <WorkspaceStateContext.Provider value={{ store, setStore }}>
       {children}

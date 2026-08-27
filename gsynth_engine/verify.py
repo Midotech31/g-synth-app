@@ -155,16 +155,16 @@ class VerificationReport:
 
     @property
     def is_verified(self) -> bool:
-        """Every read agrees, and something was actually read."""
-        return bool(self.reads) and not self.differences
+        """The requested region is fully read and every read agrees."""
+        return bool(self.reads) and self.fully_covered and not self.differences
 
     @property
     def fully_covered(self) -> bool:
         """Every base of the design was read by at least one trace.
 
         Coverage only — it says nothing about whether the reads *agreed*.
-        A design can be fully covered and still differ everywhere; that is
-        `is_verified`.
+        A design can be fully covered and still differ; ``is_verified``
+        requires both complete coverage and agreement.
         """
         return not self.gaps
 
@@ -422,91 +422,4 @@ def verify_read(
         ))
 
     total = matched + len(differences)
-    identity = round(100.0 * matched / total, 2) if total else 0.0
-
-    warnings: list[str] = []
-    if identity < 98 and differences:
-        warnings.append(
-            f"{name} matches the design at only {identity:.1f}%. That is more "
-            f"disagreement than a good read has — check the trace quality "
-            f"before treating these as real changes."
-        )
-
-    return ReadAlignment(
-        name=name,
-        length=len(raw),
-        start=offset % len(template),
-        end=(offset + len(oriented)) % len(template) or len(template),
-        reverse_complemented=flipped,
-        identity=identity,
-        matched=matched,
-        differences=differences,
-        trimmed_start=cut_start,
-        trimmed_end=cut_end,
-        warnings=warnings,
-        mean_quality=round(trace.mean_quality, 1) if trace is not None else None,
-    )
-
-
-def verify(
-    design: str,
-    reads: list[str] | dict[str, str],
-    *,
-    circular: bool = False,
-    trim: int = 30,
-    coding_start: int | None = None,
-    coding_end: int | None = None,
-    region: tuple[int, int] | None = None,
-    traces: dict[str, Chromatogram] | None = None,
-) -> VerificationReport:
-    """Check every read against the design and report coverage and changes.
-
-    Args:
-        region: the stretch that has to be covered — normally the insert.
-            Coverage of a whole plasmid by two Sanger reads is never going
-            to be complete, and reporting it as a failure would be noise.
-
-    A read that cannot be placed becomes a warning rather than an exception:
-    one bad trace out of six should not stop the other five being reported.
-    """
-    template = clean_dna(design)
-    entries = reads if isinstance(reads, dict) else {
-        f"read {i + 1}": sequence for i, sequence in enumerate(reads)
-    }
-
-    aligned: list[ReadAlignment] = []
-    warnings: list[str] = []
-    for name, sequence in entries.items():
-        try:
-            aligned.append(verify_read(
-                template, sequence, name=name, circular=circular, trim=trim,
-                coding_start=coding_start, coding_end=coding_end,
-                trace=(traces or {}).get(name),
-            ))
-        except SequenceError as error:
-            warnings.append(str(error))
-
-    start, stop = region or (0, len(template))
-    wanted = set(range(start, stop))
-    for read in aligned:
-        if read.end > read.start:
-            wanted -= set(range(read.start, read.end))
-        else:                                    # wraps the origin
-            wanted -= set(range(read.start, len(template)))
-            wanted -= set(range(read.end))
-
-    gaps: list[tuple[int, int]] = []
-    for position in sorted(wanted):
-        if gaps and position == gaps[-1][1]:
-            gaps[-1] = (gaps[-1][0], position + 1)
-        else:
-            gaps.append((position, position + 1))
-
-    span = max(1, stop - start)
-    return VerificationReport(
-        design_length=len(template),
-        reads=aligned,
-        gaps=gaps,
-        coverage=round(100.0 * (span - len(wanted)) / span, 1),
-        warnings=warnings,
-    )
+    identity = round(100.0 * matched / total, 2) if total else 0

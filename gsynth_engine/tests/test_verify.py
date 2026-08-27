@@ -209,6 +209,7 @@ class TestReport:
             circular=True, region=(result.insert_start, result.insert_end),
         )
         assert not report.fully_covered
+        assert not report.is_verified
         assert report.coverage < 100
 
     def test_one_bad_read_does_not_stop_the_others(self, construct):

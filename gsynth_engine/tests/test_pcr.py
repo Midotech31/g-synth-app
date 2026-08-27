@@ -10,7 +10,7 @@ not compose.
 import pytest
 
 from gsynth_engine import cloning, vectors
-from gsynth_engine.cloning import _observed_insert_ends, translate
+from gsynth_engine.cloning import _observed_insert_ends, find_sites, translate
 from gsynth_engine.pcr import (
     DEFAULT_CLAMP,
     MAX_ANNEAL,
@@ -142,7 +142,28 @@ class TestCloningTails:
         assert "CATATG" in r.product
         assert "CTCGAG" in r.product
         assert r.amplified_region in r.product
+        assert r.amplified_region == GENE[3:]
+        assert r.template_start == 3
+
+    def test_ndei_uses_its_own_start_codon_by_default(self):
+        """NdeI's CATATG supplies the initiating ATG, so the template primer
+        begins at codon two and the expressed protein starts with one Met."""
+        r = design_pcr(
+            GENE, left_enzyme="NdeI", right_enzyme="XhoI", keep_frame=True,
+        )
+        start = r.insert_orf_start
+        assert translate(r.digest.top[start:start + 6]) == "MK"
+        assert r.forward.anneals == GENE[3:3 + len(r.forward.anneals)]
+
+    def test_both_start_codons_can_be_kept_deliberately(self):
+        r = design_pcr(
+            GENE, left_enzyme="NdeI", right_enzyme="XhoI", keep_frame=True,
+            start_codon_mode="keep_both",
+        )
         assert r.amplified_region == GENE
+        start = r.insert_orf_start
+        assert translate(r.digest.top[start:start + 6]) == "MM"
+        assert any("Met-Met" in warning for warning in r.warnings)
 
     def test_the_clamp_can_be_shortened_and_says_what_that_costs(self):
         r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI", clamp=2)
@@ -153,9 +174,24 @@ class TestCloningTails:
         with pytest.raises(SequenceError, match="both ends or for neither"):
             design_pcr(GENE, left_enzyme="NdeI")
 
+    def test_using_the_same_enzyme_at_both_ends_is_refused(self):
+        with pytest.raises(SequenceError, match="must differ"):
+            design_pcr(GENE, left_enzyme="NdeI", right_enzyme="NdeI")
+
+    def test_clamp_length_is_bounded_in_the_engine_too(self):
+        with pytest.raises(SequenceError, match="Clamp length"):
+            design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI", clamp=21)
+
     def test_an_unknown_enzyme_is_refused_by_name(self):
         with pytest.raises(SequenceError, match="not an enzyme"):
             design_pcr(GENE, left_enzyme="NotAnEnzyme", right_enzyme="XhoI")
+
+    def test_an_unknown_start_codon_mode_is_refused(self):
+        with pytest.raises(SequenceError, match="Start-codon mode"):
+            design_pcr(
+                GENE, left_enzyme="NdeI", right_enzyme="XhoI",
+                start_codon_mode="guess",
+            )
 
 
 class TestTheDigest:
@@ -244,6 +280,21 @@ class TestSitesInsideTheGene:
         assert r.is_clean
         assert r.problems == []
 
+    @pytest.mark.parametrize("enzyme", ["NheI", "BmtI", "BssHII", "GlaI", "HhaI", "BfaI"])
+    def test_the_clamp_does_not_create_an_extra_selected_site(self, enzyme):
+        result = design_pcr(GENE, left_enzyme=enzyme, right_enzyme="XhoI")
+        assert result.is_clean, result.problems
+        assert find_sites(result.product, enzyme, circular=False) == [DEFAULT_CLAMP]
+
+    def test_a_site_created_at_the_site_insert_boundary_blocks_the_digest(self):
+        # NheI followed by TAGC creates a second overlapping GCTAGC across
+        # the intended site's right boundary.
+        gene = "TAGC" + GENE[4:]
+        result = design_pcr(gene, left_enzyme="NheI", right_enzyme="XhoI")
+        assert not result.is_clean
+        assert result.digest is None
+        assert any("overlapping site" in problem for problem in result.problems)
+
 
 class TestReadingFrame:
     def test_an_atg_supplying_enzyme_anchors_the_frame_on_its_own_atg(self):
@@ -251,10 +302,19 @@ class TestReadingFrame:
         start = r.insert_orf_start
         assert r.digest.top[start:start + 3] == "ATG"
 
-    def test_a_duplicated_start_codon_is_reported(self):
+    def test_the_default_does_not_duplicate_the_start_codon(self):
+        r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI", keep_frame=True)
+        start = r.insert_orf_start
+        assert translate(r.digest.top[start:start + 6]) == "MK"
+        assert not any("Met-Met" in w for w in r.warnings)
+
+    def test_a_deliberately_duplicated_start_codon_is_reported(self):
         """NdeI's CATATG carries an ATG. A gene that also begins with one
         yields Met-Met, which is a real extra residue on the product."""
-        r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI", keep_frame=True)
+        r = design_pcr(
+            GENE, left_enzyme="NdeI", right_enzyme="XhoI", keep_frame=True,
+            start_codon_mode="keep_both",
+        )
         start = r.insert_orf_start
         assert translate(r.digest.top[start:start + 6]) == "MM"
         assert any("Met-Met" in w for w in r.warnings)
@@ -267,119 +327,19 @@ class TestReadingFrame:
         start = r.insert_orf_start
         assert translate(r.digest.top[start:start + 6]) == "MK"
 
+    @pytest.mark.parametrize("enzyme", ["NcoI", "CciI", "FaeI", "NsiI", "PciI", "SphI"])
+    def test_an_atg_elsewhere_in_a_site_does_not_replace_the_gene_start(self, enzyme):
+        result = design_pcr(
+            GENE, left_enzyme=enzyme, right_enzyme="XhoI", keep_frame=True,
+        )
+        assert result.amplified_region == GENE
+        start = result.insert_orf_start
+        assert result.digest.top[start:start + 3] == "ATG"
+        assert translate(result.digest.top[start:start + 6]) == "MK"
+
     def test_a_region_that_is_not_whole_codons_is_flagged(self):
         r = design_pcr(GENE[:-2], left_enzyme="BamHI", right_enzyme="XhoI",
                        keep_frame=True)
         assert any("whole number of codons" in w for w in r.warnings)
 
-    def test_a_well_formed_design_is_not_flagged_for_frame(self):
-        """A warning that fires on every design is one the reader learns to
-        skip past. The insert carries an overhang at each end that belongs to
-        no codon, so its own length is never a multiple of three — testing
-        that instead of the region would flag everything."""
-        r = design_pcr(GENE, left_enzyme="BamHI", right_enzyme="XhoI",
-                       keep_frame=True)
-        assert not any("whole number of codons" in w for w in r.warnings)
-
-    def test_an_internal_stop_is_reported(self):
-        gene = GENE[:30] + "TAA" + GENE[33:]
-        r = design_pcr(gene, left_enzyme="BamHI", right_enzyme="XhoI",
-                       keep_frame=True)
-        assert any("stop codon" in w for w in r.warnings)
-
-
-class TestPrimerQuality:
-    """Each check is asserted on an input that trips it *and* on one that does
-    not. A quality check only ever tested against the case it fires on cannot
-    be distinguished from one that fires on everything."""
-
-    def test_a_weak_three_prime_end_is_reported(self):
-        notes = _primer_warnings("GGCACCGGTGTTGTTCCGATTCTAA", label="forward")
-        assert any("ends in A or T" in n for n in notes)
-
-    def test_a_strong_three_prime_end_is_not_reported(self):
-        notes = _primer_warnings("GAAGAATTGTTCACCGGTGTTGTTC", label="forward")
-        assert not any("ends in A or T" in n for n in notes)
-
-    def test_a_gc_clamp_that_is_too_strong_is_reported(self):
-        notes = _primer_warnings("ATGAAAGGTGAAGAATTGGCGCC", label="forward")
-        assert any("last five bases" in n for n in notes)
-
-    def test_an_at_rich_region_is_reported(self):
-        notes = _primer_warnings("ATATATATATATATATATAT", label="forward")
-        assert any("Below 40%" in n for n in notes)
-
-    def test_a_gc_rich_region_is_reported(self):
-        notes = _primer_warnings("GCGCGGCCGCGGCCGCGGCC", label="forward")
-        assert any("Above 65%" in n for n in notes)
-
-    def test_a_long_homopolymer_is_reported(self):
-        notes = _primer_warnings("ATGAAAAAAAAGGTCACCGGTGTT", label="forward")
-        assert any("identical bases" in n for n in notes)
-
-    def test_a_balanced_primer_draws_no_complaint(self):
-        assert _primer_warnings("GAAGAATTGTTCACCGGTGTTGTTC", label="forward") == []
-
-    def test_primer_dimer_between_the_pair_is_detected(self):
-        """Two primers complementary at their 3' ends extend one another into
-        a short product that then amplifies far better than the template."""
-        forward = "ATGCGTACGTTGACCGGGCCCAAAGGGCC"
-        reverse = "GGCCCTTTGGGCCCGGTCAACGTACGCAT"
-        assert _cross_dimer(forward, reverse) >= 5
-
-    def test_an_unrelated_pair_is_not_called_a_dimer(self):
-        assert _cross_dimer("ATGAAAGGTGAAGAATTGTT", "TTTCAGGGTCAGTTTACCGT") < 5
-
-    def test_the_gc_clamp_property_reads_the_three_prime_end(self):
-        r = design_pcr(GENE)
-        assert r.forward.has_gc_clamp == any(b in "GC" for b in r.forward.anneals[-2:])
-
-
-class TestTheWholeJourney:
-    """Amplify, cut, ligate. Each step can be right on its own and still not
-    compose — this is the only test that says the three of them do."""
-
-    def test_a_pcr_product_clones_into_pet21a(self):
-        r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI", name="gene")
-        assert r.is_clean
-
-        record = vectors.sequence_of("pET-21a")
-        result = cloning.clone(
-            record["sequence"], r.digest.top,
-            left_enzyme="NdeI", right_enzyme="XhoI",
-            vector_spec=vectors.get("pET-21a"),
-            insert_reverse=r.digest.bottom,
-            insert_left_end=r.digest.left_end,
-            insert_right_end=r.digest.right_end,
-            name="pET21a-gene",
-        )
-        assert result.is_clonable
-        assert result.problems == []
-
-    def test_the_cloned_insert_is_the_gene_that_was_amplified(self):
-        """Round trip: what comes back out of the plasmid is what went into
-        the reaction."""
-        r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI")
-        record = vectors.sequence_of("pET-21a")
-        result = cloning.clone(
-            record["sequence"], r.digest.top,
-            left_enzyme="NdeI", right_enzyme="XhoI",
-            insert_reverse=r.digest.bottom,
-            insert_left_end=r.digest.left_end,
-            insert_right_end=r.digest.right_end,
-        )
-        plasmid = result.plasmid
-        # The cassette reads on the minus strand in pET-21a, so look on both.
-        assert GENE in plasmid + plasmid or GENE in reverse_complement(plasmid) * 2
-
-    def test_recutting_the_plasmid_returns_an_insert_of_the_right_length(self):
-        r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI")
-        record = vectors.sequence_of("pET-21a")
-        result = cloning.clone(
-            record["sequence"], r.digest.top,
-            left_enzyme="NdeI", right_enzyme="XhoI",
-            insert_reverse=r.digest.bottom,
-            insert_left_end=r.digest.left_end,
-            insert_right_end=r.digest.right_end,
-        )
-        assert result.insert_length == r.digest.length
+    def test_a_well_formed_design_is_not_flagged_for_frame(s

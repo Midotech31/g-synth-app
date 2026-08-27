@@ -73,6 +73,44 @@ export type Segment = {
   sequence: string;
 };
 
+export type Diagnostic = {
+  code: string;
+  severity: "info" | "warning" | "error";
+  message: string;
+  remedy: string;
+  positions: number[];
+};
+
+export type PreflightCheck = {
+  code: string;
+  label: string;
+  status: "pass" | "review" | "block";
+  detail: string;
+  remedy: string;
+  evidence: Record<string, unknown>;
+  passed: boolean;
+};
+
+export type PreflightReport = {
+  workflow: string;
+  verdict: "ready" | "review" | "blocked";
+  can_export: boolean;
+  checks: PreflightCheck[];
+  diagnostics: Diagnostic[];
+};
+
+export type Provenance = {
+  schema: "gsynth.provenance/v1";
+  engine_version: string;
+  workflow: string;
+  generated_at: string | null;
+  parameters: Record<string, unknown>;
+  parameters_sha256: string;
+  output_sha256: string;
+  vector_sha256: string | null;
+  enzyme_table: { sha256: string; source: string; entries: number };
+};
+
 export type SSDResult = {
   forward: string;
   reverse: string;
@@ -91,6 +129,8 @@ export type SSDResult = {
   coding_region: string;
   segments: Segment[];
   warnings: string[];
+  preflight?: PreflightReport;
+  provenance?: Provenance;
   project_id?: number;
 };
 
@@ -166,6 +206,8 @@ export type AssemblyResult = {
   warnings: string[];
   /** Empty means the oligos re-ligate to the design. Non-empty blocks ordering. */
   verification: string[];
+  preflight?: PreflightReport;
+  provenance?: Provenance;
   project_id?: number;
 };
 
@@ -246,6 +288,8 @@ export type CloneResult = {
   /** Empty means these two molecules really do join. */
   problems: string[];
   is_clonable: boolean;
+  preflight?: PreflightReport;
+  provenance?: Provenance;
   /** Null when the insert was supplied already cut — there was no SSD design. */
   insert: SSDResult | null;
   assembly: AssemblyResult | null;
@@ -310,6 +354,8 @@ export type PcrResult = {
   is_clean: boolean;
   /** Null for conventional PCR, and when a problem blocks the digest. */
   digest: PcrDigest | null;
+  preflight?: PreflightReport;
+  provenance?: Provenance;
 };
 
 export type PcrParams = {
@@ -320,6 +366,7 @@ export type PcrParams = {
   right_enzyme?: string | null;
   clamp?: number;
   keep_frame?: boolean;
+  start_codon_mode?: "use_site" | "keep_both";
   name?: string;
 };
 
@@ -357,6 +404,8 @@ export type OptimiseResult = {
   problems: string[];
   warnings: string[];
   is_clean: boolean;
+  preflight?: PreflightReport;
+  provenance?: Provenance;
 };
 
 export type LigationReaction = {
@@ -413,8 +462,18 @@ export type VerifyReport = {
   coverage: number;
   gaps: [number, number][];
   fully_covered: boolean;
-  /** Empty differences with at least one read means it is the design. */
+  /** True only when the requested region is completely covered and agrees. */
   is_verified: boolean;
+  verification_state?:
+    | "fully_verified"
+    | "differences_detected"
+    | "partial_match"
+    | "reads_unplaced"
+    | "not_checked";
+  region_start?: number;
+  region_end?: number;
+  preflight?: PreflightReport;
+  provenance?: Provenance;
   differences: Difference[];
   reads: {
     name: string;
@@ -601,325 +660,4 @@ export type Project = ProjectSummary & {
     construct_gc?: number;
     gc?: number;
   };
-  created_at: string;
-};
-
-export class ApiError extends Error {
-  status: number;
-  /** Field-level errors from DRF, e.g. { email: ["already exists"] } */
-  fields: Record<string, string[]>;
-
-  constructor(status: number, message: string, fields: Record<string, string[]> = {}) {
-    super(message);
-    this.status = status;
-    this.fields = fields;
-  }
-}
-
-export const tokenStore = {
-  get access() {
-    return localStorage.getItem(ACCESS_KEY);
-  },
-  get refresh() {
-    return localStorage.getItem(REFRESH_KEY);
-  },
-  save({ access, refresh }: Tokens) {
-    localStorage.setItem(ACCESS_KEY, access);
-    localStorage.setItem(REFRESH_KEY, refresh);
-  },
-  saveAccess(access: string) {
-    localStorage.setItem(ACCESS_KEY, access);
-  },
-  clear() {
-    localStorage.removeItem(ACCESS_KEY);
-    localStorage.removeItem(REFRESH_KEY);
-  },
-};
-
-/** Turn a DRF error body into one readable sentence plus per-field detail. */
-function describe(status: number, body: unknown): ApiError {
-  if (body && typeof body === "object") {
-    const obj = body as Record<string, unknown>;
-    if (typeof obj.detail === "string") return new ApiError(status, obj.detail);
-
-    const fields: Record<string, string[]> = {};
-    const parts: string[] = [];
-    for (const [key, value] of Object.entries(obj)) {
-      const messages = Array.isArray(value) ? value.map(String) : [String(value)];
-      fields[key] = messages;
-      parts.push(key === "non_field_errors" ? messages.join(" ") : `${key}: ${messages.join(" ")}`);
-    }
-    if (parts.length) return new ApiError(status, parts.join(" · "), fields);
-  }
-  if (status === 401) return new ApiError(status, "Your session has expired. Please sign in again.");
-  if (status === 429) return new ApiError(status, "Too many attempts. Please wait a minute and try again.");
-  return new ApiError(status, `Request failed (${status}).`);
-}
-
-/** Hand a blob to the browser as a download. */
-function saveBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.style.display = "none";
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  // Firefox can cancel the download when the object URL is revoked in the
-  // same task as the synthetic click.
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
-let refreshInFlight: Promise<string | null> | null = null;
-
-async function refreshAccessToken(): Promise<string | null> {
-  const refresh = tokenStore.refresh;
-  if (!refresh) return null;
-
-  const response = await fetch(`${API_BASE}/api/auth/refresh/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh }),
-  });
-  if (!response.ok) return null;
-
-  const data = (await response.json()) as { access: string; refresh?: string };
-  // ROTATE_REFRESH_TOKENS is on, so keep the new refresh token when sent.
-  if (data.refresh) tokenStore.save({ access: data.access, refresh: data.refresh });
-  else tokenStore.saveAccess(data.access);
-  return data.access;
-}
-
-async function sendWithRefresh(
-  send: (token: string | null) => Promise<Response>,
-): Promise<Response> {
-  const response = await send(tokenStore.access);
-  if (response.status !== 401 || !tokenStore.refresh) return response;
-
-  refreshInFlight = refreshInFlight ?? refreshAccessToken().finally(() => {
-    refreshInFlight = null;
-  });
-  const fresh = await refreshInFlight;
-  if (!fresh) {
-    tokenStore.clear();
-    throw new ApiError(401, "Your session has expired. Please sign in again.");
-  }
-  return send(fresh);
-}
-
-function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  return sendWithRefresh((token) => {
-    const headers = new Headers(init.headers);
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-    else headers.delete("Authorization");
-    return fetch(`${API_BASE}${path}`, { ...init, headers });
-  });
-}
-
-type RequestOptions = {
-  method?: string;
-  body?: unknown;
-  /** Set for multipart uploads — the browser must write its own boundary. */
-  formData?: FormData;
-  auth?: boolean;
-};
-
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, formData, auth = true } = options;
-
-  const send = async (token: string | null): Promise<Response> => {
-    const headers: Record<string, string> = {};
-    if (!formData) headers["Content-Type"] = "application/json";
-    if (auth && token) headers["Authorization"] = `Bearer ${token}`;
-    return fetch(`${API_BASE}${path}`, {
-      method,
-      headers,
-      body: formData ?? (body === undefined ? undefined : JSON.stringify(body)),
-    });
-  };
-
-  const response = auth ? await sendWithRefresh(send) : await send(null);
-
-  if (response.status === 204 || response.status === 205) return undefined as T;
-
-  const text = await response.text();
-  let payload: unknown = null;
-  if (text) {
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      if (!response.ok) throw describe(response.status, null);
-      throw new ApiError(502, "The server returned an invalid response.");
-    }
-  }
-
-  if (!response.ok) throw describe(response.status, payload);
-  return payload as T;
-}
-
-export const api = {
-  register: (email: string, name: string, password: string, password2: string) =>
-    request<User>("/api/auth/register/", {
-      method: "POST",
-      auth: false,
-      body: { email, name, password, password2 },
-    }),
-
-  login: async (email: string, password: string) => {
-    const tokens = await request<Tokens>("/api/auth/login/", {
-      method: "POST",
-      auth: false,
-      body: { email, password },
-    });
-    tokenStore.save(tokens);
-    return tokens;
-  },
-
-  logout: async () => {
-    const refresh = tokenStore.refresh;
-    try {
-      if (refresh) await request<void>("/api/auth/logout/", { method: "POST", body: { refresh } });
-    } finally {
-      tokenStore.clear();
-    }
-  },
-
-  me: () => request<User>("/api/auth/me/"),
-
-  listProjects: () =>
-    request<{ count: number; results: ProjectSummary[] }>("/api/projects/"),
-
-  getProject: (id: number) => request<Project>(`/api/projects/${id}/`),
-
-  createProject: (payload: Partial<Project>) =>
-    request<Project>("/api/projects/", { method: "POST", body: payload }),
-
-  deleteProject: (id: number) =>
-    request<void>(`/api/projects/${id}/`, { method: "DELETE" }),
-
-  catalogue: () => request<Catalogue>("/api/design/enzymes/", { auth: false }),
-
-  designSSD: (params: DesignParams) =>
-    request<SSDResult>("/api/design/ssd/", { method: "POST", body: params }),
-
-  designAssembly: (params: DesignParams) =>
-    request<AssemblyResult>("/api/design/assembly/", { method: "POST", body: params }),
-
-  optimise: (params: OptimiseParams) =>
-    request<OptimiseResult>("/api/design/optimise/", { method: "POST", body: params }),
-
-  ligation: (params: {
-    vector_length: number;
-    insert_length: number;
-    vector_ng?: number;
-    ends?: string;
-    ratios?: number[];
-  }) =>
-    request<{ reactions: LigationReaction[]; ends: string }>(
-      "/api/design/ligation/", { method: "POST", body: params },
-    ),
-
-  primers: (params: {
-    template: string;
-    target_start: number;
-    target_end: number;
-    circular?: boolean;
-    name?: string;
-  }) => request<PrimerSet>("/api/design/primers/", { method: "POST", body: params }),
-
-  verify: (params: {
-    design: string;
-    reads: Record<string, string>;
-    circular?: boolean;
-    trim?: number;
-    coding_start?: number | null;
-    coding_end?: number | null;
-    region_start?: number | null;
-    region_end?: number | null;
-  }) => request<VerifyReport>("/api/design/verify/", { method: "POST", body: params }),
-
-  /**
-   * The same comparison, from .ab1 files rather than pasted letters.
-   *
-   * Multipart because a trace is binary — base64 in JSON would inflate a
-   * 400 kB file by a third for nothing. What comes back carries the quality
-   * of each disputed base and the peaks around it.
-   */
-  verifyTraces: (params: {
-    design: string;
-    files: File[];
-    circular?: boolean;
-    trim_quality?: number;
-    coding_start?: number | null;
-    coding_end?: number | null;
-    region_start?: number | null;
-    region_end?: number | null;
-  }) => {
-    const form = new FormData();
-    form.append("design", params.design);
-    params.files.forEach((file) => form.append("traces", file));
-    for (const key of ["circular", "trim_quality", "coding_start", "coding_end",
-                       "region_start", "region_end"] as const) {
-      const value = params[key];
-      if (value !== undefined && value !== null) form.append(key, String(value));
-    }
-    return request<VerifyReport>("/api/design/verify/traces/", {
-      method: "POST", formData: form,
-    });
-  },
-
-  align: (params: {
-    first: string;
-    second: string;
-    mode?: string;
-    is_protein?: boolean;
-    try_reverse?: boolean;
-  }) => request<AlignResult>("/api/design/align/", { method: "POST", body: params }),
-
-  pcr: (params: PcrParams) =>
-    request<PcrResult>("/api/design/pcr/", { method: "POST", body: params }),
-
-  clone: (params: CloneParams) =>
-    request<CloneResult>("/api/design/clone/", { method: "POST", body: params }),
-
-  vectors: () =>
-    request<{ vectors: VectorSpec[]; default: string }>("/api/design/vectors/", {
-      auth: false,
-    }),
-
-  vectorSequence: (key: string) =>
-    request<VectorRecord>(`/api/design/vectors/${encodeURIComponent(key)}/`, {
-      auth: false,
-    }),
-
-  /** GET a file the browser saves — for endpoints that need no body. */
-  downloadUrl: async (path: string, filename: string) => {
-    const response = await authenticatedFetch(path);
-    if (!response.ok) throw new ApiError(response.status, "Download failed.");
-    saveBlob(await response.blob(), filename);
-  },
-
-  /** Downloads stream as files, so they bypass the JSON request helper. */
-  download: async (path: string, params: DesignParams | CloneParams, filename: string) => {
-    const response = await authenticatedFetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-    });
-    if (!response.ok) throw new ApiError(response.status, "Download failed.");
-    saveBlob(await response.blob(), filename);
-  },
-
-  parseFile: (file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    return request<ParsedRecord>("/api/sequences/parse/", { method: "POST", formData });
-  },
-
-  askTutor: (question: string, history: { role: string; content: string }[]) =>
-    request<{ answer: string }>("/api/tutor/ask/", {
-      method: "POST",
-      body: { question, history },
-    }),
-};
+  pro
