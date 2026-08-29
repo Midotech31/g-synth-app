@@ -14,6 +14,8 @@ type Props = {
   onChange: <K extends keyof DesignParams>(key: K, value: DesignParams[K]) => void;
   /** Hide the fragmentation controls where they do not apply. */
   showFragmentation?: boolean;
+  /** Guided mode keeps validated defaults and exposes only core choices. */
+  expert?: boolean;
   idPrefix?: string;
 };
 
@@ -22,6 +24,7 @@ export default function InsertForm({
   catalogue,
   onChange,
   showFragmentation = true,
+  expert = true,
   idPrefix = "",
 }: Props) {
   const id = (name: string) => `${idPrefix}${name}`;
@@ -128,7 +131,7 @@ export default function InsertForm({
         </div>
       </div>
 
-      <div className="field">
+      {expert && <div className="field">
         <label htmlFor={id("cleavage")}>Protease site</label>
         <select
           id={id("cleavage")}
@@ -142,25 +145,25 @@ export default function InsertForm({
             </option>
           ))}
         </select>
-      </div>
+      </div>}
 
       <div className="checks">
-        <label>
+        {expert && <label>
           <input
             type="checkbox"
             checked={params.include_his_tag}
             onChange={(e) => onChange("include_his_tag", e.target.checked)}
           />
           6×His tag
-        </label>
-        <label>
+        </label>}
+        {expert && <label>
           <input
             type="checkbox"
             checked={params.include_linkers}
             onChange={(e) => onChange("include_linkers", e.target.checked)}
           />
           Flexible linkers
-        </label>
+        </label>}
         <label>
           <input
             type="checkbox"
@@ -169,7 +172,7 @@ export default function InsertForm({
           />
           Insert already has its own ATG
         </label>
-        {params.is_coding && (
+        {expert && params.is_coding && (
           <label>
             <input
               type="checkbox"
@@ -181,7 +184,7 @@ export default function InsertForm({
         )}
       </div>
 
-      {showFragmentation && (
+      {expert && showFragmentation && (
         <div className="row-2">
           <div className="field">
             <label htmlFor={id("oligo")}>Oligo length (nt)</label>

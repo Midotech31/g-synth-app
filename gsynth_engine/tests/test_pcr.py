@@ -10,7 +10,7 @@ not compose.
 import pytest
 
 from gsynth_engine import cloning, vectors
-from gsynth_engine.cloning import _observed_insert_ends, translate
+from gsynth_engine.cloning import _observed_insert_ends, find_sites, translate
 from gsynth_engine.pcr import (
     DEFAULT_CLAMP,
     MAX_ANNEAL,
@@ -77,6 +77,23 @@ class TestConventionalPcr:
         with pytest.raises(SequenceError, match="inside the template"):
             design_pcr(GENE, target_start=0, target_end=len(GENE) + 50)
 
+    def test_manual_lengths_are_used_exactly(self):
+        result = design_pcr(
+            GENE, forward_anneal_length=20, reverse_anneal_length=24,
+        )
+        assert result.forward.anneal_length == 20
+        assert result.reverse.anneal_length == 24
+        assert result.forward.anneals == GENE[:20]
+        assert result.reverse.anneals == reverse_complement(GENE[-24:])
+
+    def test_manual_mode_requires_both_lengths(self):
+        with pytest.raises(SequenceError, match="both manual primer lengths"):
+            design_pcr(GENE, forward_anneal_length=20)
+
+    def test_manual_lengths_are_bounded(self):
+        with pytest.raises(SequenceError, match="between 15 and 60"):
+            design_pcr(GENE, forward_anneal_length=12, reverse_anneal_length=20)
+
 
 class TestAnnealingTemperature:
     """Ta comes from the part that binds in cycle one, not from the whole
@@ -142,7 +159,28 @@ class TestCloningTails:
         assert "CATATG" in r.product
         assert "CTCGAG" in r.product
         assert r.amplified_region in r.product
+        assert r.amplified_region == GENE[3:]
+        assert r.template_start == 3
+
+    def test_ndei_uses_its_own_start_codon_by_default(self):
+        """NdeI's CATATG supplies the initiating ATG, so the template primer
+        begins at codon two and the expressed protein starts with one Met."""
+        r = design_pcr(
+            GENE, left_enzyme="NdeI", right_enzyme="XhoI", keep_frame=True,
+        )
+        start = r.insert_orf_start
+        assert translate(r.digest.top[start:start + 6]) == "MK"
+        assert r.forward.anneals == GENE[3:3 + len(r.forward.anneals)]
+
+    def test_both_start_codons_can_be_kept_deliberately(self):
+        r = design_pcr(
+            GENE, left_enzyme="NdeI", right_enzyme="XhoI", keep_frame=True,
+            start_codon_mode="keep_both",
+        )
         assert r.amplified_region == GENE
+        start = r.insert_orf_start
+        assert translate(r.digest.top[start:start + 6]) == "MM"
+        assert any("Met-Met" in warning for warning in r.warnings)
 
     def test_the_clamp_can_be_shortened_and_says_what_that_costs(self):
         r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI", clamp=2)
@@ -153,9 +191,41 @@ class TestCloningTails:
         with pytest.raises(SequenceError, match="both ends or for neither"):
             design_pcr(GENE, left_enzyme="NdeI")
 
+    def test_using_the_same_enzyme_at_both_ends_is_refused(self):
+        with pytest.raises(SequenceError, match="must differ"):
+            design_pcr(GENE, left_enzyme="NdeI", right_enzyme="NdeI")
+
+    def test_clamp_length_is_bounded_in_the_engine_too(self):
+        with pytest.raises(SequenceError, match="Clamp length"):
+            design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI", clamp=21)
+
     def test_an_unknown_enzyme_is_refused_by_name(self):
         with pytest.raises(SequenceError, match="not an enzyme"):
             design_pcr(GENE, left_enzyme="NotAnEnzyme", right_enzyme="XhoI")
+
+    def test_an_unknown_start_codon_mode_is_refused(self):
+        with pytest.raises(SequenceError, match="Start-codon mode"):
+            design_pcr(
+                GENE, left_enzyme="NdeI", right_enzyme="XhoI",
+                start_codon_mode="guess",
+            )
+
+    def test_blocked_pair_returns_simulated_directional_alternatives(self):
+        gene = GENE[:60] + "CTCGAG" + GENE[66:]
+        result = design_pcr(gene, left_enzyme="NdeI", right_enzyme="XhoI")
+        assert result.problems
+        assert result.alternative_pairs
+        for alternative in result.alternative_pairs:
+            assert alternative["left_enzyme"] != alternative["right_enzyme"]
+            assert alternative["left_overhang"] != alternative["right_overhang"]
+            simulated = design_pcr(
+                gene,
+                left_enzyme=alternative["left_enzyme"],
+                right_enzyme=alternative["right_enzyme"],
+                suggest_alternatives=False,
+            )
+            assert simulated.is_clean
+            assert simulated.digest is not None
 
 
 class TestTheDigest:
@@ -244,6 +314,21 @@ class TestSitesInsideTheGene:
         assert r.is_clean
         assert r.problems == []
 
+    @pytest.mark.parametrize("enzyme", ["NheI", "BmtI", "BssHII", "GlaI", "HhaI", "BfaI"])
+    def test_the_clamp_does_not_create_an_extra_selected_site(self, enzyme):
+        result = design_pcr(GENE, left_enzyme=enzyme, right_enzyme="XhoI")
+        assert result.is_clean, result.problems
+        assert find_sites(result.product, enzyme, circular=False) == [DEFAULT_CLAMP]
+
+    def test_a_site_created_at_the_site_insert_boundary_blocks_the_digest(self):
+        # NheI followed by TAGC creates a second overlapping GCTAGC across
+        # the intended site's right boundary.
+        gene = "TAGC" + GENE[4:]
+        result = design_pcr(gene, left_enzyme="NheI", right_enzyme="XhoI")
+        assert not result.is_clean
+        assert result.digest is None
+        assert any("overlapping site" in problem for problem in result.problems)
+
 
 class TestReadingFrame:
     def test_an_atg_supplying_enzyme_anchors_the_frame_on_its_own_atg(self):
@@ -251,10 +336,19 @@ class TestReadingFrame:
         start = r.insert_orf_start
         assert r.digest.top[start:start + 3] == "ATG"
 
-    def test_a_duplicated_start_codon_is_reported(self):
+    def test_the_default_does_not_duplicate_the_start_codon(self):
+        r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI", keep_frame=True)
+        start = r.insert_orf_start
+        assert translate(r.digest.top[start:start + 6]) == "MK"
+        assert not any("Met-Met" in w for w in r.warnings)
+
+    def test_a_deliberately_duplicated_start_codon_is_reported(self):
         """NdeI's CATATG carries an ATG. A gene that also begins with one
         yields Met-Met, which is a real extra residue on the product."""
-        r = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI", keep_frame=True)
+        r = design_pcr(
+            GENE, left_enzyme="NdeI", right_enzyme="XhoI", keep_frame=True,
+            start_codon_mode="keep_both",
+        )
         start = r.insert_orf_start
         assert translate(r.digest.top[start:start + 6]) == "MM"
         assert any("Met-Met" in w for w in r.warnings)
@@ -266,6 +360,16 @@ class TestReadingFrame:
         assert r.insert_orf_start % 3 == 0
         start = r.insert_orf_start
         assert translate(r.digest.top[start:start + 6]) == "MK"
+
+    @pytest.mark.parametrize("enzyme", ["NcoI", "CciI", "FaeI", "NsiI", "PciI", "SphI"])
+    def test_an_atg_elsewhere_in_a_site_does_not_replace_the_gene_start(self, enzyme):
+        result = design_pcr(
+            GENE, left_enzyme=enzyme, right_enzyme="XhoI", keep_frame=True,
+        )
+        assert result.amplified_region == GENE
+        start = result.insert_orf_start
+        assert result.digest.top[start:start + 3] == "ATG"
+        assert translate(result.digest.top[start:start + 6]) == "MK"
 
     def test_a_region_that_is_not_whole_codons_is_flagged(self):
         r = design_pcr(GENE[:-2], left_enzyme="BamHI", right_enzyme="XhoI",

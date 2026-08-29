@@ -596,6 +596,14 @@ def clone(
         left, right = insert_left_end, insert_right_end
     elif insert_reverse:
         left, right = _observed_insert_ends(insert_top, insert_reverse, left_enzyme)
+        mismatches = insert_duplex_mismatches(insert_top, insert_reverse, left_enzyme)
+        if mismatches:
+            preview = ", ".join(str(position + 1) for position in mismatches[:5])
+            suffix = "…" if len(mismatches) > 5 else ""
+            problems.append(
+                f"The two supplied insert strands do not pair at {len(mismatches)} "
+                f"position(s): {preview}{suffix}."
+            )
     else:
         # Only the forward strand was supplied, so half the geometry is
         # unobservable: at a 5' cut the left overhang is on the top strand and
@@ -901,6 +909,26 @@ def _observed_insert_ends(
         right = End("", "blunt", "right")
 
     return left, right
+
+
+def insert_duplex_mismatches(top: str, reverse: str, left_enzyme: str) -> list[int]:
+    """Top-strand coordinates where the two supplied insert strands disagree.
+
+    Terminal overhangs are intentionally unpaired and excluded. Alignment is
+    determined from the observed left-enzyme cut offset, the same geometry
+    used to read the insert ends.
+    """
+    top_clean = clean_dna(top)
+    bottom_sense = reverse_complement(clean_dna(reverse))
+    info = ALL_ENZYMES[left_enzyme]
+    offset = int(info["cut_bottom"]) - int(info["cut_top"])  # type: ignore[arg-type]
+    overlap_start = max(0, offset)
+    overlap_end = min(len(top_clean), offset + len(bottom_sense))
+    return [
+        position
+        for position in range(overlap_start, overlap_end)
+        if top_clean[position] != bottom_sense[position - offset]
+    ]
 
 
 def _junction(

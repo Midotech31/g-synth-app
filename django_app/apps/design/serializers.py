@@ -14,7 +14,7 @@ from gsynth_engine.constants import (
     CLEAVAGE_SITES,
 )
 from gsynth_engine.merzoug import MAX_OVERHANG, MIN_OVERHANG
-from gsynth_engine.pcr import DEFAULT_CLAMP
+from gsynth_engine.pcr import DEFAULT_CLAMP, MAX_MANUAL_ANNEAL, MIN_MANUAL_ANNEAL
 from gsynth_engine.vectors import CATALOGUE, DEFAULT_VECTOR
 
 #: Every enzyme with verified cut geometry. The interface groups the
@@ -383,6 +383,13 @@ class AlignRequestSerializer(serializers.Serializer):
     gap_extend = serializers.IntegerField(default=1, min_value=0, max_value=20)
 
 
+class SequenceAnalysisRequestSerializer(serializers.Serializer):
+    """One DNA sequence for reverse-complement, translation and ORF analysis."""
+
+    sequence = serializers.CharField(max_length=2_000_000)
+    minimum_codons = serializers.IntegerField(min_value=1, max_value=100_000, default=10)
+
+
 class PcrRequestSerializer(serializers.Serializer):
     """A PCR, conventional or with cloning tails.
 
@@ -403,6 +410,21 @@ class PcrRequestSerializer(serializers.Serializer):
     # request for a thousand bases of clamp is an oligo nobody can order.
     clamp = serializers.IntegerField(min_value=0, max_value=20, default=DEFAULT_CLAMP)
     keep_frame = serializers.BooleanField(default=False)
+    start_codon_mode = serializers.ChoiceField(
+        choices=("use_site", "keep_both"), default="use_site",
+        help_text=(
+            "When the left site supplies ATG, use that start codon by default "
+            "or deliberately retain the template ATG as well."
+        ),
+    )
+    forward_anneal_length = serializers.IntegerField(
+        min_value=MIN_MANUAL_ANNEAL, max_value=MAX_MANUAL_ANNEAL,
+        required=False, allow_null=True, default=None,
+    )
+    reverse_anneal_length = serializers.IntegerField(
+        min_value=MIN_MANUAL_ANNEAL, max_value=MAX_MANUAL_ANNEAL,
+        required=False, allow_null=True, default=None,
+    )
     name = serializers.CharField(max_length=60, required=False, default="product")
 
     def validate(self, attrs):
@@ -415,4 +437,19 @@ class PcrRequestSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"right_enzyme": "Choose an enzyme for both ends, or for neither."}
             )
+        if (
+            attrs.get("left_enzyme") is not None
+            and attrs.get("left_enzyme") == attrs.get("right_enzyme")
+        ):
+            raise serializers.ValidationError({
+                "right_enzyme": "The two enzymes must differ, otherwise the "
+                                "insert could ligate in either orientation."
+            })
+        if (attrs.get("forward_anneal_length") is None) != (
+            attrs.get("reverse_anneal_length") is None
+        ):
+            raise serializers.ValidationError({
+                "reverse_anneal_length": "Set both manual primer lengths, "
+                                           "or leave both automatic."
+            })
         return attrs

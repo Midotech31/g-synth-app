@@ -46,6 +46,10 @@ class TestEnzymeCatalogue:
         assert by_name["NdeI"]["overhang"] == "TA"
         assert by_name["NdeI"]["overhang_type"] == "5'"
         assert by_name["NdeI"]["supplies_start_codon"] is True
+        assert by_name["CviAII"]["supplies_start_codon"] is True
+        assert by_name["FatI"]["supplies_start_codon"] is True
+        assert by_name["NcoI"]["supplies_start_codon"] is False
+        assert by_name["NsiI"]["supplies_start_codon"] is False
         assert by_name["XhoI"]["overhang"] == "TCGA"
         assert by_name["KpnI"]["overhang_type"] == "3'"
         assert by_name["SmaI"]["overhang_type"] == "blunt"
@@ -545,6 +549,9 @@ class TestCloningIntoACatalogueVector:
         assert response.data["is_clonable"], response.data["problems"]
         assert response.data["vector_name"] == "pET-21a(+)"
         assert response.data["length"] > 5000
+        assert response.data["preflight"]["can_export"] is True
+        assert response.data["provenance"]["workflow"] == "cloning"
+        assert len(response.data["provenance"]["output_sha256"]) == 64
 
     def test_the_backbone_survives(self, auth_client):
         """pET-21a's cassette reads on the minus strand; getting that wrong
@@ -772,6 +779,19 @@ class TestExport:
         assert response.status_code == 200
         assert response.content.decode().startswith(">EntA")
 
+    def test_cloning_worksheet_links_preflight_bands_ligation_and_primers(self, auth_client):
+        response = auth_client.post(
+            reverse("design-clone-worksheet"),
+            {"sequence": LONG_INSERT, "vector_key": "pET-21a", "name": "EntA"},
+        )
+        assert response.status_code == 200, response.content[:300]
+        text = response.content.decode()
+        assert "PREFLIGHT RELEASE" in text
+        assert "Expected gel bands" in text
+        assert "3:1 insert:vector" in text
+        assert "SEQUENCING PRIMERS" in text
+        assert "Output SHA-256" in text
+
     def test_the_construct_exports_with_its_cassette_labelled(self, auth_client):
         response = auth_client.post(reverse("design-construct-export"), {
             "sequence": LONG_INSERT, "name": "EntA",
@@ -970,6 +990,11 @@ class TestVerifyEndpoint:
         assert response.data["is_verified"]
         assert response.data["coverage"] == 100.0
         assert response.data["differences"] == []
+        assert response.data["verification_state"] == "fully_verified"
+        assert response.data["region_start"] == cloned["insert_start"]
+        assert response.data["region_end"] == cloned["insert_end"]
+        assert response.data["preflight"]["verdict"] == "ready"
+        assert response.data["provenance"]["workflow"] == "sequence_verification"
 
     def test_a_reversed_read_is_handled(self, auth_client):
         """Half of all Sanger reads come back on the other strand."""
@@ -982,6 +1007,8 @@ class TestVerifyEndpoint:
         response = auth_client.post(reverse(self.url_name), {
             "design": cloned["plasmid"],
             "reads": {"T7-R": reverse_complement(forward)},
+            "region_start": cloned["insert_start"],
+            "region_end": cloned["insert_end"],
         }, format="json")
         assert response.data["reads"][0]["reverse_complemented"] is True
         assert response.data["is_verified"]
@@ -1023,6 +1050,7 @@ class TestVerifyEndpoint:
             "region_end": cloned["insert_end"],
         }, format="json")
         assert not response.data["fully_covered"]
+        assert not response.data["is_verified"]
         assert response.data["coverage"] < 100
 
     def test_one_unplaceable_read_does_not_sink_the_rest(self, auth_client):
@@ -1046,6 +1074,30 @@ class TestVerifyEndpoint:
         }, format="json")
         assert response.status_code == 400
         assert "at least one read" in str(response.data)
+
+
+@pytest.mark.django_db
+class TestSequenceAnalysisEndpoint:
+    url_name = "design-analyse"
+
+    def test_requires_authentication(self, api_client):
+        response = api_client.post(reverse(self.url_name), {"sequence": "ATGAAATAA"})
+        assert response.status_code == 401
+
+    def test_returns_reverse_complement_six_frames_and_orfs(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": "CCCATGAAATAAGGG", "minimum_codons": 2,
+        })
+        assert response.status_code == 200, response.data
+        assert response.data["reverse_complement"] == "CCCTTATTTCATGGG"
+        assert [frame["frame"] for frame in response.data["frames"]] == [1, 2, 3, -1, -2, -3]
+        assert response.data["orfs"][0]["protein"] == "MK"
+        assert (response.data["orfs"][0]["start"], response.data["orfs"][0]["end"]) == (3, 12)
+
+    def test_invalid_dna_is_actionable(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {"sequence": "ATGNNNTAA"})
+        assert response.status_code == 400
+        assert "not A, C, G or T" in response.data["detail"]
 
 
 @pytest.mark.django_db
@@ -1333,6 +1385,7 @@ class TestTraceVerifyEndpoint:
         response = auth_client.post(reverse(self.url_name), {
             "design": self.DESIGN, "circular": False,
             "traces": [self._upload(self.DESIGN[30:230])],
+            "region_start": 30, "region_end": 230,
         }, format="multipart")
         assert response.status_code == 200, response.data
         assert response.data["is_verified"] is True

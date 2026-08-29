@@ -529,6 +529,53 @@ describe("multipart uploads", () => {
   });
 });
 
+describe("PCR design", () => {
+  it("sends the explicit NdeI start-codon policy to the engine", async () => {
+    serve(() => json(200, {}));
+
+    await client.api.pcr({
+      template: "ATGAAAGGTGAAGAATTGTTCACCGGTGTTGTTCCGATTCTG",
+      left_enzyme: "NdeI",
+      right_enzyme: "XhoI",
+      start_codon_mode: "use_site",
+    });
+
+    expect(JSON.parse(String(calls[0].init.body))).toMatchObject({
+      left_enzyme: "NdeI",
+      right_enzyme: "XhoI",
+      start_codon_mode: "use_site",
+    });
+  });
+
+  it("sends exact manual footprints when the expert mode selects them", async () => {
+    serve(() => json(200, {}));
+
+    await client.api.pcr({
+      template: "ATGAAAGGTGAAGAATTGTTCACCGGTGTTGTTCCGATTCTG",
+      forward_anneal_length: 20,
+      reverse_anneal_length: 24,
+    });
+
+    expect(JSON.parse(String(calls[0].init.body))).toMatchObject({
+      forward_anneal_length: 20,
+      reverse_anneal_length: 24,
+    });
+  });
+});
+
+describe("sequence analysis", () => {
+  it("posts the DNA and ORF threshold to the analysis endpoint", async () => {
+    serve(() => json(200, { frames: [], orfs: [] }));
+
+    await client.api.analyse({ sequence: "ATGAAATAA", minimum_codons: 2 });
+
+    expect(calls[0].url).toContain("/api/design/analyse/");
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      sequence: "ATGAAATAA", minimum_codons: 2,
+    });
+  });
+});
+
 describe("file downloads", () => {
   const revoke = vi.fn();
 

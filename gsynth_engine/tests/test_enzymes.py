@@ -21,6 +21,7 @@ from gsynth_engine.constants import (
     left_remainders,
     overhang,
     right_remainders,
+    supplies_start_codon,
 )
 from gsynth_engine.sequence import reverse_complement
 
@@ -109,6 +110,16 @@ class TestTheWideTable:
             low, high = min(top, bottom), max(top, bottom)
             assert sequence == site[low:high]
             assert kind == ("5'" if top < bottom else "3'")
+
+    def test_start_codon_supply_depends_on_the_retained_remainder(self):
+        assert {name for name in ALL_ENZYMES if supplies_start_codon(name)} == {
+            "CviAII", "FatI", "NdeI",
+        }
+        # Each of these recognition sites contains ATG, but the cut removes
+        # it or leaves an extra frame-shifting base after it.
+        for name in ("CciI", "FaeI", "NcoI", "NsiI", "PciI", "SphI"):
+            assert "ATG" in str(ALL_ENZYMES[name]["recognition"])
+            assert not supplies_start_codon(name)
 
 
 class TestIsoschizomersAreCollapsed:

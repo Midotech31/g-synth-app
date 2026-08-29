@@ -19,6 +19,7 @@ CLEAVAGE_SITES: Final[dict[str, str]] = {
     "Thrombin":     "CTGGTGCCGCGTGGTTCT",           # LVPR/GS
     "TEV":          "GAAAACCTGTATTTTCAGGGC",        # ENLYFQ/G
     "Factor Xa":    "ATCGAAGGTCGT",                 # IEGR/
+    "Factor Xa (legacy DNA)": "ATCGAGGGAAGG",        # IEGR/, G-Synth 2025
     "PreScission":  "CTGGAAGTGCTGTTCCAGGGCCCA",     # LEVLFQ/GP
     "Enterokinase": "GATGACGATGACAAG",              # DDDDK/
     "SUMO":         "CTGCAGGACTCAGAGG",
@@ -94,6 +95,19 @@ def left_remainders(enzyme: str) -> tuple[str, str]:
     top: int = info["cut_top"]                # type: ignore[assignment]
     bottom: int = info["cut_bottom"]          # type: ignore[assignment]
     return site[top:], _rc(site[bottom:])
+
+
+def supplies_start_codon(enzyme: str) -> bool:
+    """Whether the LEFT insert remainder ends in a complete start codon.
+
+    Merely containing ``ATG`` in the recognition sequence is not enough.
+    Bases before the top-strand cut are discarded, while bases between an
+    internal ``ATG`` and the insert shift the coding frame.  A site supplies
+    the initiator only when the top-strand piece retained by the insert ends
+    exactly in ``ATG``.
+    """
+    forward, _reverse = left_remainders(enzyme)
+    return forward.endswith("ATG")
 
 
 def right_remainders(enzyme: str) -> tuple[str, str]:

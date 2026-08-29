@@ -29,7 +29,26 @@ class TestProjectCrud:
         assert got.status_code == 200
         assert got.data["name"] == "Insulin v1"
         assert got.data["sequence"] == "ATGAAACGT"
+        assert got.data["provenance"]["schema"] == "gsynth.provenance/v1"
+        assert len(got.data["provenance"]["output_sha256"]) == 64
         assert Project.objects.filter(id=pid, user=user).exists()
+
+    def test_provenance_is_server_generated_and_read_only(self, auth_client):
+        response = auth_client.post("/api/projects/", {
+            "name": "traceable",
+            "module": "ssd",
+            "sequence": "ATGAAATAA",
+            "provenance": {"output_sha256": "forged"},
+        }, format="json")
+        assert response.status_code == 201
+        assert response.data["provenance"]["output_sha256"] != "forged"
+
+        patched = auth_client.patch(
+            f"/api/projects/{response.data['id']}/",
+            {"provenance": {"output_sha256": "changed"}},
+            format="json",
+        )
+        assert patched.data["provenance"]["output_sha256"] == response.data["provenance"]["output_sha256"]
 
     def test_update(self, auth_client, user):
         p = Project.objects.create(user=user, name="A", notes="")

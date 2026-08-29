@@ -34,6 +34,12 @@ const STAGES: { to: string; name: string; icon: IconName; blurb: string }[] = [
   },
 ];
 
+const TOOLS: { to: string; name: string; detail: string }[] = [
+  { to: "/translate", name: "Translate & ORFs", detail: "Six frames, both strands, coordinates and FASTA/CSV export." },
+  { to: "/reverse-complement", name: "Reverse complement", detail: "Validated 5′→3′ transformation with one-click copy." },
+  { to: "/pcr", name: "PCR primers", detail: "Conventional or restriction-cloning primers with digest simulation." },
+];
+
 /** What is actually different here, not a features list — each of these is
  *  a specific defect this method guards against, the way CLAUDE.md records
  *  them, said in one sentence a person can act on. */
@@ -184,6 +190,18 @@ export default function Home() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-head"><h2>Sequence tools</h2></div>
+          <div className="feature-list">
+            {TOOLS.map((tool) => <Link key={tool.to} to={tool.to} className="feature-row" style={{ textDecoration: "none" }}>
+              <span className="dot" style={{ background: "var(--accent)" }} />
+              <span style={{ minWidth: 0 }}><span className="nm" style={{ display: "block" }}>{tool.name}</span>
+                <span className="ty">{tool.detail}</span></span>
+              <span className="rg">Open →</span>
+            </Link>)}
           </div>
         </div>
 

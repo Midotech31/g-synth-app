@@ -82,6 +82,11 @@ services:
         destination: /index.html
 
     envVars:
+      # Frontend tooling and jsdom require a current LTS runtime. Pin it so a
+      # Render default change cannot make an otherwise reproducible build fail.
+      - key: NODE_VERSION
+        value: "22.22.2"
+
       # Baked in at build time. In development this is empty and Vite proxies
       # /api to :8000; in production the two services are separate origins,
       # so the client needs the API's absolute URL.

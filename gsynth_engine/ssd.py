@@ -39,6 +39,7 @@ from gsynth_engine.constants import (
     left_remainders,
     overhang,
     right_remainders,
+    supplies_start_codon,
 )
 from gsynth_engine.sequence import (
     SequenceError,
@@ -133,7 +134,7 @@ class SSDResult:
         after it.
         """
         cut, _ = left_remainders(self.left_enzyme)
-        if cut.endswith("ATG"):
+        if supplies_start_codon(self.left_enzyme):
             return len(cut) - 3
         return len(cut)
 
@@ -213,13 +214,19 @@ def design_small_sequence(
         return cursor + len(part)
 
     if is_coding:
-        # NdeI supplies the ATG through its own recognition site; keeping the
-        # insert's ATG as well would duplicate the start codon.
-        if left == "NdeI" and seq.startswith("ATG"):
+        if not seq.startswith("ATG"):
+            raise SequenceError(
+                "A coding insert must begin with ATG. Turn off 'already has "
+                "its own ATG' if this is a non-coding sequence, or add the "
+                "correct start codon."
+            )
+        # Some left sites retain a complete ATG at the cut end. Keeping the
+        # insert's own ATG as well would duplicate the initiator.
+        if supplies_start_codon(left):
             seq = seq[3:]
             warnings.append(
-                "The insert's ATG was removed: NdeI's site CATATG already "
-                "provides the start codon."
+                f"The insert's ATG was removed: {left}'s retained site "
+                "already provides the start codon."
             )
         if remove_stop:
             seq, found = _strip_stop_codon(seq)
@@ -239,11 +246,11 @@ def design_small_sequence(
 
     else:
         # Non-coding: build the standard expression cassette in front.
-        atg = "" if left == "NdeI" else "ATG"
-        if left == "NdeI":
+        atg = "" if supplies_start_codon(left) else "ATG"
+        if supplies_start_codon(left):
             warnings.append(
-                "No separate ATG was added: NdeI's site CATATG provides the "
-                "start codon."
+                f"No separate ATG was added: {left}'s retained site provides "
+                "the start codon."
             )
 
         cassette = ""

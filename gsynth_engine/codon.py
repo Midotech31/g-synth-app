@@ -41,7 +41,7 @@ import random
 from collections import Counter
 from dataclasses import dataclass, field
 
-from gsynth_engine.cloning import find_sites, translate
+from gsynth_engine.cloning import translate
 from gsynth_engine.constants import ALL_ENZYMES
 from gsynth_engine.sequence import (
     SequenceError,
@@ -598,15 +598,6 @@ def optimise(
         )
     else:
         changed = len(codons)
-
-    for enzyme in constraints.avoid_enzymes:
-        if enzyme in ALL_ENZYMES and find_sites(
-            optimised, enzyme, circular=False
-        ):
-            warnings.append(
-                f"An {enzyme} site remains. The construct cannot be cut with "
-                f"{enzyme} without cutting inside the gene."
-            )
 
     return OptimisationResult(
         sequence=optimised,

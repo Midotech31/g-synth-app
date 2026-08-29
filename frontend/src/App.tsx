@@ -29,6 +29,8 @@ const Help = lazy(() => import("./pages/Help"));
 const Learn = lazy(() => import("./pages/Learn"));
 const Optimise = lazy(() => import("./pages/Optimise"));
 const Pcr = lazy(() => import("./pages/Pcr"));
+const ReverseComplement = lazy(() => import("./pages/ReverseComplement"));
+const Translate = lazy(() => import("./pages/Translate"));
 const Verify = lazy(() => import("./pages/Verify"));
 const Viewer = lazy(() => import("./pages/Viewer"));
 
@@ -59,10 +61,17 @@ function Rail() {
       ],
     },
     {
+      label: "Analyse",
+      items: [
+        { to: "/translate", label: "Translate & ORFs", icon: "helix" },
+        { to: "/reverse-complement", label: "Reverse complement", icon: "arrowLeft" },
+        { to: "/align", label: "Compare", icon: "scales" },
+      ],
+    },
+    {
       label: "Verify",
       items: [
         { to: "/verify", label: "Check", icon: "check" },
-        { to: "/align", label: "Compare", icon: "scales" },
         { to: "/learn", label: "Learn", icon: "book" },
       ],
     },
@@ -139,7 +148,7 @@ function Protected() {
   if (!user) return <Navigate to="/login" replace />;
 
   return (
-    <WorkspaceStateProvider>
+    <WorkspaceStateProvider identity={String(user.id)}>
       <div className="shell">
       {/* First thing in the tab order, so the nine rail links can be passed
           over. `tabIndex` on the target because following a fragment moves
@@ -208,6 +217,8 @@ export default function App() {
             <Route path="/clone" element={<Clone />} />
             <Route path="/verify" element={<Verify />} />
             <Route path="/align" element={<Align />} />
+            <Route path="/translate" element={<Translate />} />
+            <Route path="/reverse-complement" element={<ReverseComplement />} />
             <Route path="/learn" element={<Learn />} />
             <Route path="/projects" element={<Dashboard />} />
             <Route path="/projects/:id" element={<Viewer />} />
@@ -219,4 +230,3 @@ export default function App() {
     </BrowserRouter>
   );
 }
-

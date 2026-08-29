@@ -7,6 +7,8 @@ tests are.
 """
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -23,6 +25,7 @@ from apps.design.serializers import (
     PcrRequestSerializer,
     PrimerRequestSerializer,
     SaveableAssemblyRequestSerializer,
+    SequenceAnalysisRequestSerializer,
     SSDRequestSerializer,
     TraceUploadSerializer,
     VerifyRequestSerializer,
@@ -51,14 +54,31 @@ from gsynth_engine.constants import (
     COMMON_ENZYME_PAIRS,
     RESTRICTION_ENZYMES,
     overhang,
+    supplies_start_codon,
 )
 from gsynth_engine.duplex import DuplexView, construct_duplex, junction_view
 from gsynth_engine.genbank import oligos_to_fasta, to_fasta, to_genbank
 from gsynth_engine.ligation import ligation_series, plan_ligation
 from gsynth_engine.merzoug import AssemblyPlan, design_merzoug_assembly
+from gsynth_engine.orf import analyse_sequence
 from gsynth_engine.pcr import design_pcr
+from gsynth_engine.preflight import (
+    assembly_preflight,
+    cloning_preflight,
+    optimisation_preflight,
+    pcr_preflight,
+    ssd_preflight,
+    verification_preflight,
+    verification_state,
+)
 from gsynth_engine.primers import design_sequencing_primers
-from gsynth_engine.protocol import bench_protocol, order_sheet, order_sheet_csv
+from gsynth_engine.protocol import (
+    bench_protocol,
+    cloning_worksheet,
+    order_sheet,
+    order_sheet_csv,
+)
+from gsynth_engine.provenance import build_provenance
 from gsynth_engine.sequence import SequenceError, gc_content
 from gsynth_engine.ssd import SSDResult, design_small_sequence
 from gsynth_engine.thermo import ANNEALING
@@ -68,6 +88,37 @@ from gsynth_engine.verify import verify
 def _bad_request(error: SequenceError) -> Response:
     """Engine errors are already written for the user — pass them through."""
     return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SequenceAnalysisView(APIView):
+    """POST /api/design/analyse/ — six-frame translation and complete ORFs."""
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = SequenceAnalysisRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result = analyse_sequence(
+                data["sequence"], minimum_codons=data["minimum_codons"],
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+        return Response(asdict(result))
+
+
+def _provenance(workflow: str, data: dict, output: str, *, vector: str = "") -> dict:
+    """Timestamped reproducibility record for responses, saves and exports."""
+    from django.utils import timezone
+
+    return build_provenance(
+        workflow,
+        parameters=dict(data),
+        output_sequence=output,
+        vector_sequence=vector,
+        generated_at=timezone.now().isoformat(),
+    )
 
 
 def _ssd_payload(result: SSDResult) -> dict:
@@ -97,6 +148,7 @@ def _ssd_payload(result: SSDResult) -> dict:
             for segment in result.segments
         ],
         "warnings": result.warnings,
+        "preflight": ssd_preflight(result).to_dict(),
     }
 
 
@@ -184,6 +236,7 @@ def _assembly_payload(plan: AssemblyPlan, construct_name: str) -> dict:
         "warnings": plan.warnings,
         # Empty means: re-ligating these oligos reproduces the design exactly.
         "verification": plan.verify(),
+        "preflight": assembly_preflight(plan).to_dict(),
     }
 
 
@@ -236,6 +289,7 @@ def _validation(result: CloningResult, duplex_mismatches: list[int]) -> list[dic
     """
     junctions_ok = all(j.site_regenerated for j in result.junctions)
     ends_ok = not any("does not match" in p for p in result.problems)
+    duplex_problems = [problem for problem in result.problems if "do not pair" in problem]
     frame_ok = not any("truncated" in p for p in result.problems)
 
     return [
@@ -247,10 +301,11 @@ def _validation(result: CloningResult, duplex_mismatches: list[int]) -> list[dic
         },
         {
             "check": "Both strands pair everywhere",
-            "passed": not duplex_mismatches,
+            "passed": not duplex_mismatches and not duplex_problems,
             "detail": (
                 f"{len(duplex_mismatches)} positions do not pair."
-                if duplex_mismatches else "No mismatch in the insert duplex."
+                if duplex_mismatches else " ".join(duplex_problems)
+                if duplex_problems else "No mismatch in the insert duplex."
             ),
         },
         {
@@ -304,6 +359,7 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan) -> dict:
         "color": "#0E6E77",
     })
 
+    duplex_mismatches = construct_duplex(plan).mismatches() if plan else []
     return {
         "plasmid": result.plasmid,
         "name": result.name,
@@ -380,8 +436,11 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan) -> dict:
         ),
         "validation": _validation(
             result,
-            construct_duplex(plan).mismatches() if plan else [],
+            duplex_mismatches,
         ),
+        "preflight": cloning_preflight(
+            result, duplex_mismatches=duplex_mismatches,
+        ).to_dict(),
         "warnings": result.warnings,
         # Empty means these two molecules really do join.
         "problems": result.problems,
@@ -548,6 +607,10 @@ class OptimiseView(APIView):
 
         payload = _optimisation_payload(result)
         payload["table_source"] = table.source
+        payload["preflight"] = optimisation_preflight(result).to_dict()
+        payload["provenance"] = _provenance(
+            "codon_optimisation", data, result.sequence,
+        )
         return Response(payload)
 
 
@@ -850,12 +913,18 @@ class TraceVerifyView(APIView):
                     **trace.window(d.read_index),
                 })
 
+        preflight = verification_preflight(report)
         return Response({
             "design_length": report.design_length,
+            "region_start": region[0] if region else 0,
+            "region_end": region[1] if region else report.design_length,
             "coverage": report.coverage,
             "gaps": report.gaps,
             "fully_covered": report.fully_covered,
             "is_verified": report.is_verified,
+            "verification_state": verification_state(report),
+            "preflight": preflight.to_dict(),
+            "provenance": _provenance("sequence_verification", data, data["design"]),
             "differences": [_difference_payload(d) for d in report.differences],
             "reads": [_read_payload(r) for r in report.reads],
             "traces": summaries,
@@ -889,13 +958,19 @@ class VerifyView(APIView):
         except SequenceError as error:
             return _bad_request(error)
 
+        preflight = verification_preflight(report)
         return Response({
             "design_length": report.design_length,
+            "region_start": region[0] if region else 0,
+            "region_end": region[1] if region else report.design_length,
             "coverage": report.coverage,
             "gaps": report.gaps,
             "fully_covered": report.fully_covered,
-            # Empty differences with at least one read means it is the design.
+            # Verification requires agreement over the complete requested region.
             "is_verified": report.is_verified,
+            "verification_state": verification_state(report),
+            "preflight": preflight.to_dict(),
+            "provenance": _provenance("sequence_verification", data, data["design"]),
             "differences": [_difference_payload(d) for d in report.differences],
             "reads": [
                 {
@@ -937,9 +1012,10 @@ class EnzymeCatalogueView(APIView):
                 "common": name in RESTRICTION_ENZYMES,
                 "overhang": sequence,
                 "overhang_type": kind,
-                # NdeI's site contains the ATG, which changes how the insert
-                # is built — the UI should say so next to the option.
-                "supplies_start_codon": "ATG" in str(ALL_ENZYMES[name]["recognition"]),
+                # This is derived from the retained top-strand remainder.
+                # An ATG elsewhere in the recognition site may be cut away
+                # or followed by frame-shifting bases.
+                "supplies_start_codon": supplies_start_codon(name),
             })
         return Response({
             "enzymes": enzymes,
@@ -966,6 +1042,9 @@ class SSDDesignView(APIView):
             return _bad_request(error)
 
         payload = _ssd_payload(result)
+        payload["provenance"] = _provenance(
+            "ssd", serializer.validated_data, result.forward,
+        )
 
         if serializer.validated_data["save_as_project"]:
             project = Project.objects.create(
@@ -976,6 +1055,7 @@ class SSDDesignView(APIView):
                 notes=f"{result.left_enzyme}/{result.right_enzyme}"
                       + (f" · {result.cleavage_site}" if result.cleavage_site else ""),
                 data=payload,
+                provenance=payload["provenance"],
             )
             payload["project_id"] = project.id
         return Response(payload)
@@ -998,6 +1078,9 @@ class MerzougAssemblyView(APIView):
             return _bad_request(error)
 
         payload = _assembly_payload(plan, name)
+        payload["provenance"] = _provenance(
+            "merzoug_assembly", serializer.validated_data, plan.construct_forward,
+        )
 
         if serializer.validated_data["save_as_project"]:
             project = Project.objects.create(
@@ -1009,9 +1092,48 @@ class MerzougAssemblyView(APIView):
                       f"{plan.oligo_count} oligos · "
                       f"{plan.overhang_length} nt overhangs",
                 data=payload,
+                provenance=payload["provenance"],
             )
             payload["project_id"] = project.id
         return Response(payload)
+
+
+def _run_clone(data: dict, engine_kwargs: dict):
+    """Build exactly one cloning result for preview, export and worksheet."""
+    if data.get("pre_digested"):
+        plan = None
+        ssd = None
+        insert_forward = data["sequence"]
+        insert_reverse = data["insert_reverse"]
+    elif data["fragment"]:
+        plan = design_merzoug_assembly(data["sequence"], **engine_kwargs)
+        ssd = plan.ssd
+        insert_forward = plan.construct_forward
+        insert_reverse = plan.construct_reverse
+    else:
+        plan = None
+        ssd = design_small_sequence(
+            data["sequence"],
+            **{key: value for key, value in engine_kwargs.items()
+               if key not in ("target_oligo_length", "overhang_length")},
+        )
+        insert_forward = ssd.forward
+        insert_reverse = ssd.reverse
+
+    vector_sequence, vector_name, annotations, spec = resolve_vector(data)
+    result = clone(
+        vector_sequence,
+        insert_forward,
+        insert_reverse=insert_reverse,
+        left_enzyme=data["left_enzyme"],
+        right_enzyme=data["right_enzyme"],
+        circular=data["vector_is_circular"],
+        name=data["name"],
+        vector_annotations=annotations,
+        vector_spec=spec,
+        orf_start=ssd.orf_start if ssd is not None else None,
+    )
+    return result, ssd, plan, vector_sequence, vector_name, spec
 
 
 class CloneView(APIView):
@@ -1032,44 +1154,8 @@ class CloneView(APIView):
         name = data["name"]
 
         try:
-            if data.get("pre_digested"):
-                # Already an insert. Designing one around it would add a
-                # second set of sites and tags outside ends that are already
-                # sticky, and the plasmid that came back would not be the one
-                # the bench is building.
-                plan = None
-                ssd = None
-                insert_forward = data["sequence"]
-                insert_reverse = data["insert_reverse"]
-            elif data["fragment"]:
-                plan = design_merzoug_assembly(
-                    data["sequence"], **serializer.engine_kwargs
-                )
-                ssd = plan.ssd
-                insert_forward = plan.construct_forward
-                insert_reverse = plan.construct_reverse
-            else:
-                plan = None
-                ssd = design_small_sequence(
-                    data["sequence"],
-                    **{k: v for k, v in serializer.engine_kwargs.items()
-                       if k not in ("target_oligo_length", "overhang_length")},
-                )
-                insert_forward = ssd.forward
-                insert_reverse = ssd.reverse
-
-            vector_sequence, vector_name, annotations, spec = resolve_vector(data)
-            result = clone(
-                vector_sequence,
-                insert_forward,
-                insert_reverse=insert_reverse,
-                left_enzyme=data["left_enzyme"],
-                right_enzyme=data["right_enzyme"],
-                circular=data["vector_is_circular"],
-                name=name,
-                vector_annotations=annotations,
-                vector_spec=spec,
-                orf_start=ssd.orf_start if ssd is not None else None,
+            result, ssd, plan, vector_sequence, vector_name, spec = _run_clone(
+                data, serializer.engine_kwargs,
             )
         except SequenceError as error:
             return _bad_request(error)
@@ -1077,6 +1163,9 @@ class CloneView(APIView):
         payload = _clone_payload(result, ssd, plan)
         payload["vector_name"] = vector_name
         payload["vector"] = _vector_payload(spec, vector_sequence)
+        payload["provenance"] = _provenance(
+            "cloning", data, result.plasmid, vector=vector_sequence,
+        )
 
         if data["save_as_project"] and result.is_clonable:
             project = Project.objects.create(
@@ -1087,6 +1176,7 @@ class CloneView(APIView):
                 notes=f"{result.length} bp in {vector_name} · "
                       f"{result.left_enzyme}/{result.right_enzyme}",
                 data=payload,
+                provenance=payload["provenance"],
             )
             payload["project_id"] = project.id
         return Response(payload)
@@ -1123,33 +1213,8 @@ class CloneExportView(APIView):
         name = data["name"]
 
         try:
-            vector_sequence, vector_name, annotations, spec = resolve_vector(data)
-            if data.get("pre_digested"):
-                # Checked before `fragment`, which defaults to True and would
-                # otherwise win. Same reasoning as CloneView: the fragment is
-                # already an insert, and rebuilding one here would export a
-                # different plasmid from the one the page showed.
-                ssd = None
-                forward, reverse = data["sequence"], data["insert_reverse"]
-            elif data["fragment"]:
-                plan = design_merzoug_assembly(
-                    data["sequence"], **serializer.engine_kwargs
-                )
-                ssd, forward, reverse = plan.ssd, plan.construct_forward, plan.construct_reverse
-            else:
-                kwargs = {
-                    k: v for k, v in serializer.engine_kwargs.items()
-                    if k not in ("target_oligo_length", "overhang_length")
-                }
-                ssd = design_small_sequence(data["sequence"], **kwargs)
-                forward, reverse = ssd.forward, ssd.reverse
-
-            result = clone(
-                vector_sequence, forward, insert_reverse=reverse,
-                left_enzyme=data["left_enzyme"], right_enzyme=data["right_enzyme"],
-                circular=data["vector_is_circular"], name=name,
-                vector_annotations=annotations, vector_spec=spec,
-                orf_start=ssd.orf_start if ssd is not None else None,
+            result, ssd, plan, vector_sequence, vector_name, _spec = _run_clone(
+                data, serializer.engine_kwargs,
             )
         except SequenceError as error:
             return _bad_request(error)
@@ -1164,7 +1229,7 @@ class CloneExportView(APIView):
                 f"{safe}.fasta", "text/plain; charset=utf-8",
             )
 
-        payload = _clone_payload(result, ssd, None)
+        payload = _clone_payload(result, ssd, plan)
         return _attachment(
             to_genbank(
                 result.plasmid,
@@ -1176,6 +1241,56 @@ class CloneExportView(APIView):
                 date=_today(),
             ),
             f"{safe}.gb", "chemical/seq-na-genbank",
+        )
+
+
+class CloneWorksheetView(APIView):
+    """POST /api/design/clone/worksheet/ — printable release-to-bench record."""
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = CloneRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result, _ssd, _plan, vector_sequence, vector_name, _spec = _run_clone(
+                data, serializer.engine_kwargs,
+            )
+            if not result.is_clonable:
+                raise SequenceError(
+                    "A bench worksheet cannot be released for a blocked cloning design."
+                )
+            primers = design_sequencing_primers(
+                result.plasmid,
+                target_start=result.insert_start,
+                target_end=result.insert_end,
+                circular=True,
+                name=(data["name"] or "clone").replace(" ", "_")[:20],
+            )
+            reactions = ligation_series(
+                vector_length=result.backbone_length,
+                insert_length=result.insert_length,
+                ends=result.junctions[0].kind if result.junctions else "5'",
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        preflight = cloning_preflight(result)
+        provenance = _provenance(
+            "cloning", data, result.plasmid, vector=vector_sequence,
+        )
+        text = cloning_worksheet(
+            result,
+            vector_name=vector_name,
+            primer_set=primers,
+            ligation_plans=reactions,
+            preflight=preflight,
+            provenance=provenance,
+        )
+        safe = (data["name"] or "construct").replace(" ", "_")
+        return _attachment(
+            text, f"{safe}_bench_worksheet.txt", "text/plain; charset=utf-8",
         )
 
 
@@ -1337,6 +1452,9 @@ class PcrView(APIView):
                 right_enzyme=data["right_enzyme"],
                 clamp=data["clamp"],
                 keep_frame=data["keep_frame"],
+                start_codon_mode=data["start_codon_mode"],
+                forward_anneal_length=data["forward_anneal_length"],
+                reverse_anneal_length=data["reverse_anneal_length"],
                 name=data["name"],
             )
         except SequenceError as error:
@@ -1356,8 +1474,13 @@ class PcrView(APIView):
             "insert_orf_start": result.insert_orf_start,
             "problems": result.problems,
             "warnings": result.warnings,
+            "alternative_pairs": result.alternative_pairs,
             "is_clean": result.is_clean,
             "digest": None,
+            "preflight": pcr_preflight(
+                result, keep_frame=data["keep_frame"],
+            ).to_dict(),
+            "provenance": _provenance("pcr", data, result.product),
         }
         if result.digest is not None:
             payload["digest"] = {

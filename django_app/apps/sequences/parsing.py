@@ -138,6 +138,28 @@ def _annotations_from(record) -> list[Annotation]:
             start, end = int(location.start), int(location.end)
         except (TypeError, ValueError):
             continue      # fuzzy/unknown locations — nothing sensible to draw
+
+        # Biopython represents an origin-spanning circular feature as a
+        # CompoundLocation with one part ending at the record boundary and
+        # another beginning at zero. Preserve it as [start, end + length),
+        # the same wrapped-coordinate convention used by our generated
+        # GenBank records and by SeqViz, rather than flattening it to the
+        # entire plasmid through CompoundLocation.start/end.
+        parts = list(getattr(location, "parts", ()))
+        record_length = len(record.seq)
+        boundary_part = next(
+            (part for part in parts if int(part.end) == record_length), None
+        )
+        origin_part = next((part for part in parts if int(part.start) == 0), None)
+        is_circular = str(record.annotations.get("topology", "")).lower() == "circular"
+        if (
+            is_circular
+            and boundary_part is not None
+            and origin_part is not None
+            and len(parts) > 1
+        ):
+            start = int(boundary_part.start)
+            end = record_length + int(origin_part.end)
         if end <= start:
             continue
         out.append(Annotation(
