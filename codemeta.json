@@ -1,0 +1,36 @@
+{
+  "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
+  "@type": "SoftwareSourceCode",
+  "name": "G-Synth",
+  "description": "PCR-free gene synthesis, restriction-enzyme cloning design and quality-aware post-sequencing verification with reference-aligned chromatograms.",
+  "version": "1.0.0",
+  "datePublished": "2026-08-29",
+  "codeRepository": "https://github.com/Midotech31/g-synth-app",
+  "issueTracker": "https://github.com/Midotech31/g-synth-app/issues",
+  "license": "https://spdx.org/licenses/MIT",
+  "programmingLanguage": ["Python", "TypeScript", "CSS"],
+  "runtimePlatform": ["Python >=3.11", "Node.js >=22.22.2 <25", "Docker"],
+  "operatingSystem": ["Linux", "macOS", "Windows via Docker"],
+  "applicationCategory": "Bioinformatics",
+  "keywords": [
+    "gene synthesis",
+    "molecular cloning",
+    "codon optimisation",
+    "restriction enzymes",
+    "Sanger sequencing",
+    "synthetic biology"
+  ],
+  "author": [
+    {
+      "@type": "Person",
+      "givenName": "Mohamed",
+      "familyName": "Merzoug",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "Higher School of Biological Sciences of Oran (ESSBO)"
+      }
+    }
+  ],
+  "developmentStatus": "active",
+  "isAccessibleForFree": true
+}

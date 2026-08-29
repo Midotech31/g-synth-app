@@ -13,6 +13,7 @@ import InsertForm from "../components/InsertForm";
 import { segmentColour } from "../components/segmentColour";
 import Icon from "../components/Icon";
 import LiveStatus from "../components/LiveStatus";
+import PreflightPanel from "../components/PreflightPanel";
 import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
@@ -40,6 +41,9 @@ export default function Design() {
   const [saved, setSaved, clearSaved] = useWorkspaceState("design.saved", "");
   const [exportOpen, setExportOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [experience, setExperience] = useWorkspaceState<"guided" | "expert">(
+    "design.experience", "guided",
+  );
   const location = useLocation();
 
   // The optimiser hands its gene over rather than making the user copy it.
@@ -110,6 +114,7 @@ export default function Design() {
   }
 
   const verified = result !== null && result.verification.length === 0;
+  const canExport = verified && (result?.preflight?.can_export ?? true);
 
   function clearWorkspace() {
     clearParams();
@@ -147,15 +152,21 @@ export default function Design() {
           <div className="design-steps" aria-label="Design progress">
             <div className="design-step active"><span>1</span>Insert</div>
             <i aria-hidden="true" />
-            <div className={`design-step ${result ? "complete" : ""}`}><span>2</span>Configure</div>
+            <div className={`design-step ${result ? "complete" : ""}`}><span>2</span>Strategy</div>
             <i aria-hidden="true" />
-            <div className={`design-step ${result ? "complete" : ""}`}><span>3</span>Review</div>
+            <div className={`design-step ${result ? "complete" : ""}`}><span>3</span>Preflight</div>
+            <i aria-hidden="true" />
+            <div className={`design-step ${canExport ? "complete" : ""}`}><span>4</span>Order</div>
+            <i aria-hidden="true" />
+            <div className="design-step"><span>5</span>Clone</div>
+            <i aria-hidden="true" />
+            <div className="design-step"><span>6</span>Verify</div>
           </div>
         </div>
         <button
           className="btn btn-primary design-save"
           onClick={() => design(true)}
-          disabled={busy || !verified}
+          disabled={busy || !canExport}
         >
           <Icon name="check" size={18} />
           Save project
@@ -164,7 +175,7 @@ export default function Design() {
           <button
             className="btn btn-outline"
             onClick={() => setExportOpen((open) => !open)}
-            disabled={!verified}
+            disabled={!canExport}
             aria-expanded={exportOpen}
             aria-controls="design-export-menu"
           >
@@ -202,9 +213,24 @@ export default function Design() {
         <div className="design-layout">
           {/* ── Inputs ─────────────────────────────────────────────────── */}
           <div className="card design-input-card">
-            <div className="card-head"><h2>Insert</h2></div>
+            <div className="card-head">
+              <h2 style={{ flex: 1 }}>Insert</h2>
+              <div className="mode-switch" role="group" aria-label="Design detail level">
+                <button className={experience === "guided" ? "active" : ""} onClick={() => {
+                  setExperience("guided");
+                  setParams((current) => ({ ...current, cleavage_site: "Thrombin", include_his_tag: true, include_linkers: true, remove_stop: false, target_oligo_length: 90, overhang_length: 4 }));
+                  setResult(null);
+                }}>Guided</button>
+                <button className={experience === "expert" ? "active" : ""} onClick={() => setExperience("expert")}>Expert</button>
+              </div>
+            </div>
             <div className="card-body">
-              <InsertForm params={params} catalogue={catalogue} onChange={set} />
+              {experience === "guided" && (
+                <div className="notice notice-info compact">
+                  Validated defaults add a 6×His tag, flexible linkers and a Thrombin site, using 90 nt oligos with 4 nt assembly junctions.
+                </div>
+              )}
+              <InsertForm params={params} catalogue={catalogue} onChange={set} expert={experience === "expert"} />
             </div>
             <div className="design-form-actions">
               <button className="btn btn-outline" onClick={clearWorkspace} disabled={busy}>
@@ -253,6 +279,8 @@ export default function Design() {
                     </div>
                   )}
                 </div>
+
+                <PreflightPanel report={result.preflight} />
 
                 <div className="card design-stats">
                   <div className="card-body stat-row">

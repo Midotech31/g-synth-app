@@ -10,7 +10,10 @@ import {
   type VerifyReport,
 } from "../api/client";
 import Icon from "../components/Icon";
+import CoverageMap from "../components/CoverageMap";
 import LiveStatus from "../components/LiveStatus";
+import PreflightPanel from "../components/PreflightPanel";
+import ReferenceAlignment from "../components/ReferenceAlignment";
 import TraceView from "../components/TraceView";
 import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
@@ -187,9 +190,13 @@ export default function Verify() {
   function verdict(): string {
     if (tab === "reads") {
       if (!report) return "";
-      return report.is_verified
-        ? `It is the design: every read agrees over ${report.coverage}% of the region checked.`
-        : `${report.differences.length} difference${report.differences.length === 1 ? "" : "s"}. The clone is not what was designed.`;
+      switch (report.verification_state) {
+        case "fully_verified": return `Fully verified: the complete requested region agrees with the design.`;
+        case "differences_detected": return `${report.differences.length} sequence difference${report.differences.length === 1 ? "" : "s"} detected.`;
+        case "reads_unplaced": return "Reads supplied, but none could be placed on this design.";
+        case "partial_match": return `Partial match: covered bases agree, but only ${report.coverage}% of the region was read.`;
+        default: return "Verification has not produced a conclusive result.";
+      }
     }
     if (tab === "primers") {
       if (!primers) return "";
@@ -402,21 +409,34 @@ export default function Verify() {
             {tab === "reads" && (
               report ? (
                 <>
-                  <div className={`notice ${report.is_verified ? "notice-ok" : "notice-error"}`}>
-                    {report.is_verified ? (
+                  <div className={`notice ${report.verification_state === "fully_verified" ? "notice-ok" : report.verification_state === "differences_detected" ? "notice-error" : "notice-info"}`}>
+                    {report.verification_state === "fully_verified" ? (
                       <>
-                        <strong>It is the design.</strong> Every read agrees
-                        with the construct over {report.coverage}% of the
-                        region checked.
+                        <strong>Fully verified.</strong> The complete requested
+                        region is covered and agrees with the design.
                       </>
-                    ) : (
+                    ) : report.verification_state === "differences_detected" ? (
                       <>
                         <strong>{report.differences.length} difference
                         {report.differences.length === 1 ? "" : "s"}.</strong>{" "}
-                        The clone is not what was designed.
+                        The covered clone sequence is not what was designed.
+                      </>
+                    ) : report.verification_state === "reads_unplaced" ? (
+                      <><strong>Reads could not be placed.</strong> Check that these reads belong to this construct, then review orientation and trimming.</>
+                    ) : report.verification_state === "not_checked" ? (
+                      <><strong>Not checked.</strong> No usable sequencing evidence was available.</>
+                    ) : (
+                      <>
+                        <strong>Partial match.</strong> The reads agree
+                        wherever they align, but cover only {report.coverage}%
+                        of the requested region. Sequence the remaining gap
+                        {report.gaps.length === 1 ? "" : "s"} before accepting
+                        this clone.
                       </>
                     )}
                   </div>
+
+                  <PreflightPanel report={report.preflight} />
 
                   {report.differences.length > 0 && (
                     <div className="card">
@@ -463,6 +483,9 @@ export default function Verify() {
                       </span>
                     </div>
                     <div className="table-scroll">
+                      <div className="card-body" style={{ paddingBottom: 0 }}>
+                        <CoverageMap report={report} />
+                      </div>
                       <table className="data">
                         <thead>
                           <tr>
@@ -655,6 +678,14 @@ export default function Verify() {
             )}
           </div>
         </div>
+
+        {tab === "reads" && report && project && (report.trace_tracks?.length ?? 0) > 0 && (
+          <div className="card alignment-card">
+            <div className="card-body">
+              <ReferenceAlignment reference={project.sequence} report={report} />
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

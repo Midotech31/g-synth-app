@@ -7,6 +7,7 @@ from rest_framework.decorators import action
 from apps.projects.models import Project
 from apps.projects.serializers import ProjectListSerializer, ProjectSerializer
 from gsynth_engine.genbank import to_fasta, to_genbank
+from gsynth_engine.provenance import build_provenance
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
@@ -30,7 +31,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return ProjectListSerializer if self.action == "list" else ProjectSerializer
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        data = serializer.validated_data
+        provenance = build_provenance(
+            str(data.get("module", "general")),
+            parameters={"name": data.get("name", ""), "sequence": data.get("sequence", "")},
+            output_sequence=str(data.get("sequence", "")),
+        )
+        serializer.save(user=self.request.user, provenance=provenance)
 
     @action(detail=True, methods=["get"])
     def export(self, request, pk=None):
@@ -43,11 +50,19 @@ class ProjectViewSet(viewsets.ModelViewSet):
         project = self.get_object()
         safe = (project.name or "sequence").replace(" ", "_")
         data = project.data or {}
+        # Only the dedicated read-only field is authoritative. `data` is
+        # user-editable JSON and must never be allowed to forge an audit hash.
+        provenance = project.provenance or {}
+        provenance_note = (
+            f"G-Synth {provenance.get('engine_version', 'unknown')} · "
+            f"output SHA-256 {provenance.get('output_sha256', 'unavailable')}"
+        )
 
         # `format` is DRF's own renderer switch, so a value it does not
         # recognise 404s before this view ever runs.
         if request.query_params.get("filetype") == "fasta":
-            body = to_fasta(project.sequence, name=safe, description=project.notes)
+            description = " · ".join(filter(None, (project.notes, provenance_note)))
+            body = to_fasta(project.sequence, name=safe, description=description)
             filename, content_type = f"{safe}.fasta", "text/plain; charset=utf-8"
         else:
             body = to_genbank(
@@ -57,6 +72,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 features=data.get("annotations") or [],
                 circular=str(data.get("topology", "")).lower() == "circular",
                 date=timezone.now().strftime("%d-%b-%Y").upper(),
+                comments=[provenance_note],
             )
             filename, content_type = f"{safe}.gb", "chemical/seq-na-genbank"
 

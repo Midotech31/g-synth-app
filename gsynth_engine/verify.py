@@ -155,16 +155,16 @@ class VerificationReport:
 
     @property
     def is_verified(self) -> bool:
-        """Every read agrees, and something was actually read."""
-        return bool(self.reads) and not self.differences
+        """The requested region is fully read and every read agrees."""
+        return bool(self.reads) and self.fully_covered and not self.differences
 
     @property
     def fully_covered(self) -> bool:
         """Every base of the design was read by at least one trace.
 
         Coverage only — it says nothing about whether the reads *agreed*.
-        A design can be fully covered and still differ everywhere; that is
-        `is_verified`.
+        A design can be fully covered and still differ; ``is_verified``
+        requires both complete coverage and agreement.
         """
         return not self.gaps
 

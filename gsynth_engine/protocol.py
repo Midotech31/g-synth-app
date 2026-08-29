@@ -257,5 +257,88 @@ def bench_protocol(
         add(f"   {i + 1:>6}  {plan.construct_forward[i : i + 60]}")
     add("")
     add("   Verify by sequencing across every junction before expressing.")
-
     return "\n".join(lines)
+
+
+def cloning_worksheet(
+    result,
+    *,
+    vector_name: str,
+    primer_set,
+    ligation_plans: list,
+    preflight,
+    provenance: dict[str, object],
+) -> str:
+    """A traceable, printable record linking the design to bench checks.
+
+    Reagent units and buffers remain manufacturer-specific; the worksheet
+    records design-derived molecule sizes, molar amounts and verification
+    coverage without inventing a universal restriction-digest recipe.
+    """
+    lines: list[str] = []
+    add = lines.append
+    add(f"G-SYNTH CLONING WORKSHEET — {result.name}")
+    add("=" * 76)
+    add(f"Vector             {vector_name}")
+    add(f"Enzyme pair        {result.left_enzyme} / {result.right_enzyme}")
+    add(f"Recombinant        {result.length} bp")
+    add(f"Backbone band      {result.backbone_length} bp after double digest")
+    add(f"Excised vector     {result.removed_length} bp")
+    add(f"Insert             {result.insert_length} bp")
+    add(f"Engine             {provenance.get('engine_version', 'unknown')}")
+    add(f"Output SHA-256     {provenance.get('output_sha256', 'unavailable')}")
+    add(f"Parameters SHA-256 {provenance.get('parameters_sha256', 'unavailable')}")
+    add("")
+
+    add("1. PREFLIGHT RELEASE")
+    add("-" * 76)
+    add(f"Overall verdict    {preflight.verdict.upper()}")
+    for check in preflight.checks:
+        mark = "PASS" if check.status == "pass" else check.status.upper()
+        add(f"[{mark:6}] {check.code:<28} {check.label}")
+        add(f"         {check.detail}")
+    add("")
+
+    add("2. DOUBLE-DIGEST RECORD")
+    add("-" * 76)
+    add("Confirm buffer, enzyme units, temperature and heat inactivation against")
+    add("the current supplier datasheets; record the lot-specific setup below.")
+    add(f"Expected gel bands: {result.backbone_length} bp backbone + "
+        f"{result.removed_length} bp excised vector segment.")
+    add("Buffer/lot: ____________________  Incubation: ____________________")
+    add("Observed bands: __________________  Purified backbone: __________ ng/µL")
+    add("")
+
+    add("3. LIGATION SERIES")
+    add("-" * 76)
+    add("Use the measured purified-DNA concentrations to convert these target")
+    add("masses to pipetting volumes. Include vector-only and no-ligase controls.")
+    for plan in ligation_plans:
+        add(f"{plan.ratio:g}:1 insert:vector — vector {plan.vector_ng:g} ng "
+            f"({plan.vector_fmol:g} fmol), insert {plan.insert_ng:g} ng "
+            f"({plan.insert_fmol:g} fmol)")
+    add("Vector-only control: ______  No-ligase control: ______  Plate ID: ______")
+    add("")
+
+    add("4. SEQUENCING PRIMERS")
+    add("-" * 76)
+    for primer in primer_set.primers:
+        direction = "forward" if primer.direction == 1 else "reverse"
+        add(f"{primer.name:<24} {primer.sequence}  {primer.tm:.1f}°C  {direction}")
+        add(f"{'':24} expected read {primer.reads_from + 1}–{primer.reads_to}")
+    if primer_set.gaps:
+        add(f"COVERAGE WARNING: uncovered intervals {primer_set.gaps}")
+    else:
+        add("Coverage gate: the complete insert is covered by the primer set.")
+    add("")
+
+    add("5. RESULTS AND SIGN-OFF")
+    add("-" * 76)
+    add("Colony/clone ID: __________________  Extraction date: ________________")
+    add("Digest result:  □ expected  □ unexpected  □ not run")
+    add("Sequencing:     □ fully verified  □ differences  □ partial/unplaced")
+    add("Reviewed by: ______________________  Date: __________________________")
+    add("")
+    add("Do not release a clone for expression until the requested region is")
+    add("fully covered and every confident difference has been adjudicated.")
+    return "\n".join(lines) + "\n"

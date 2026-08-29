@@ -73,6 +73,44 @@ export type Segment = {
   sequence: string;
 };
 
+export type Diagnostic = {
+  code: string;
+  severity: "info" | "warning" | "error";
+  message: string;
+  remedy: string;
+  positions: number[];
+};
+
+export type PreflightCheck = {
+  code: string;
+  label: string;
+  status: "pass" | "review" | "block";
+  detail: string;
+  remedy: string;
+  evidence: Record<string, unknown>;
+  passed: boolean;
+};
+
+export type PreflightReport = {
+  workflow: string;
+  verdict: "ready" | "review" | "blocked";
+  can_export: boolean;
+  checks: PreflightCheck[];
+  diagnostics: Diagnostic[];
+};
+
+export type Provenance = {
+  schema: "gsynth.provenance/v1";
+  engine_version: string;
+  workflow: string;
+  generated_at: string | null;
+  parameters: Record<string, unknown>;
+  parameters_sha256: string;
+  output_sha256: string;
+  vector_sha256: string | null;
+  enzyme_table: { sha256: string; source: string; entries: number };
+};
+
 export type SSDResult = {
   forward: string;
   reverse: string;
@@ -91,6 +129,8 @@ export type SSDResult = {
   coding_region: string;
   segments: Segment[];
   warnings: string[];
+  preflight?: PreflightReport;
+  provenance?: Provenance;
   project_id?: number;
 };
 
@@ -166,6 +206,8 @@ export type AssemblyResult = {
   warnings: string[];
   /** Empty means the oligos re-ligate to the design. Non-empty blocks ordering. */
   verification: string[];
+  preflight?: PreflightReport;
+  provenance?: Provenance;
   project_id?: number;
 };
 
@@ -246,6 +288,8 @@ export type CloneResult = {
   /** Empty means these two molecules really do join. */
   problems: string[];
   is_clonable: boolean;
+  preflight?: PreflightReport;
+  provenance?: Provenance;
   /** Null when the insert was supplied already cut — there was no SSD design. */
   insert: SSDResult | null;
   assembly: AssemblyResult | null;
@@ -310,6 +354,8 @@ export type PcrResult = {
   is_clean: boolean;
   /** Null for conventional PCR, and when a problem blocks the digest. */
   digest: PcrDigest | null;
+  preflight?: PreflightReport;
+  provenance?: Provenance;
 };
 
 export type PcrParams = {
@@ -320,6 +366,7 @@ export type PcrParams = {
   right_enzyme?: string | null;
   clamp?: number;
   keep_frame?: boolean;
+  start_codon_mode?: "use_site" | "keep_both";
   name?: string;
 };
 
@@ -357,6 +404,8 @@ export type OptimiseResult = {
   problems: string[];
   warnings: string[];
   is_clean: boolean;
+  preflight?: PreflightReport;
+  provenance?: Provenance;
 };
 
 export type LigationReaction = {
@@ -413,8 +462,18 @@ export type VerifyReport = {
   coverage: number;
   gaps: [number, number][];
   fully_covered: boolean;
-  /** Empty differences with at least one read means it is the design. */
+  /** True only when the requested region is completely covered and agrees. */
   is_verified: boolean;
+  verification_state?:
+    | "fully_verified"
+    | "differences_detected"
+    | "partial_match"
+    | "reads_unplaced"
+    | "not_checked";
+  region_start?: number;
+  region_end?: number;
+  preflight?: PreflightReport;
+  provenance?: Provenance;
   differences: Difference[];
   reads: {
     name: string;
@@ -436,6 +495,7 @@ export type VerifyReport = {
   warnings: string[];
   /** Present only on the trace endpoint. */
   traces?: TraceSummary[];
+  trace_tracks?: TraceTrack[];
   trace_windows?: TraceWindow[];
 };
 
@@ -450,6 +510,19 @@ export type TraceSummary = {
   sample_count: number;
   /** Enough good sequence to be worth comparing to a design at all. */
   usable: boolean;
+};
+
+/** Quality-trimmed chromatogram evidence, oriented left-to-right on the reference. */
+export type TraceTrack = {
+  read: string;
+  reference_start: number;
+  reference_end: number;
+  reverse_complemented: boolean;
+  sequence: string;
+  qualities: number[];
+  peaks: number[];
+  sample_count: number;
+  traces: Record<string, number[]>;
 };
 
 /** The peaks around one difference — never a whole trace, which is megabytes. */
@@ -601,6 +674,7 @@ export type Project = ProjectSummary & {
     construct_gc?: number;
     gc?: number;
   };
+  provenance?: Provenance | Record<string, unknown>;
   created_at: string;
 };
 

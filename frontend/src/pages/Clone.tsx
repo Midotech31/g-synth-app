@@ -16,6 +16,7 @@ import InsertForm from "../components/InsertForm";
 import JunctionDuplex from "../components/JunctionDuplex";
 import Icon from "../components/Icon";
 import LiveStatus from "../components/LiveStatus";
+import PreflightPanel from "../components/PreflightPanel";
 import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
 const SAMPLE = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA";
@@ -85,6 +86,7 @@ export default function Clone() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved, clearSaved] = useWorkspaceState("clone.saved", "");
+  const [experience, setExperience] = useWorkspaceState<"guided" | "expert">("clone.experience", "guided");
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -344,6 +346,19 @@ export default function Clone() {
     setError("");
   }
 
+  async function downloadWorksheet() {
+    const safe = (params.name || "construct").replace(/\s+/g, "_");
+    try {
+      await api.download(
+        "/api/design/clone/worksheet/",
+        clonePayload(),
+        `${safe}_bench_worksheet.txt`,
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "The bench worksheet could not be generated.");
+    }
+  }
+
   return (
     <>
       <LiveStatus message={status} />
@@ -489,7 +504,17 @@ export default function Clone() {
             </div>
 
             <div className="card">
-              <div className="card-head"><h2>Insert</h2></div>
+              <div className="card-head">
+                <h2 style={{ flex: 1 }}>Insert</h2>
+                <div className="mode-switch" role="group" aria-label="Cloning detail level">
+                  <button className={experience === "guided" ? "active" : ""} onClick={() => {
+                    setExperience("guided");
+                    setParams((current) => ({ ...current, cleavage_site: "Thrombin", include_his_tag: true, include_linkers: true, remove_stop: false, target_oligo_length: 90, overhang_length: 4 }));
+                    setResult(null);
+                  }}>Guided</button>
+                  <button className={experience === "expert" ? "active" : ""} onClick={() => setExperience("expert")}>Expert</button>
+                </div>
+              </div>
               {preDigested && (
                 /* Without this the page silently ignores the insert form, and
                    the reader has no way to tell why their edits do nothing. */
@@ -514,20 +539,26 @@ export default function Clone() {
                 </div>
               )}
               <div className="card-body">
+                {experience === "guided" && !preDigested && (
+                  <div className="notice notice-info compact">
+                    Validated defaults add a 6×His tag, flexible linkers and a Thrombin site, using 90 nt oligos with 4 nt assembly junctions.
+                  </div>
+                )}
                 <InsertForm
                   params={params}
                   catalogue={catalogue}
                   onChange={set}
                   showFragmentation={fragment}
                   idPrefix="clone-"
+                  expert={experience === "expert"}
                 />
-                <div className="checks">
+                {experience === "expert" && <div className="checks">
                   <label>
                     <input type="checkbox" checked={!fragment}
                            onChange={(e) => { setFragment(!e.target.checked); setResult(null); }} />
                     Clone the SSD duplex as it is, without fragmenting it
                   </label>
-                </div>
+                </div>}
               </div>
             </div>
           </div>
@@ -573,6 +604,8 @@ export default function Clone() {
                     </>
                   )}
                 </div>
+
+                <PreflightPanel report={result.preflight} />
 
                 <div className="card">
                   <div className="card-body stat-row">
@@ -770,19 +803,24 @@ export default function Clone() {
                     </label>
                     <button className="btn btn-outline"
                             onClick={() => void exportPlasmid("genbank")}
-                            disabled={!result.is_clonable}
+                            disabled={!result.is_clonable || result.preflight?.can_export === false}
                             title="Opens in SnapGene, Benchling or ApE with its features">
                       GenBank
                     </button>
                     <button className="btn btn-outline"
                             onClick={() => void exportPlasmid("fasta")}
-                            disabled={!result.is_clonable}>
+                            disabled={!result.is_clonable || result.preflight?.can_export === false}>
                       FASTA
+                    </button>
+                    <button className="btn btn-outline"
+                            onClick={() => void downloadWorksheet()}
+                            disabled={!result.is_clonable || result.preflight?.can_export === false}>
+                      Bench worksheet
                     </button>
                     <button
                       className="btn btn-primary"
                       onClick={() => runClone(true)}
-                      disabled={busy || !result.is_clonable}
+                      disabled={busy || !result.is_clonable || result.preflight?.can_export === false}
                     >
                       Save plasmid
                     </button>

@@ -39,6 +39,7 @@ class Project(models.Model):
     sequence = models.TextField(blank=True, default="")
     notes = models.TextField(blank=True, default="")
     data = models.JSONField(default=dict, blank=True)
+    provenance = models.JSONField(default=dict, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -181,6 +181,17 @@ class TestConstraints:
         # ...even if a compromise elsewhere is worth mentioning.
         assert isinstance(result.warnings, list)
 
+    def test_a_remaining_enzyme_site_is_not_duplicated_as_a_warning(self):
+        protein = "MTNLQAVTRVMEPACRCYGQDGCRYSIVDYM"
+        result = optimise(
+            protein,
+            is_protein=True,
+            constraints=Constraints(avoid_enzymes=("CviAII",)),
+            max_rounds=0,
+        )
+        assert any("CATG" in problem for problem in result.problems)
+        assert result.warnings == []
+
 
 # ── Determinism ─────────────────────────────────────────────────────────────
 

@@ -2,9 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { SeqViz } from "seqviz";
 
-import { ApiError, api, type Annotation, type Project } from "../api/client";
+import {
+  ApiError,
+  api,
+  type Annotation,
+  type PreflightReport,
+  type Project,
+  type Provenance,
+} from "../api/client";
 import Icon from "../components/Icon";
 import LiveStatus from "../components/LiveStatus";
+import PreflightPanel from "../components/PreflightPanel";
 
 /**
  * Find the annotation a map click landed on.
@@ -27,12 +35,26 @@ function reverseComplement(seq: string): string {
     .join("");
 }
 
-function annotationAt(annotations: Annotation[], start: number, end: number): Annotation | null {
-  const covering = annotations.filter((a) => a.start <= start && a.end >= end);
+export function annotationAt(
+  annotations: Annotation[], start: number, end: number, sequenceLength = Infinity,
+): Annotation | null {
+  const covering = annotations.filter((a) => {
+    if (a.start <= start && a.end >= end) return true;
+    return Number.isFinite(sequenceLength)
+      && a.end > sequenceLength
+      && start < a.end - sequenceLength;
+  });
   if (!covering.length) return null;
   return covering.reduce((smallest, a) =>
     a.end - a.start < smallest.end - smallest.start ? a : smallest,
   );
+}
+
+export function sequenceForAnnotation(sequence: string, annotation: Annotation): string {
+  const span = annotation.end <= sequence.length
+    ? sequence.slice(annotation.start, annotation.end)
+    : sequence.slice(annotation.start) + sequence.slice(0, annotation.end - sequence.length);
+  return annotation.direction === -1 ? reverseComplement(span) : span;
 }
 
 type ViewMode = "circular" | "linear" | "both";
@@ -133,6 +155,8 @@ export default function Viewer() {
   // oligos, the junctions and the protein unrecoverable — the parts someone
   // reopens a project *for*.
   const payload = (project.data ?? {}) as Record<string, unknown>;
+  const preflight = payload.preflight as PreflightReport | undefined;
+  const provenance = (project.provenance ?? payload.provenance) as Partial<Provenance> | undefined;
   const oligos = (payload.oligos as Record<string, string | number>[]) ?? [];
   const junctions = (payload.junctions as {
     name: string; enzyme: string; kind: string; overhang: string;
@@ -203,6 +227,28 @@ export default function Viewer() {
           </div>
         </div>
 
+        <PreflightPanel report={preflight} />
+
+        {provenance?.output_sha256 && (
+          <div className="card">
+            <div className="card-head">
+              <h2 style={{ flex: 1 }}>Reproducibility record</h2>
+              <button className="btn btn-outline" onClick={() => {
+                void navigator.clipboard.writeText(JSON.stringify(provenance, null, 2));
+                setStatus("Provenance manifest copied.");
+              }}>Copy manifest</button>
+            </div>
+            <div className="card-body provenance-grid">
+              <div><span>Engine</span><strong>{provenance.engine_version ?? "unknown"}</strong></div>
+              <div><span>Workflow</span><strong>{provenance.workflow ?? project.module}</strong></div>
+              <div><span>Generated</span><strong>{provenance.generated_at ? new Date(provenance.generated_at).toLocaleString() : "not recorded"}</strong></div>
+              <div><span>Output SHA-256</span><code title={provenance.output_sha256}>{provenance.output_sha256}</code></div>
+              {provenance.vector_sha256 && <div><span>Vector SHA-256</span><code title={provenance.vector_sha256}>{provenance.vector_sha256}</code></div>}
+              <div><span>Enzyme table SHA-256</span><code title={provenance.enzyme_table?.sha256}>{provenance.enzyme_table?.sha256 ?? "not recorded"}</code></div>
+            </div>
+          </div>
+        )}
+
         <div className="viewer-layout">
           <div className="card seq-stage">
             <SeqViz
@@ -219,7 +265,9 @@ export default function Viewer() {
                 if (sel.type !== "ANNOTATION" || sel.start === undefined || sel.end === undefined) {
                   return;
                 }
-                const hit = annotationAt(annotations, sel.start, sel.end);
+                const hit = annotationAt(
+                  annotations, sel.start, sel.end, project.sequence.length,
+                );
                 if (hit) setSelected(hit);
               }}
               // The reverse direction: picking a feature from the list
@@ -327,9 +375,7 @@ export default function Viewer() {
                 )}
                 <div className="card-body" style={{ paddingTop: 0 }}>
                   <div className="seq-block">
-                    {selected.direction === -1
-                      ? reverseComplement(project.sequence.slice(selected.start, selected.end))
-                      : project.sequence.slice(selected.start, selected.end)}
+                    {sequenceForAnnotation(project.sequence, selected)}
                   </div>
                   {selected.direction === -1 && (
                     <p className="note" style={{ marginTop: "0.5rem" }}>

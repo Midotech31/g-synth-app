@@ -109,6 +109,17 @@ class TestReadingATrace:
         assert all(trace.traces[b] for b in "ACGT")
         assert trace.sample_count == len(trace.traces["A"])
 
+    def test_alignment_track_reverses_and_complements_the_signal(self):
+        trace = read_ab1(build_ab1(READ))
+        forward = trace.alignment_track(5, 20)
+        reverse = trace.alignment_track(5, 20, reverse=True)
+
+        from gsynth_engine.sequence import reverse_complement
+        assert reverse["sequence"] == reverse_complement(forward["sequence"])
+        assert reverse["qualities"] == list(reversed(forward["qualities"]))
+        assert reverse["peaks"] == sorted(reverse["peaks"])
+        assert reverse["traces"]["A"] == list(reversed(forward["traces"]["T"]))
+
     def test_channels_follow_the_files_own_base_order(self):
         """FWO_ says which base DATA9-12 carry, and it is not always GATC.
 

@@ -9,6 +9,7 @@ import {
 } from "../api/client";
 import Icon from "../components/Icon";
 import LiveStatus from "../components/LiveStatus";
+import PreflightPanel from "../components/PreflightPanel";
 import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
 const SAMPLE =
@@ -173,6 +174,7 @@ export default function Optimise() {
                     </button>
                   ))}
                 </div>
+
                 <p className="note" style={{ marginTop: "0.4rem" }}>
                   Pick the pair you will clone with. A gene carrying an internal
                   NdeI site cannot be cloned NdeI/XhoI, however well it
@@ -238,6 +240,8 @@ export default function Optimise() {
                   )}
                 </div>
 
+                <PreflightPanel report={result.preflight} />
+
                 <div className="card">
                   <div className="card-body stat-row">
                     <div className="stat">
@@ -279,7 +283,7 @@ export default function Optimise() {
                             onClick={() => void navigator.clipboard?.writeText(result.sequence)}>
                       Copy
                     </button>
-                    <button className="btn btn-primary" onClick={sendToDesign}>
+                    <button className="btn btn-primary" onClick={sendToDesign} disabled={result.preflight?.can_export === false}>
                       Design oligos →
                     </button>
                   </div>

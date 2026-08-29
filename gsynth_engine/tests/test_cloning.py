@@ -206,6 +206,20 @@ class TestClone:
         )
         assert result.is_clonable, result.problems
 
+    def test_an_internal_mismatch_between_insert_strands_blocks_cloning(self, vector, ssd):
+        reverse = list(ssd.reverse)
+        at = len(reverse) // 2
+        reverse[at] = next(base for base in "ACGT" if base != reverse[at])
+        result = clone(
+            vector,
+            ssd.forward,
+            insert_reverse="".join(reverse),
+            left_enzyme="NdeI",
+            right_enzyme="XhoI",
+        )
+        assert not result.is_clonable
+        assert any("do not pair" in problem for problem in result.problems)
+
     def test_plasmid_length_is_backbone_plus_insert(self, vector, ssd):
         result = clone(vector, ssd.forward, left_enzyme="NdeI", right_enzyme="XhoI")
         assert result.length == result.backbone_length + len(ssd.forward)

@@ -43,7 +43,11 @@ instead of believed.
 5.4 kb vector outnumbers a 150 bp insert thirty-six to one), sequencing
 primers that sit back from the insert rather than at it, and a comparison of
 the reads that come back against the design — in either orientation, with a
-substitution reported as the residue it changes.
+substitution reported as the residue it changes. Uploaded ABI/AB1 traces are
+quality-trimmed and displayed in a reference-aligned chromatogram viewer with
+consensus, coordinates, strand direction, base calls, Phred-quality shading,
+four-channel peaks and explicit mismatches. Only evidence admitted by the
+verification algorithm is drawn as covered.
 
 **Compare** aligns two sequences that are not assumed to be the same thing.
 
@@ -103,9 +107,9 @@ assert plan.verify() == []          # empty means the oligos re-ligate to the de
 ### Tests
 
 ```bash
-python -m pytest gsynth_engine/tests -q     # 901 — the biology
-cd django_app && python -m pytest -q        # 206 — the HTTP layer
-cd frontend && npm test                     # the interface
+python -m pytest gsynth_engine/tests -q     # 1,056 — the biology
+cd django_app && python -m pytest -q        # 232 — the HTTP layer
+cd frontend && npm test                     # 57 — the interface
 ```
 
 All three run in CI on every push. The engine's suite is the definition of
@@ -113,6 +117,16 @@ correctness: it is where the golden examples live, where every one of the 109
 enzymes is checked in both positions, and where the property the whole method
 rests on is asserted — that the designed fragments re-ligate into the
 construct exactly.
+
+Scientific scope and validation materials:
+
+- [`docs/BIOLOGICAL_ASSUMPTIONS.md`](docs/BIOLOGICAL_ASSUMPTIONS.md) — what is checked, and what still requires bench evidence.
+- [`docs/WORKED_CLONING_EXAMPLES.md`](docs/WORKED_CLONING_EXAMPLES.md) — cohesive, mixed-polarity, blunt, and blocking cases.
+- [`docs/SCIENTIFIC_REFERENCES.md`](docs/SCIENTIFIC_REFERENCES.md) — sources behind the assumptions.
+- [`docs/USABILITY_STUDY.md`](docs/USABILITY_STUDY.md) — the human-validation protocol and release criteria.
+- [`docs/WET_LAB_VALIDATION.md`](docs/WET_LAB_VALIDATION.md) — physical construct-to-sequencing evidence and acceptance criteria.
+- [`docs/ACCESSIBILITY_MOBILE_AUDIT_2026-08-27.md`](docs/ACCESSIBILITY_MOBILE_AUDIT_2026-08-27.md) — responsive and WCAG-oriented engineering audit.
+- [`docs/AI_USE_DISCLOSURE.md`](docs/AI_USE_DISCLOSURE.md) — final, auditable declaration of generative-AI assistance and human responsibility.
 
 ## What is in here
 

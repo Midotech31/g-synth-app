@@ -47,6 +47,15 @@ class TestRequestIsBounded:
         assert r.status_code == 400
         assert "right_enzyme" in r.data
 
+    def test_the_same_enzyme_at_both_ends_is_rejected(self, auth_client):
+        r = auth_client.post(
+            reverse("design-pcr"),
+            {"template": GENE, "left_enzyme": "NdeI", "right_enzyme": "NdeI"},
+            format="json",
+        )
+        assert r.status_code == 400
+        assert "differ" in str(r.data)
+
     def test_an_unknown_enzyme_is_rejected(self, auth_client):
         r = auth_client.post(
             reverse("design-pcr"),
@@ -73,6 +82,16 @@ class TestRequestIsBounded:
         )
         assert r.status_code == 400
 
+    def test_an_unknown_start_codon_mode_is_rejected(self, auth_client):
+        r = auth_client.post(
+            reverse("design-pcr"),
+            {"template": GENE, "left_enzyme": "NdeI", "right_enzyme": "XhoI",
+             "start_codon_mode": "guess"},
+            format="json",
+        )
+        assert r.status_code == 400
+        assert "start_codon_mode" in r.data
+
     def test_a_region_too_short_becomes_a_readable_400(self, auth_client):
         """`SequenceError` messages are shown to the user verbatim, so the
         endpoint must pass one through rather than raise a 500."""
@@ -87,6 +106,38 @@ class TestRequestIsBounded:
 
 @pytest.mark.django_db
 class TestTheResponseMatchesTheEngine:
+    def test_ndei_uses_the_site_start_codon_by_default(self, auth_client):
+        r = auth_client.post(
+            reverse("design-pcr"),
+            {"template": GENE, "left_enzyme": "NdeI", "right_enzyme": "XhoI",
+             "keep_frame": True},
+            format="json",
+        )
+        expected = design_pcr(
+            GENE, left_enzyme="NdeI", right_enzyme="XhoI", keep_frame=True,
+        )
+        assert r.status_code == 200
+        assert r.data["amplified_region"] == GENE[3:]
+        assert r.data["template_start"] == 3
+        assert r.data["forward"]["sequence"] == expected.forward.sequence
+        assert not any("Met-Met" in warning for warning in r.data["warnings"])
+
+    def test_both_ndei_start_codons_are_an_explicit_opt_in(self, auth_client):
+        r = auth_client.post(
+            reverse("design-pcr"),
+            {"template": GENE, "left_enzyme": "NdeI", "right_enzyme": "XhoI",
+             "keep_frame": True, "start_codon_mode": "keep_both"},
+            format="json",
+        )
+        expected = design_pcr(
+            GENE, left_enzyme="NdeI", right_enzyme="XhoI", keep_frame=True,
+            start_codon_mode="keep_both",
+        )
+        assert r.status_code == 200
+        assert r.data["amplified_region"] == GENE
+        assert r.data["forward"]["sequence"] == expected.forward.sequence
+        assert any("Met-Met" in warning for warning in r.data["warnings"])
+
     def test_conventional_pcr_returns_the_engine_primers(self, auth_client):
         expected = design_pcr(GENE)
         r = auth_client.post(reverse("design-pcr"), {"template": GENE}, format="json")

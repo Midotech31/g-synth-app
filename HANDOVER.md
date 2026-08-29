@@ -1,542 +1,713 @@
-# G-Synth — handover
+# G-Synth workstation handover
 
-Everything an agent needs to continue this work well: what the application
-is *for*, how it thinks, what is finished, what is not, and the mistakes this
-repository has already sprung on somebody.
+**Prepared:** 2026-08-26 19:30 (Africa/Algiers, UTC+01:00)
 
-Read this first. `CLAUDE.md` is the short operational version of the same
-rules and is loaded automatically; this is the reasoning behind it.
+**Repository:** `https://github.com/Midotech31/g-synth-app`
 
-**Status at handover:** 856 engine tests, 193 HTTP tests, ruff clean,
-frontend builds and typechecks. Branch `claude/update-and-fix-bugs-gQoQw`,
-head `5378f81`, nothing unpushed.
+**Production branch at audit time:** `main` at `462a20de6b3cc0136f5a37c34b41a37b267fff95`
 
----
+**Production commit:** `Redesign the scientific workspace (#14)`
 
-# PART I — WHAT IT IS FOR
+**Engine version:** `1.0.0`
 
-## 1. The objective
+**Purpose:** Give a workstation Codex enough product, biological, technical,
+deployment, validation, and repository context to continue without access to
+the originating chat.
 
-G-Synth automates **one laboratory's** gene synthesis and cloning workflow.
-It is not a general sequence editor and must not become one. Every feature
-exists because a step was being done by hand; every check exists because
-skipping it once cost somebody a fortnight.
-
-The lab: **Mohamed Merzoug's group**, working on bacteriocins and enterocins
-from *Enterococcus*, expressed in *E. coli* from pET vectors. That decides
-the defaults — pET-21a(+), NdeI/XhoI, C-terminal 6×His, thrombin — and it
-decides what is worth building. A feature that does not serve that workflow
-is scope creep even when it is a good idea.
-
-The stated standard, in the user's own words:
-
-> *"Ma logique / la qualité de rendu et accuracy comparable à SnapGene et
-> Geneious."*
-
-Three separate obligations, and they are not equally met:
-
-| Obligation | Meaning | State |
-|---|---|---|
-| **His logic** | Merzoug assembly, his cassette, his vectors — end to end | **Met.** Nothing else does this at all. |
-| **Accuracy** | Right by the standards a commercial tool is held to | **Met**, and exceeded in two places (below). |
-| **Rendering** | The user *sees* a thing is right, not is told | **~85%.** Maps, duplexes, junctions, traces exist; interactive editing does not. |
-
-**Where G-Synth beats the commercial tools**, and why that must be
-preserved:
-
-1. **It refuses to hand over a design it has not verified.**
-   `AssemblyPlan.verify()` re-ligates the design in silico and blocks the
-   download unless the fragments reproduce the construct base for base on
-   both strands. SnapGene will happily export a construct it never
-   simulated.
-2. **It judges a chromatogram, it does not merely draw one.** SnapGene shows
-   you the peak; G-Synth says *"Q7 — check the trace"* and separates a
-   mutation from a bad call. Identical letters, opposite conclusions.
+This document contains no credentials. Do not add passwords, personal access
+tokens, database URLs, secret keys, or copied environment values to it.
 
 ---
 
-# PART II — THE SCIENCE, IN ENOUGH DETAIL TO CHANGE CODE SAFELY
+## 1. Executive state
 
-## 2.1 Merzoug Assembly
+G-Synth is a working full-stack laboratory application for one gene-synthesis
+and cloning workflow. The current stack is:
 
-The lab's own method for building a gene from oligos. **No PCR at any step.**
-
-> Each fragment is a short duplex made by annealing one forward and one
-> reverse oligo. Adjacent fragments carry complementary 4–8 nt overhangs, so
-> they ligate in exactly one order. Fragments are joined pairwise with ligase
-> until the full-length insert exists, which is then cloned with the terminal
-> restriction pair.
-
-### How the fragments are derived — the key idea
-
-The full-length duplex is built **first** (the SSD cassette), then cut *in
-silico*: the top strand at a junction, the bottom strand k nucleotides
-further along.
-
-```
-top     5'──────────────┐ ┌──────────────3'
-bottom  3'──────────┐   └─┘          ┌───5'
-                    └──── k nt ──────┘
-                    the overhang each junction presents
+```text
+React/TypeScript workspace
+        ↓ JSON over /api
+Django REST API
+        ↓ direct function calls
+dependency-free Python biology engine
+        ↓
+PostgreSQL in production / SQLite in development
 ```
 
-Deriving fragments by **cutting a fixed construct** — rather than building
-fragments and hoping they compose — buys two guarantees for free:
+The live services were reachable on 2026-08-26:
 
-1. the terminal ends are *exactly* the SSD enzyme overhangs, and
-2. re-ligating every fragment reproduces the construct base for base.
+- Workspace: `https://gsynth-app.onrender.com/` — HTTP 200.
+- API health: `https://gsynth-api-c2p9.onrender.com/api/health/` — returned
+  `{"status":"ok","service":"gsynth-api"}`.
+- Django admin: `https://gsynth-api-c2p9.onrender.com/admin/`.
 
-**Never invert this.** If you find yourself constructing oligos first and
-assembling second, both guarantees are gone and no test will tell you.
+Render builds both services from `main`. Supabase provides the persistent
+PostgreSQL database through its Session Pooler. Free-tier cold starts are
+expected; this deployment does not provide a zero-downtime SLA.
 
-### Why junction placement is not arbitrary
+At this handover, every automated functional check passes:
 
-Overhangs decide the assembly order. Two junctions sharing an overhang — or
-an overhang that is its own reverse complement — let fragments ligate in the
-wrong order or to themselves, and the error is invisible until sequencing.
+| Layer | Result |
+| --- | ---: |
+| Focused SSD + PCR compatibility tests | 73 passed |
+| Biology engine | 949 passed |
+| Django/API | 222 passed |
+| Frontend | 47 passed |
+| Ruff | passed |
+| TypeScript | passed |
+| Production frontend build | passed, 502 modules transformed |
+| Django migration check | no changes detected |
+| Python dependency consistency | no broken requirements |
 
-Junctions are therefore nudged from their ideal position until every
-overhang is unique, non-palindromic, distinct from the vector's own sticky
-ends, and **not within one mismatch of any other** (NEB's ligase-fidelity
-data: overhangs differing at a single position still join measurably).
+Non-failing local warnings:
 
-### The overhang supply is finite and small
+- Pytest could not write its cache in this sandbox.
+- Django tests warn that `django_app/staticfiles/` does not exist before
+  `collectstatic`; Render creates it during the production build.
 
-Placing one overhang rules out its own one-mismatch neighbourhood *and* its
-reverse complement's. At 4 nt that exhausts the alphabet after **22
-junctions**, whichever ones you pick. A 2.4 kb gene at 90 nt oligos needs 26.
+Historical note: this baseline had four npm advisories. The 2026-08-27 local
+hardening pass resolves them through tested React Router 7 and Vite 8 upgrades;
+the current lockfile audits at zero known vulnerabilities. Django was moved
+from the unsupported 5.1 line to 5.2.17 after a seven-advisory audit, also with
+the complete test cycle.
 
-The design widens the overhang automatically — 5 nt gives 92, 6 nt gives 482
-— and reports it as a **warning**, because the number on the form is no
-longer the number in the tubes. `OVERHANG_SUPPLY` in `merzoug.py` is
-measured, not estimated; a test re-derives it from the rules themselves.
+### Local hardening update — 2026-08-27
 
-Widening costs nothing at the bench: fragments are cut from a fixed
-construct, so a wider stagger moves *where* the cuts fall, not how much has
-to be synthesised. Keep that true if you touch the fragment builder.
+The USB working tree now contains an uncommitted product-hardening pass after
+the production commit named above. It adds one structured preflight contract
+and stable diagnostic codes across optimisation, SSD/assembly, PCR, cloning,
+and verification; server-generated provenance persisted on projects and
+included in exports; full-duplex validation for supplied inserts; explicit
+five-state sequencing verdicts with a coverage map; Guided/Expert modes;
+session-restored user-scoped drafts; a cloning bench worksheet; and scientific
+limitations, references, worked examples, and a bench-user study protocol in
+`docs/`.
 
-## 2.2 SSD — Small Sequence Design
+Database change: apply `projects.0003_project_provenance` with the normal
+`python manage.py migrate` deployment step. Provenance is read-only through the
+API; user-editable project JSON is never accepted as an authoritative audit
+record.
 
-The cassette the insert is wrapped in, before fragmentation:
+Validated local state after this pass:
 
-```
-[left sticky end][ATG][6×His][linker][protease site][INSERT][linker][right sticky end]
-```
+| Layer | Result |
+| --- | ---: |
+| Biology engine | 1,055 passed |
+| Generated/randomized molecular invariants | 70 passed (included above) |
+| Engine coverage | 97.21% (95% gate passed) |
+| Django/API | 230 passed |
+| Frontend | 54 passed |
+| Ruff | passed |
+| TypeScript | passed |
+| Production frontend build | passed, 485 modules transformed |
+| Django migration/system checks | no drift; no issues |
+| npm audit | 0 known vulnerabilities |
+| Python dependency audit | 0 known vulnerabilities |
+| Mobile/accessibility engineering audit | contrast, target size and reflow checks passed after fixes |
 
-Every element is optional and order matters. `ssd.py` is the heart of the
-application; `test_ssd_golden.py` pins known-good outputs. Changing a
-constant in `constants.py` changes the oligos the lab orders.
+The frontend was validated in a clean temporary Linux `npm ci` installation.
+The dependency folder present on the USB was installed for Windows and cannot
+load Rolldown's Linux native binding; use `npm ci` on the target operating
+system rather than copying `node_modules` between systems.
 
-## 2.3 Restriction geometry — the part that is easy to get wrong
+The local SQLite database was backed up as
+`django_app/db.sqlite3.pre-provenance-20260827.bak`, then migrated successfully
+through `projects.0003_project_provenance`. The public Render workspace, SPA
+route rewrite, health endpoint, public enzyme catalogue, and unauthenticated
+API guard were smoke-tested successfully. The hardened working tree has not
+been committed/pushed, so the production PostgreSQL migration is still pending
+the authorised deployment; Render's start command will apply it on that deploy.
 
-Enzymes are stored as **cut positions** (`recognition`, `cut_top`,
-`cut_bottom`), never as the bases an oligo should carry. What each oligo
-carries is *derived per role*, because it differs depending on which end the
-enzyme sits at — `left_remainders()` and `right_remainders()`. Storing one
-pair of strings per enzyme is correct only for the pair it was checked
-against and silently wrong for every other.
-
-**Polarity depends on the side, not only the strand.** The two strands run
-in opposite directions, so a protruding top strand is a **5' overhang at a
-fragment's left end** and a **3' overhang at its right**. Deriving polarity
-from the strand alone reports NdeI as a 3' cutter.
-
-**Two enzyme sets, for two different questions:**
-
-- `RESTRICTION_ENZYMES` — **19**, curated. What a user *picks a cloning pair
-  from*. This lab's freezer. Never widen it to the size of the other; a
-  hundred-name dropdown is worse than nineteen.
-- `ALL_ENZYMES` — **109**, generated from REBASE. What answers *"what else
-  cuts here"*. pET-21a has 60 single-cutters; a map drawn from nineteen
-  showed 14, and a diagnostic digest could be planned against sites nobody
-  was shown.
-
-**Isoschizomers collapse; neoschizomers do not.** NheI and BmtI both cut
-`GCTAGC` — NheI leaves `G^CTAG_C` (5'), BmtI leaves `G_CTAG^C` (3').
-Grouping by recognition sequence merges them and returns the wrong sticky
-end for whichever name loses. Group by *(site, cut_top, cut_bottom)*.
-
-## 2.4 Cloning
-
-`cloning.py` cuts the vector, inserts the construct, closes the plasmid.
-
-**A vector's cassette may read on the minus strand.** In pET-21a, NdeI is at
-236 and XhoI at 157 — the left-hand enzyme cuts *after* the right-hand one.
-Assuming otherwise keeps the 78 bp cloning stuffer and throws away the
-origin and the resistance marker, with all the arithmetic still adding up.
-The fix: flip the vector when the smaller arc demands it, mirror the
-annotations.
-
-**A vector tag counts only where the vector contributed sequence.**
-Searching the whole protein for `HHHHHH` finds the *insert's own* tag and
-reports it as the vector's C-terminal one — describing a construct that will
-not bind the column as one that will.
-
-## 2.5 Verification against sequencing
-
-`verify.py` places each read against the design (k-mer anchors vote on
-orientation and offset, then a **banded** alignment runs only in the located
-window) and reports what differs, where, and whether it changes the protein.
-
-`chromatogram.py` reads the `.ab1` trace directly — ABIF is a published
-format and the engine takes no runtime dependencies. Having the quality
-values changes three things:
-
-1. **Trimming is by quality** (Mott's algorithm), not by a fixed count. A
-   fixed 30 discards 60 good bases on a clean read and keeps 30 useless ones
-   on a bad one.
-2. **Every difference carries the confidence of the base that produced it.**
-   Below Q20 it is marked unsupported — at that confidence the basecaller is
-   choosing between a peak and its neighbour's shoulder.
-3. **The peaks around each difference are returned and drawn**, so the
-   judgement is made by looking rather than taken on trust.
-
-A read supplied as letters reports `quality: null`, **not** "fine". An
-unmarked difference must mean *unknown*, or the whole distinction is worth
-nothing.
+The dedicated audit is recorded in
+`docs/ACCESSIBILITY_MOBILE_AUDIT_2026-08-27.md`. The independent 5–8 scientist
+study and physical design-to-sequencing runs remain external evidence gates;
+their protocols explicitly remain marked pending and must not be represented
+as completed.
 
 ---
 
-# PART III — ARCHITECTURE
+## 2. Start here on the workstation
 
-## 3.1 The rule above all others
+Clone the production branch and prove its identity:
 
-```
-gsynth_engine/   the biology. Dependency-free Python. No Django, no HTTP.
-django_app/      a thin layer that validates, calls the engine, serialises.
-frontend/        React + TypeScript. Draws what the engine returns.
-tools/           generators for committed assets (logo, enzyme table).
-app.py, modules/, utils/   the original Streamlit app. Superseded, kept.
+```powershell
+git clone https://github.com/Midotech31/g-synth-app.git
+Set-Location g-synth-app
+git switch main
+git pull --ff-only
+git rev-parse HEAD
 ```
 
-**No biology outside `gsynth_engine/`.** If you find yourself computing a
-sequence in a view, a serializer or a component, it belongs in the engine —
-that is where it can be tested without a web server and where a bug has one
-place to be.
+At the date above, the last command should print:
 
-The engine has **no runtime dependencies**. Biopython appears only as a
-*build-time* source for generated data (BLOSUM62, the enzyme table) and in
-the Django layer's file parsing. Do not add an engine dependency; if a
-format needs parsing, parse it — `chromatogram.py` is ~200 lines for ABIF.
-
-## 3.2 Adding an endpoint
-
-1. Logic in the engine, with tests. Callable and verifiable without Django.
-2. A serializer with **bounds on every field**. A field with no maximum is a
-   denial of service waiting for someone to paste an operon.
-3. A view that calls the engine and turns `SequenceError` into a 400. Give
-   it `throttle_scope = "design"` if it runs an algorithm, not a lookup.
-4. An HTTP test asserting the response **matches what the engine returned** —
-   not that it looks plausible.
-
-## 3.3 Module map
-
-| Module | Lines | Responsibility | Watch out for |
-|---|---|---|---|
-| `sequence.py` | 79 | primitives, `SequenceError` | keep dependency-free |
-| `constants.py` | 137 | curated 19, `ALL_ENZYMES`, 7 protease sites | cut positions, never strings |
-| `enzyme_table.py` | 126 | generated REBASE table (109) | regenerate, never hand-edit |
-| `thermo.py` | 224 | SantaLucia 1998 NN Tm, salt corrections | `ANNEALING` ≠ `PRIMER`, ~7 °C apart |
-| `ssd.py` | 303 | the cassette | golden tests pin the output |
-| `merzoug.py` | 680 | fragmentation, junction placement | `OVERHANG_SUPPLY`, `terminal_ends`, `verify()` |
-| `duplex.py` | 398 | hybridisation view, junction views | polarity by side |
-| `cloning.py` | 865 | cut, insert, close, validate | minus-strand cassettes; observed vs declared ends |
-| `vectors.py` | 493 | 7-vector catalogue, validation | only authoritative sequences ship |
-| `codon.py` | 674 | optimisation, CAI (Sharp & Li 1987) | windowed cost — §5 |
-| `verify.py` | 500 | read placement, differences | banded DP — §5 |
-| `chromatogram.py` | 338 | ABIF, quality, Mott trimming | reverse-read index mapping |
-| `align.py` | 425 | Gotoh affine-gap pairwise | traceback layer — §4 |
-| `primers.py` | 316 | sequencing primers | read ranges wrap the origin |
-| `ligation.py` | 195 | molar ligation arithmetic | molar, not mass |
-| `protocol.py` | 261 | order sheet, bench protocol | |
-| `genbank.py` | 179 | GenBank / FASTA export | LOCUS line is column-positional |
-
-**HTTP:** 17 design endpoints under `/api/design/`, 7 accounts, 1 sequences.
-
-**Frontend** (~4 560 lines): 7 workspace pages — Design, Optimise, Clone,
-Verify, Align, Dashboard, Viewer — plus Login and Signup; 6 components —
-DuplexView, JunctionDuplex, TraceView, InsertForm, Logo, Icon.
-
----
-
-# PART IV — INVARIANTS THAT MUST NEVER REGRESS
-
-Each is enforced by a test. If one breaks, the application is producing
-**wrong molecules**, not merely misbehaving.
-
-1. **Re-ligating a Merzoug design in silico reproduces the construct base
-   for base, on both strands.** `verify()` runs before any plan is returned;
-   nothing downloads until it is empty.
-2. **The assembled fragments present the sticky ends the chosen enzymes
-   leave** — sequence *and* polarity, at both outer ends, measured off the
-   molecule by `terminal_ends`, not read back from the labels the design
-   wrote.
-3. **Codon optimisation never changes the protein.**
-4. **Recutting a recombinant plasmid with the same pair returns the insert.**
-5. **Every enzyme is checked in both positions, left and right** — all 109.
-6. **The curated 19 are re-checked against REBASE on every run.** A
-   hand-typed cut position is otherwise invisible when wrong.
-7. **Circular means circular.** Sites, reads, features and primer
-   read-ranges wrap past position 0. Clamping silently truncates them, and
-   in every pET construct the insert sits exactly there.
-
-## Decisions that are easy to reverse by accident
-
-Each was a **real defect**. Reintroducing one is silent — the code runs, the
-tests you thought to write pass, and the molecule is wrong.
-
-- **A terminal end is measured, never quoted.** Every terminal value in a
-  plan is copied from the SSD when fragments are built, so a check that
-  compares them agrees with itself whatever the oligos spell. Same reason
-  `cloning.py` has `_observed_insert_ends`.
-- **Affine gaps need the traceback to remember which layer it is *in*,** not
-  which layer won at each cell. The latter fragments one twelve-base
-  deletion into four.
-- **Sequences and matrices ship only as verified data.** Vector sequences
-  come from an authoritative file and are validated against their catalogue
-  entry. BLOSUM62 is generated from Biopython. A transcription error in
-  5 000 bases, or in 576 matrix values, is invisible.
-- **Tm comes from stacking, under the reaction the protocol prescribes.**
-  Not from base composition, and not at a generic primer dilution —
-  composition cannot tell two oligos of equal GC apart.
-- **Reverse reads map back through the flip.** The trace runs in the read's
-  own direction and the comparison does not. Mapping a difference back
-  without undoing the flip reads the quality of the base the same distance
-  from the *other* end: a real number, from the wrong base, entirely
-  plausible.
-
----
-
-# PART V — PERFORMANCE ENVELOPE
-
-Two endpoints were once hangable by any signed-in user. The serializers
-accept up to 200 kb, so every algorithm must be sane at that size.
-
-| Fix | Before | After |
-|---|---|---|
-| Codon repair compares candidates on a **window**, not the whole gene | 6.7 s @ 3 kb | 0.42 s |
-| Banded alignment **iterates only the band** and sizes buffers by the band | >2 min | 1.9 s |
-| Junction placement uses a **precomputed exclusion set**, not pairwise | ~25 s @ 200 kb | 1.3 s |
-
-Reference timings: 3 kb optimisation ≈ 0.4 s · 1 kb read ≈ 0.01 s ·
-2.4 kb assembly ≈ 0.02 s · 200 kb assembly ≈ 1.3 s.
-
-**Measure before and after.** A perf test pins the placement bound.
-
----
-
-# PART VI — WHAT IS DONE
-
-Every item below is implemented, tested, and verified in a browser.
-
-## Workflow
-
-| Area | What works | Where |
-|---|---|---|
-| **Optimise** | Codon optimisation for the host, CAI (Sharp & Li), GC windows, homopolymer and repeat limits, restriction-site avoidance, rare-codon repair. Protein never changes. | `codon.py`, `/optimise/` |
-| **Design** | SSD cassette; Merzoug fragmentation to oligo pairs; automatic overhang widening with a warning; order sheet (CSV); bench protocol; hybridisation view; per-junction views. Gene scale proven to 200 kb. | `ssd.py`, `merzoug.py`, `protocol.py`, `duplex.py` |
-| **Clone** | Cut vector, insert, close; minus-strand cassettes handled; 6 validation checks; ORF and tag outcomes; junction seams drawn; restriction map (28 features on pET-21a). | `cloning.py`, `/clone/` |
-| **Check** | Sequencing verification in either orientation; `.ab1` chromatogram reading with quality-aware trimming and per-difference confidence; sequencing primers; molar ligation arithmetic. | `verify.py`, `chromatogram.py`, `primers.py`, `ligation.py` |
-| **Compare** | Gotoh affine-gap pairwise, global / local / semi-global, DNA and protein (BLOSUM62), reverse-complement search. | `align.py`, `/align/` |
-| **Projects** | Save a design or plasmid; reopen with its content; circular / linear / both plasmid maps with features. | `Dashboard.tsx`, `Viewer.tsx` |
-| **Export** | GenBank (features preserved), FASTA, oligo FASTA, order-sheet CSV, bench protocol. | `genbank.py`, `protocol.py` |
-| **Import** | SnapGene `.dna`, GenBank, FASTA — validated against the catalogue entry, so pasting pET-28a while pET-21a is selected is caught. | `apps/sequences/parsing.py`, `vectors.py` |
-
-## Accounts and safety
-
-JWT with `ver`-claim revocation and blacklist; per-user project isolation;
-`ScopedRateThrottle` on 12 algorithmic endpoints; bounds on every serializer
-field; 19 security tests.
-
-## Brand and interface
-
-Vector logo generated by `tools/generate_logo.py` in two cuts (detailed, and
-a compact one for ≤40 px and the favicon); 9 drawn SVG icons on one 24 px
-grid. **No emoji anywhere** — an emoji is a different picture on every
-operating system, and sometimes an empty box. Scientific arrows in prose
-(`5'→3'`) are typography and stay as text.
-
-## Test inventory
-
-**Engine — 856 tests**
-
-`align` 25 · `chromatogram` 29 · `cloning` 53 · `codon` 35 ·
-`duplex_integrity` 5 · `duplex_view` 38 · `enzymes` 9 (parametrised over 109
-→ ~570) · `genbank` 24 · `ligation` 17 · `merzoug` 39 · `primers` 17 ·
-`protocol` 15 · `ssd_golden` 7 · `thermo` 23 · `vectors` 34 · `verify` 18
-
-**HTTP — 193 tests**
-
-`design` 127 · `sequences` 24 · `security` 19 · `projects` 12 ·
-`accounts` 10 · `health` 1
-
----
-
-# PART VII — WHAT REMAINS
-
-Ranked by what would actually cost the user bench time.
-
-### 1. Five vectors need importing per use — **BLOCKED ON THE USER**
-
-Only pET-21a(+) and pET-21(+) ship with sequences. pET-28a(+), pET-22b(+),
-pET-32a(+), pGEX-4T-1 and pUC19 are catalogued — name, length, resistance,
-tags, notes — but have no sequence, so the user must import a file each
-time.
-
-**Do not invent these sequences.** A transcription error in 5 000 bases is
-invisible and poisons every design made against that backbone. They must
-come from the user's own SnapGene export or a supplier's file. snapgene.com,
-addgene.org and ncbi.nlm.nih.gov are all blocked at the container's egress
-policy — do not try to route around it.
-
-*When the files arrive:* drop each in `gsynth_engine/vector_data/<key>.json`
-in the same shape as `pET-21a.json`, set `bundled=` on the `VectorSpec`, and
-let `validate()` check it against the catalogue entry. One pass.
-
-### 2. Type IIS enzymes — needs a model change, not a table change
-
-BsaI, BsmBI, Esp3I and their kin cut **outside** their recognition sequence.
-A cut is currently stored as an offset *into* the site, so `site[cut_top:]`
-returns an empty string rather than raising — **wrong ends, not absent
-ones**, which is worse. `tools/generate_enzymes.py` excludes them on
-purpose.
-
-Supporting them means letting `cut_top`/`cut_bottom` exceed the site length
-and teaching the remainder functions to reach into the flanking sequence.
-Worth doing only if the lab moves to Golden Gate.
-
-### 3. Interactive sequence editing — deliberate deferral
-
-Everything renders read-only. You cannot click a base, select a region, or
-annotate in place. Building a competent editor is months of work and the
-user has SnapGene for browsing. **Do not start this without being asked.**
-
-### 4. Smaller, genuinely useful
-
-- **Publication-quality figure export** (SVG/PDF of the map and duplex).
-  The renderings exist; only the export does not.
-- **Filters on multi-fragment assemblies** — by overhang type, or to only
-  the junctions with a warning. Offered to the user, never requested. At 55
-  fragments the junction list is long.
-- **A custom map surface.** The circular/linear maps come from SeqViz, a
-  library. It works; it gives less control than drawing it.
-
-### 5. Deployment — **do not raise unprompted**
-
-`django_app/DEPLOY.md` covers Supabase + Render on free tiers and is
-written. The user has said explicitly he is not handing the app to his team
-until it is finished. He will raise it.
-
----
-
-# PART VIII — HOW TO VERIFY YOUR WORK
-
-```bash
-python -m ruff check .                      # one config, at the repo root
-python -m pytest gsynth_engine/tests -q     # 856 — the biology
-cd django_app && python -m pytest -q        # 193 — the HTTP layer
-cd frontend && npm run typecheck && npm run build
+```text
+462a20de6b3cc0136f5a37c34b41a37b267fff95
 ```
 
-All four must be green before you touch anything, and again before you
-commit.
+If `main` has advanced, inspect the intervening commits rather than resetting
+it to this snapshot.
 
-Write each test as a **claim about the molecule**, not about the code. Every
-docstring in `gsynth_engine/tests/` says what the check protects against;
-keep that up, because six months later the *why* is the only part that still
-matters.
+Create the Python environment on Windows:
 
-**Prove a check can fail.** An earlier compatibility check passed for every
-input because it compared a label with itself. When you add an invariant,
-add the test that breaks it deliberately.
-
-## UI work: screenshots, not assertions
-
-Start both servers, drive the page with Playwright
-(`executablePath: '/opt/pw-browsers/chromium'`), and **look at the result**.
-Several real bugs were found that way and by no other means — a drawing that
-is subtly wrong looks exactly like a passing test.
-
-```bash
-cd django_app && python manage.py runserver --settings=config.settings.dev
-cd frontend && npm run dev        # proxies /api to :8000
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[test]"
+python -m pip install -r django_app\requirements.txt
 ```
 
-SQLite by default; no database to install. On Windows the venv activation is
-`.venv\Scripts\activate`, not `source`.
+Install the exact frontend dependency lock:
 
-## Regenerating committed assets
-
-```bash
-python tools/generate_logo.py                                  # → mark.svg
-python tools/generate_enzymes.py > gsynth_engine/enzyme_table.py
+```powershell
+Set-Location frontend
+npm ci
+Set-Location ..
 ```
 
-Both need Biopython. **Adjust the generator and re-run it**; never hand-edit
-the output. That is how vector art and data tables quietly rot.
+Run the baseline before changing code:
+
+```powershell
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m pytest gsynth_engine\tests -q
+Set-Location django_app
+..\.venv\Scripts\python.exe -m pytest -q
+..\.venv\Scripts\python.exe manage.py makemigrations --check --dry-run --settings=config.settings.test
+Set-Location ..\frontend
+npm run typecheck
+npm test
+npm run build
+Set-Location ..
+```
+
+To run locally without Docker, use two terminals:
+
+```powershell
+# Terminal 1, repository root
+Set-Location django_app
+..\.venv\Scripts\python.exe manage.py migrate --settings=config.settings.dev
+..\.venv\Scripts\python.exe manage.py runserver --settings=config.settings.dev
+```
+
+```powershell
+# Terminal 2
+Set-Location frontend
+npm run dev
+```
+
+Open `http://localhost:5173`. The frontend proxies `/api` to
+`http://127.0.0.1:8000` by default. Docker Compose under `django_app/` also
+starts PostgreSQL, Redis, the API, frontend, and a local Ollama service.
 
 ---
 
-# PART IX — CONVENTIONS
+## 3. What the product is for
 
-- **British spelling** in prose. Comments explain *why*, never *what*.
-- Match the surrounding style rather than importing a new one.
-- Errors reaching a user are written **for them**: what is wrong, and what
-  to do about it. `SequenceError` messages are shown verbatim in the
-  interface.
-- **Severity follows consequence.** A leftover restriction site blocks the
-  whole strategy and is a **problem**; a rare codon left in to satisfy a GC
-  window costs a little translation speed and is a **warning**. Calling both
-  problems teaches the user to ignore the word.
-- Commit messages say *why*, with the defect named. The history is part of
-  the documentation.
+G-Synth automates Mohamed Merzoug's laboratory workflow for bacteriocin and
+enterocin genes expressed in *E. coli* from pET vectors. It is not intended
+to become a generic sequence editor.
 
----
+The primary flow is:
 
-# PART X — TRAPS THIS REPOSITORY HAS ALREADY SPRUNG
+```text
+gene → Optimise → Design → PCR → Clone → Check
+                                      ↘ Compare
+```
 
-Learned the hard way. Every one of these cost real time.
+- **Optimise** changes codons for the expression host without changing the
+  protein and avoids selected restriction sites.
+- **Design** builds the SSD cassette and Merzoug PCR-free oligo assembly.
+- **PCR** designs conventional or cloning primers, including enzyme tails,
+  digest simulation, primer-quality checks, and reading-frame warnings.
+- **Clone** cuts a vector, ligates the insert, re-checks the seams and ORF,
+  and draws the plasmid.
+- **Check** covers ligation quantities, sequencing primers, text reads, and
+  `.ab1` chromatograms with quality-aware difference calls.
+- **Compare** performs DNA or protein pairwise alignment.
+- **Projects** saves designs/plasmids per user and reopens them.
+- **Learn** talks to Ollama when one is configured.
 
-- **A test filler that repeats.** A codon list cycled by a short-period
-  generator gives a sequence with almost no distinct k-mers, and junction
-  placement legitimately fails. That is your generator, not a bug. Use
-  `random.Random(seed)` over a wide codon set.
-- **Blanket `strict=True` on `zip`.** Most zips here are deliberately
-  unequal — `zip(fragments, fragments[1:])` is the pairwise idiom. Applying
-  it everywhere broke 97 tests. Decide per site.
-- **`from __future__ import annotations` hides undefined names.** An
-  un-imported type in a signature never raises at runtime and every test
-  passes. Only the linter catches it — which is why there is exactly **one**
-  ruff config, at the root. A second copy in a subdirectory means
-  `ruff check .` from the root silently uses defaults.
-- **Diagnostics that scale wrongly.** A "this sequence is repetitive" check
-  compared distinct k-mers against the region's *length*; since no sequence
-  has more than 4^k distinct k-mers, it labelled every gene past 131 kb
-  repetitive. Compare against what the algorithm consumes, not against size.
-- **The viewBox is not the artwork.** An untrimmed SVG viewBox is why a logo
-  looks small beside its own wordmark and hangs off-centre.
-- **Grouping enzymes by recognition sequence.** It merges neoschizomers and
-  returns the wrong sticky end. Group by *(site, cut_top, cut_bottom)*.
-- **Don't add biology to a view** to save a round trip. It will be wrong in
-  a place that has no tests.
-- **Don't trust a fixture from one instrument.** `test_chromatogram.py`
-  *writes* ABIF files to the published spec rather than shipping one,
-  because a fixture from a particular sequencer tests that sequencer.
+The scientific quality goal is comparable to SnapGene/Geneious while
+preserving the lab's custom Merzoug assembly. The differentiator is that
+downloads are blocked until the design re-ligates in silico to the intended
+construct on both strands.
 
 ---
 
-# PART XI — WHERE TO START
+## 4. Legacy executable audit: cloning primers and SSD
 
-1. Read `CLAUDE.md` (the short rules) and this file.
-2. Run all four verification commands. Green before you touch anything.
-3. Read `gsynth_engine/merzoug.py` and `gsynth_engine/ssd.py` end to end.
-   Everything else serves those two.
-4. Read `gsynth_engine/tests/test_merzoug.py` — it is the specification of
-   the method, written as claims about molecules.
+### 4.1 Reference and method
 
-**On working with this user.** He is a working molecular biologist and he
-will tell you what is wrong with a design faster than any test will. When he
-says a rendering is misaligned or a number looks off, **check the molecule
-before checking the code** — twice in this project he was right and the
-first instinct was wrong. He writes in French and English; the codebase is
-British English and should stay that way.
+The user supplied this reference executable:
+
+```text
+Original path: C:\Users\dell\Desktop\G-Synth_2025_4_0.exe
+Size: 121,718,276 bytes
+SHA-256: 46C56A17DBAF7D99BB6552B19D3631861646847883BFB41F5284C4EBD63ECE9C
+File modified: 2025-07-04
+```
+
+It is a PyInstaller application built with Python 3.12. The audit extracted
+the embedded Python code objects from the supplied executable, identified the
+actual primer and SSD functions, reconstructed only those pure calculation
+functions, and executed them with the same input molecules as the modern
+engine. This is stronger evidence than comparing the current code with the
+old `modules/` copy, which is not identical to the executable in one constant.
+
+The GUI itself was not treated as a scientific oracle. The comparison was of
+the calculations embedded inside the provided binary.
+
+### 4.2 Overall verdict
+
+The core SSD logic is respected for the validated NdeI/XhoI workflow. Default
+and coding SSD designs matched the executable nucleotide for nucleotide in
+both forward and reverse oligos.
+
+The modern implementation also corrects real defects in the old generic
+enzyme handling and improves PCR thermodynamics and validation. Those changes
+should remain.
+
+There is one resolved behavioural compatibility decision, one unresolved
+behavioural decision, and one exact DNA difference:
+
+1. **Resolved 2026-08-27:** cloning PCR now defaults to the legacy-safe NdeI
+   behaviour: when `CATATG` supplies the start codon, a template-leading
+   `ATG` is omitted. The PCR form exposes an explicit opt-in to keep both
+   codons and add an N-terminal methionine.
+2. Modern SSD accepts a sequence without `ATG` even when `is_coding=True`.
+   The executable rejected it.
+3. The Factor Xa site encodes the same IEGR peptide but uses different
+   synonymous codons.
+
+These are documented decisions, not changes made during this audit.
+
+### 4.3 SSD logic: exact findings
+
+The legacy non-coding cassette order is:
+
+```text
+[left enzyme remainder]
+[ATG, unless NdeI supplies it]
+[GSS left linker]
+[6×His]
+[SSG right linker]
+[optional protease site]
+[input sequence]
+[right enzyme remainder]
+```
+
+The reverse oligo mirrors those pieces in reverse-complement order. The
+modern default preserves that order exactly. There is no extra linker after
+the input sequence.
+
+| SSD rule | Legacy executable | Modern engine | Verdict |
+| --- | --- | --- | --- |
+| Default non-coding NdeI/XhoI | Builds the cassette above | Exact same forward and reverse oligos | Preserved |
+| Coding NdeI/XhoI | Removes a leading gene `ATG`; NdeI supplies it | Exact same forward and reverse oligos when input begins `ATG` | Preserved |
+| Stop removal | Truncates at the first in-frame `TAA`, `TAG`, or `TGA` | Same | Preserved |
+| Sequence validation | A/C/G/T only after whitespace cleanup | Same base rule through `validate_dna` | Preserved/improved errors |
+| His tag | `CACCACCACCACCACCAC` | Same | Preserved |
+| Linkers | `GGTTCTTCT` and `TCTTCTGGT` | Same | Preserved |
+| Protease placement | Before the input sequence | Same | Preserved |
+| Optional cassette parts | Always present in the old non-coding path | Modern UI/engine can omit His and/or linkers | Intentional extension |
+| Coding input without `ATG` | Rejected: “Coding sequence must start with ATG.” | Accepted | Compatibility gap |
+| Alternative enzyme ends | Reuses one old remainder pair on both sides; wrong for several enzymes | Derives left/right ends from cut geometry | Correct modern fix |
+| Tm | Whole-oligo legacy consensus calculation | SantaLucia nearest-neighbour under annealing conditions | Correct modern upgrade |
+
+The alternative-enzyme difference must not be “fixed” back to the executable.
+The executable stored `cut_forward`/`cut_reverse` strings once per enzyme and
+reused them at either side of an insert. Left and right molecular roles are
+not interchangeable. The modern `left_remainders()` and
+`right_remainders()` derive the correct ends from `cut_top`/`cut_bottom` and
+are tested for all 109 known enzymes.
+
+Factor Xa exact sequences:
+
+```text
+Legacy executable: ATCGAGGGAAGG  → IEGR
+Modern engine:     ATCGAAGGTCGT  → IEGR
+```
+
+This is peptide-equivalent but not DNA-equivalent. Keep the modern sequence
+unless the lab's historical ordered oligos, codon preference, or written SOP
+requires the exact legacy DNA. If exact backward reproducibility matters,
+make the choice explicit and add a golden test before changing the constant.
+
+### 4.4 Cloning-primer logic: exact findings
+
+The executable's `design_cloning_primers` did the following:
+
+- Selected fixed forward and reverse annealing footprints from the sequence.
+- Used a configurable 5' prefix, default `TGCATC`.
+- Added the full enzyme recognition site after the prefix.
+- For forward NdeI and a gene beginning `ATG`, removed the gene's first three
+  bases because `CATATG` already supplies the start codon.
+- Built the reverse primer as prefix + right recognition site + reverse
+  complement of the chosen final footprint.
+- Calculated Tm over the entire tailed oligo.
+
+The modern engine in `gsynth_engine/pcr.py`:
+
+- Chooses 18–30 nt annealing footprints toward a 60 °C target.
+- Uses a six-base `GCTAGC` clamp by default so enzymes cut efficiently near
+  fragment ends.
+- Reports annealing-part Tm separately from whole-oligo Tm and derives Ta from
+  the annealing part, which is the physically relevant first-cycle value.
+- Defaults to `use_site`: when the left site supplies `ATG`, the forward
+  primer anneals at codon two so the expressed protein starts with one
+  methionine. `keep_both` remains an explicit opt-in.
+- Simulates the PCR product and digest, checks internal sites, verifies sticky
+  ends, reports primer-quality problems, and can send the predigested insert
+  into Clone.
+
+Matched NdeI/XhoI example:
+
+```text
+Legacy forward: TGCATCCATATGAAAGGTGAAGAATTGTT
+Modern forward: GCTAGCCATATGAAAGGTGAAGAATTGTTCACCG
+
+Legacy reverse: TGCATCCTCGAGTTTCAGGGTCAGTTTACCGT
+Modern reverse: GCTAGCCTCGAGTTTCAGGGTCAGTTTACCGT
+```
+
+The length/prefix differences are intentional modernisations. The start-codon
+choice is explicit in the PCR interface: the default “Use NdeI's ATG” matches
+the executable and avoids Met-Met; “Keep both ATGs” preserves the former
+modern behaviour when an extra N-terminal methionine is deliberate. Engine,
+digest, reading-frame, API, client, and round-trip tests protect the default.
+
+This interpretation is independently supported by NEB's NdeI definition
+(`CA/TATG`) and by a published expression-vector description of the NdeI
+`CATATG` site as harbouring the initiation codon:
+
+- https://www.neb.com/en-us/products/r0111-ndei
+- https://pmc.ncbi.nlm.nih.gov/articles/PMC4216109/
+
+For SSD, either enforce the documented `is_coding=True` contract (must begin
+with `ATG`) or rename/reword the flag so “coding” means only “do not add the
+expression cassette”. The former matches the executable and current UI copy.
+
+---
+
+## 5. Architecture and ownership boundaries
+
+```text
+gsynth_engine/                 Scientific logic; standard-library runtime only
+gsynth_engine/tests/           Molecular claims and golden examples
+django_app/apps/design/        Thin HTTP adapters for engine functions
+django_app/apps/accounts/      User model, JWT authentication, revocation
+django_app/apps/projects/      Per-user saved designs and plasmids
+django_app/apps/sequences/     SnapGene/GenBank/FASTA parsing and validation
+django_app/apps/tutor/         Optional Ollama adapter
+frontend/src/pages/            Workspace screens
+frontend/src/components/       Shared scientific/UI renderers
+frontend/src/state/            Navigation-lifetime workspace state
+tools/                         Generators for committed data/assets
+app.py, modules/, utils/       Superseded Streamlit application, retained
+```
+
+The most important repository rule is: **no biology in Django views,
+serializers, or React components**. Put it in `gsynth_engine`, test the
+molecule there, then expose and render the returned result.
+
+When adding an endpoint:
+
+1. Implement and test the engine function.
+2. Bound every serializer input.
+3. Translate `SequenceError` into a useful 400 response.
+4. Add design throttling to algorithmic work.
+5. Add an HTTP test that asserts the response equals the engine result.
+6. Render it without re-deriving sequences in TypeScript.
+
+The engine is dependency-free at runtime. Biopython is used in tests,
+generated-data tools, and Django file parsing, not by the engine's public
+calculation path.
+
+---
+
+## 6. Scientific invariants
+
+Treat a failure here as a wrong molecule, not a normal software defect:
+
+1. Re-ligating a Merzoug plan reproduces the intended construct base for
+   base on both strands before a download is offered.
+2. Terminal sticky ends are measured from the assembled duplex, not copied
+   from labels, and match the selected enzymes in sequence and polarity.
+3. Codon optimisation never changes the translated protein.
+4. Recutting a recombinant plasmid with the same pair returns the insert.
+5. Every known restriction enzyme is checked in left and right roles.
+6. The curated 19-enzyme picker remains small; the 109-enzyme catalogue is
+   for finding sites, not for overwhelming the picker.
+7. Isoschizomers may share a result only when site and cut geometry agree;
+   neoschizomers must not be merged by recognition sequence alone.
+8. Circular vectors, features, reads, and primer read ranges wrap through
+   coordinate zero.
+9. A vector's cloning cassette may be on the minus strand. pET-21a's NdeI
+   and XhoI coordinates cannot be interpreted by ascending number alone.
+10. A vector-derived His tag counts only if the tag sequence came from the
+    vector portion, not from the insert.
+11. Tm is reaction-specific. SSD annealing, PCR annealing portions, and full
+    tailed primers are not interchangeable conditions.
+12. Reverse-read chromatogram qualities must be mapped back through the
+    orientation flip before attaching confidence to differences.
+
+Golden SSD outputs live in `gsynth_engine/tests/test_ssd_golden.py`. PCR and
+cloning-primer behaviour lives in `gsynth_engine/tests/test_pcr.py`. Read the
+test docstrings as the scientific specification before changing either.
+
+---
+
+## 7. Current implemented scope
+
+| Area | Implemented |
+| --- | --- |
+| Optimisation | Host codon usage, CAI, GC windows, repeats/homopolymers, restriction-site avoidance, protein-preserving repair |
+| SSD | Coding/non-coding paths, NdeI handling, optional stop removal, tag/linker/protease options, duplex and warning metadata |
+| Merzoug assembly | PCR-free paired fragments, automatic 4–8 nt overhang widening, uniqueness/palindrome/one-mismatch checks, re-ligation verification |
+| PCR | Conventional and cloning modes, adaptive annealing footprints, Tm/Ta, clamps, internal-site blocking, digest simulation, ORF warnings |
+| Clone | Vector digest, insert ligation, observed seams, recut check, ORF/tag outcomes, maps and export |
+| Check | Ligation calculations, sequencing primers, text-read placement, `.ab1` parsing, Mott trimming, Q-aware differences and peaks |
+| Compare | Gotoh affine-gap alignment; global, local and semi-global; DNA/protein; reverse-complement search |
+| Import/export | SnapGene `.dna`, GenBank, FASTA; GenBank/FASTA/oligo FASTA/CSV/protocol outputs |
+| Accounts/projects | JWT login/refresh/revocation, per-user projects, Django admin |
+| Interface | Home, Design, Optimise, PCR, Clone, Check, Compare, Learn, Projects, Viewer, Help |
+
+Only pET-21a(+) and pET-21(+) ship with authoritative vector sequences.
+pET-28a(+), pET-22b(+), pET-32a(+), pGEX-4T-1, and pUC19 are catalogued but
+must be imported from the lab's or supplier's authoritative file. Never type
+or invent a vector sequence to remove that requirement.
+
+Type IIS enzymes are deliberately unsupported by the current cut model.
+Their cuts fall outside the recognition sequence and require a model change,
+not another row in the existing table.
+
+---
+
+## 8. Workspace persistence and design state
+
+The redesign at `462a20d` is the current production UI. Results and form
+state now remain visible while the signed-in user navigates between sections.
+Each working page has an explicit **Clear** action. The state provider lives
+inside the authenticated shell, so signing out destroys it and prevents data
+from crossing accounts.
+
+Persistence is currently **memory-only**:
+
+- survives Design → Optimise/PCR → Design and equivalent client-side route
+  navigation;
+- does not survive a browser refresh, tab close, browser restart, or sign-out;
+- uploaded `File` objects are also memory-only.
+
+If “until I clear it” is intended to include refresh/restart, implement a
+versioned `sessionStorage` or `localStorage` layer for serialisable values and
+make the privacy choice explicit. Do not attempt to serialise uploaded trace
+files or place sensitive sequence data in persistent browser storage without
+the user's approval.
+
+Final design QA evidence is on the remote branch:
+
+```text
+agent/finalize-design-assets
+ddc6fdcdad47afd792b3ba43328df1ae07b46677
+```
+
+It adds `design-qa.md` and canonical JPG reference/implementation/comparison
+images. The application code itself is already on `main`; that branch is
+evidence, not a required production code dependency.
+
+---
+
+## 9. Deployment
+
+`render.yaml` creates:
+
+- `gsynth-api`: Django/Gunicorn web service in Frankfurt.
+- `gsynth-app`: static Vite site with React Router fallback.
+
+Production variables:
+
+| Variable | Owner | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | Render secret | Supabase Session Pooler PostgreSQL URL |
+| `DJANGO_SECRET_KEY` | Render-generated secret | Django signing key |
+| `ALLOWED_HOSTS` | API | Exact Render API hostname |
+| `CORS_ALLOWED_ORIGINS` | API | Exact frontend origin |
+| `VITE_API_BASE` | frontend build | Absolute API base URL |
+| `PYTHON_VERSION` | Render | Python 3.12 |
+
+Never commit actual values. Production intentionally refuses to start when
+critical settings are absent or unsafe rather than falling back to ephemeral
+SQLite.
+
+The Learn/Ollama feature is optional. The Render blueprint does not deploy an
+Ollama service and does not set an external `OLLAMA_BASE_URL`; therefore Learn
+should be considered unavailable in production unless an Ollama-compatible
+service is intentionally provisioned. The rest of the product is independent
+of it. Local defaults are `http://localhost:11434` and model `llama3.1`.
+
+Safe deployment sequence:
+
+1. Make a small branch; never work directly on remote `main`.
+2. Run every verification command in section 2.
+3. Keep database migrations backwards-compatible with the currently running
+   API where possible.
+4. Merge to `main`; Render auto-deploys both services.
+5. Watch the API build, migrations, boot, and `/api/health/`.
+6. Open the frontend, sign in, and exercise the changed workflow.
+7. If boot/health fails, roll back to the previous Render deploy and diagnose
+   without exposing environment values in logs or chat.
+
+Full click-by-click instructions are in `django_app/DEPLOY.md`.
+
+Any credentials previously pasted into a chat or screenshot must be treated
+as compromised and rotated at the provider. This repository and handover do
+not contain them.
+
+---
+
+## 10. Repository state at handover
+
+Remote references after an explicit refresh:
+
+```text
+origin/main                         462a20de6b3cc0136f5a37c34b41a37b267fff95
+origin/agent/finalize-design-assets ddc6fdcdad47afd792b3ba43328df1ae07b46677
+```
+
+The local audit workspace was on `agent/finalize-design-assets` at local
+commit `bdaacc0a6ed0d2638a4c5fda9ee56af0164d85b0`. Its tracked tree contains
+the same design-evidence content as the remote branch, but the commit ID is
+different. Use the remote commit above on the workstation.
+
+Five local PNGs were untracked in the audit workspace:
+
+```text
+frontend/design-qa/comparison-1.png
+frontend/design-qa/comparison-final.png
+frontend/design-qa/implementation-1.png
+frontend/design-qa/implementation-final.png
+frontend/design-reference/design-1.png
+```
+
+They are duplicate/intermediate local artifacts. Canonical committed evidence
+uses JPG. Do not add the PNGs unless there is a deliberate asset decision.
+
+This revised `HANDOVER.md` is the intended transfer artifact. It is not part
+of the production commit named above until explicitly committed and pushed.
+
+---
+
+## 11. Prioritised next work
+
+### P0 — external release evidence
+
+1. Deploy the hardened tree so Render applies `projects.0003`, then repeat the
+   authenticated production smoke workflow.
+2. Run `docs/USABILITY_STUDY.md` with 5–8 independent bench scientists.
+3. Run the physical construct matrix in `docs/WET_LAB_VALIDATION.md` and retain
+   gels, raw `.ab1` files, provenance manifests, and reviewer sign-off.
+
+### P1 — remaining compatibility decision
+
+- Decide whether Factor Xa needs exact legacy DNA or only the IEGR peptide;
+  record the decision in a golden test before changing the implementation.
+
+### P1 — dependency maintenance
+
+- Keep `package-lock.json` authoritative; use Node 22.22.2 or newer within the
+  declared engine range and `npm ci` in CI/deployment.
+- Repeat npm and Python advisory audits on every controlled upgrade.
+
+### P1 — production Learn decision
+
+Either provision a supported external Ollama-compatible endpoint with an
+explicit privacy/cost assessment, or label Learn as local-only/disabled in
+production. Do not send unpublished sequences to a third-party model without
+the user's informed approval.
+
+### P2 — optional product work
+
+- Persist serialisable workspace state across refresh only if the user wants
+  that stronger meaning of “until Clear”.
+- Import authoritative files for the five unbundled vectors.
+- Add publication-quality SVG/PDF export for maps and duplexes.
+- Consider assembly-list filters for very large fragment sets.
+
+Do not start an interactive sequence editor or Type IIS support without a
+clear user requirement; both are substantial scope changes.
+
+---
+
+## 12. Working conventions and known traps
+
+- Use British spelling in product prose and comments.
+- Comments explain why; tests state molecular claims.
+- User errors say what is wrong and what to do next.
+- Severity follows bench consequence: a strategy-destroying internal site is
+  a problem; a suboptimal but usable primer is a warning.
+- Use one Ruff configuration at repository root.
+- Generated enzyme tables and logo assets are changed through their generator,
+  not hand-edited.
+- Do not group enzymes only by recognition sequence; cut geometry matters.
+- Do not quote a terminal end from metadata when it can be measured from the
+  molecule.
+- In affine-gap traceback, preserve the active matrix layer.
+- Use a wide, seeded codon distribution in stress fixtures; short repeating
+  generators create artificial k-mer failures.
+- Do not apply `zip(..., strict=True)` mechanically; several pairs are
+  deliberately offset by one element.
+- Visual work requires screenshots at desktop and phone widths plus browser
+  console inspection. Passing component tests cannot prove a duplex or map is
+  visually correct.
+- Preserve unrelated uncommitted work. Stage explicit paths only.
+
+Performance is also a correctness boundary because authenticated design
+endpoints accept large sequences. Preserve these shapes:
+
+- codon repair compares candidate changes inside a local window, not against
+  the whole gene for every codon;
+- banded read alignment iterates and allocates only the band, not a full
+  sequence-length row for every base;
+- Merzoug overhang selection checks a precomputed exclusion set rather than
+  comparing every new junction with every previous junction.
+
+Historical reference timings were about 0.4 s for 3 kb optimisation, 0.01 s
+for a 1 kb read, 0.02 s for a 2.4 kb assembly, and 1.3 s for a 200 kb
+assembly. Re-benchmark before and after changing those algorithms; do not
+treat the old numbers as a current performance certification.
+
+Useful reading order for a new Codex:
+
+1. `HANDOVER.md`
+2. `CLAUDE.md`
+3. `gsynth_engine/ssd.py`
+4. `gsynth_engine/pcr.py`
+5. `gsynth_engine/merzoug.py`
+6. `gsynth_engine/tests/test_ssd_golden.py`
+7. `gsynth_engine/tests/test_pcr.py`
+8. `gsynth_engine/tests/test_merzoug.py`
+9. `django_app/apps/design/`
+10. `frontend/src/state/WorkspaceStateContext.tsx`
+
+When the user says that a scientific result or drawing looks wrong, inspect
+the molecule first and the UI second. A plausible rendering can still encode
+the wrong sequence.
+
+---
+
+## 13. Definition of done for the next Codex
+
+A change is ready only when:
+
+- its biological choice is explicit;
+- engine tests assert the intended molecule and include a case that would
+  fail if the protection were removed;
+- API output is checked against the engine rather than against a hand-written
+  “plausible” value;
+- TypeScript, frontend tests, and production build pass;
+- affected pages are exercised in a real browser at desktop and phone widths;
+- navigation away and back preserves results until Clear where applicable;
+- no credential or private sequence was introduced into source, fixtures,
+  screenshots, logs, or the commit message;
+- `git diff` contains only intended files;
+- deployment health is verified after merge.

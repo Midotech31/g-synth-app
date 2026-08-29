@@ -143,6 +143,62 @@ export default function Help() {
               threshold a base call is trusted at &mdash; the same letters can mean a real change or a bad
               peak, and only the trace tells them apart.
             </p>
+            <p className="note">
+              Sequencing has five explicit outcomes: <strong>fully verified</strong>, <strong>differences detected</strong>,
+              <strong> partial match</strong>, <strong>reads unplaced</strong>, and <strong>not checked</strong>.
+              Only the first means the entire requested region is covered and agrees with the design.
+            </p>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-head"><h2>Preflight &amp; reproducibility</h2></div>
+          <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
+            <p className="note">
+              Every workflow uses the same three release words. <strong>Ready</strong> has no unresolved checks.
+              <strong> Review required</strong> is scientifically usable but needs a documented choice.
+              <strong> Blocked</strong> disables release because the proposed molecule or evidence fails a required check.
+            </p>
+            <p className="note">
+              Expand any preflight row to see its stable code, evidence and next action. Codes stay fixed even when
+              explanatory wording improves, so saved projects and audit records remain interpretable.
+            </p>
+            <p className="note">
+              Saved projects carry the engine version and SHA-256 checksums of the parameters, output sequence,
+              vector and enzyme table. GenBank and FASTA exports include the output identity, allowing a later file
+              to be traced back to the exact calculated molecule without duplicating raw sequences in the manifest.
+            </p>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-head"><h2>Glossary</h2></div>
+          <div className="card-body">
+            <dl className="help-glossary">
+              <div><dt>Recognition site</dt><dd>The DNA motif an enzyme recognises; it is not necessarily the bases retained at the cut end.</dd></div>
+              <div><dt>Overhang</dt><dd>The single-stranded bases exposed after cleavage. Sequence, strand and side determine compatibility and polarity.</dd></div>
+              <div><dt>Orthogonal junction</dt><dd>An assembly overhang that does not pair with itself, another junction, or another junction&rsquo;s reverse complement.</dd></div>
+              <div><dt>Reading frame</dt><dd>The grouping of coding bases into triplets from the selected translation start through both junctions.</dd></div>
+              <div><dt>Coverage gap</dt><dd>A requested interval supported by no placed sequencing read; agreement elsewhere cannot verify it.</dd></div>
+              <div><dt>Provenance</dt><dd>The versioned record and checksums that identify the inputs, reference table and exact calculated output.</dd></div>
+            </dl>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-head"><h2>Limits of the prediction</h2></div>
+          <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
+            <p className="note">
+              G-Synth checks sequence logic. It does not predict star activity, methylation sensitivity, partial
+              digestion, enzyme-lot performance, secondary structure, transformation efficiency, toxicity,
+              expression yield or protein solubility. Confirm buffers, units and incubation conditions against the
+              current manufacturer datasheets and retain appropriate experimental controls.
+            </p>
+            <p className="note">
+              A calculated Tm, compatible end or translated protein is a design prediction, not an experimental
+              result. Sequence-verify the complete requested region before expression and adjudicate every confident
+              difference from the chromatogram.
+            </p>
           </div>
         </div>
 

@@ -529,6 +529,25 @@ describe("multipart uploads", () => {
   });
 });
 
+describe("PCR design", () => {
+  it("sends the explicit NdeI start-codon policy to the engine", async () => {
+    serve(() => json(200, {}));
+
+    await client.api.pcr({
+      template: "ATGAAAGGTGAAGAATTGTTCACCGGTGTTGTTCCGATTCTG",
+      left_enzyme: "NdeI",
+      right_enzyme: "XhoI",
+      start_codon_mode: "use_site",
+    });
+
+    expect(JSON.parse(String(calls[0].init.body))).toMatchObject({
+      left_enzyme: "NdeI",
+      right_enzyme: "XhoI",
+      start_codon_mode: "use_site",
+    });
+  });
+});
+
 describe("file downloads", () => {
   const revoke = vi.fn();
 
