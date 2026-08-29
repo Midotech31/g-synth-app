@@ -878,10 +878,23 @@ class TraceVerifyView(APIView):
         # The peaks around each difference, so it can be looked at rather
         # than taken on trust. Only these windows travel, never whole traces.
         windows = []
+        tracks = []
         for read in report.reads:
             trace = traces.get(read.name)
             if trace is None:
                 continue
+            track = trace.alignment_track(
+                read.trimmed_start,
+                trace.length - read.trimmed_end,
+                reverse=read.reverse_complemented,
+            )
+            tracks.append({
+                "read": read.name,
+                "reference_start": read.start,
+                "reference_end": read.end,
+                "reverse_complemented": read.reverse_complemented,
+                **track,
+            })
             for d in read.differences:
                 if d.read_index is None:
                     continue
@@ -906,6 +919,7 @@ class TraceVerifyView(APIView):
             "differences": [_difference_payload(d) for d in report.differences],
             "reads": [_read_payload(r) for r in report.reads],
             "traces": summaries,
+            "trace_tracks": tracks,
             "trace_windows": windows,
             "warnings": report.warnings,
         })

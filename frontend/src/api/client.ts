@@ -495,6 +495,7 @@ export type VerifyReport = {
   warnings: string[];
   /** Present only on the trace endpoint. */
   traces?: TraceSummary[];
+  trace_tracks?: TraceTrack[];
   trace_windows?: TraceWindow[];
 };
 
@@ -509,6 +510,19 @@ export type TraceSummary = {
   sample_count: number;
   /** Enough good sequence to be worth comparing to a design at all. */
   usable: boolean;
+};
+
+/** Quality-trimmed chromatogram evidence, oriented left-to-right on the reference. */
+export type TraceTrack = {
+  read: string;
+  reference_start: number;
+  reference_end: number;
+  reverse_complemented: boolean;
+  sequence: string;
+  qualities: number[];
+  peaks: number[];
+  sample_count: number;
+  traces: Record<string, number[]>;
 };
 
 /** The peaks around one difference — never a whole trace, which is megabytes. */

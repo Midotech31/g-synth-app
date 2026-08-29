@@ -21,7 +21,7 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 
-from gsynth_engine.sequence import SequenceError
+from gsynth_engine.sequence import SequenceError, reverse_complement
 
 #: Everything past this is a directory of tags; the header is fixed.
 _MAGIC = b"ABIF"
@@ -146,6 +146,54 @@ class Chromatogram:
                 if i < len(self.sequence)
             ],
             "centre": index,
+        }
+
+    def alignment_track(self, start: int, stop: int, *, reverse: bool = False) -> dict:
+        """The quality-trimmed evidence needed for a reference-aligned viewer.
+
+        Unlike :meth:`window`, this covers the complete part of a read that
+        was actually admitted to verification.  It deliberately excludes the
+        discarded noisy ends: showing those bases on the reference track
+        would visually imply evidence that the algorithm did not use.
+
+        Reverse reads are returned in reference orientation.  Reversing a
+        chromatogram means both reversing sample order *and* complementing
+        its channels (A<->T and C<->G); doing only one of those makes the
+        coloured peaks disagree with the displayed base calls.
+        """
+        start = max(0, min(start, self.length))
+        stop = max(start, min(stop, self.length))
+        if start == stop or not self.peaks:
+            return {
+                "sequence": "", "qualities": [], "peaks": [],
+                "sample_count": 0, "traces": {base: [] for base in "ACGT"},
+            }
+
+        spacing = self._spacing()
+        first = max(0, self.peaks[start] - spacing // 2)
+        last = min(self.sample_count, self.peaks[stop - 1] + spacing // 2 + 1)
+        sequence = self.sequence[start:stop]
+        qualities = self.quality[start:stop]
+        peaks = [peak - first for peak in self.peaks[start:stop]]
+        channels = {base: values[first:last] for base, values in self.traces.items()}
+
+        if reverse:
+            complement = {"A": "T", "C": "G", "G": "C", "T": "A"}
+            width = last - first
+            sequence = reverse_complement(sequence)
+            qualities = list(reversed(qualities))
+            peaks = [width - 1 - peak for peak in reversed(peaks)]
+            channels = {
+                base: list(reversed(channels.get(complement[base], [])))
+                for base in "ACGT"
+            }
+
+        return {
+            "sequence": sequence,
+            "qualities": qualities,
+            "peaks": peaks,
+            "sample_count": last - first,
+            "traces": channels,
         }
 
     def _spacing(self) -> int:

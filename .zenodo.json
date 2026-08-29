@@ -1,0 +1,28 @@
+{
+  "title": "G-Synth: PCR-free gene synthesis and cloning design with verified assembly",
+  "description": "Versioned source release for G-Synth, including codon optimisation, PCR-free oligonucleotide assembly, restriction-enzyme cloning and quality-aware post-sequencing verification with reference-aligned chromatograms.",
+  "upload_type": "software",
+  "license": "MIT",
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Merzoug, Mohamed",
+      "affiliation": "Higher School of Biological Sciences of Oran (ESSBO), Oran, Algeria"
+    }
+  ],
+  "keywords": [
+    "gene synthesis",
+    "molecular cloning",
+    "synthetic biology",
+    "Sanger sequencing",
+    "chromatogram",
+    "bioinformatics"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/Midotech31/g-synth-app",
+      "relation": "isSupplementTo",
+      "resource_type": "software"
+    }
+  ]
+}

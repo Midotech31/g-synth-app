@@ -13,6 +13,7 @@ import Icon from "../components/Icon";
 import CoverageMap from "../components/CoverageMap";
 import LiveStatus from "../components/LiveStatus";
 import PreflightPanel from "../components/PreflightPanel";
+import ReferenceAlignment from "../components/ReferenceAlignment";
 import TraceView from "../components/TraceView";
 import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
@@ -677,6 +678,14 @@ export default function Verify() {
             )}
           </div>
         </div>
+
+        {tab === "reads" && report && project && (report.trace_tracks?.length ?? 0) > 0 && (
+          <div className="card alignment-card">
+            <div className="card-body">
+              <ReferenceAlignment reference={project.sequence} report={report} />
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

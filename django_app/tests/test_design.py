@@ -1411,6 +1411,41 @@ class TestTraceVerifyEndpoint:
         assert window["bases"], "the window must name the bases it spans"
         assert any(b["index"] == window["centre"] for b in window["bases"])
 
+    def test_reference_aligned_trace_track_uses_only_verified_bases(self, auth_client):
+        """The overview must not present quality-discarded ends as evidence."""
+        read = self.DESIGN[30:230]
+        quality = [2] * 12 + [45] * (len(read) - 24) + [2] * 12
+        response = auth_client.post(reverse(self.url_name), {
+            "design": self.DESIGN, "circular": False,
+            "traces": [self._upload(read, quality)],
+        }, format="multipart")
+
+        assert response.status_code == 200, response.data
+        track = response.data["trace_tracks"][0]
+        aligned = response.data["reads"][0]
+        assert track["read"] == "fwd.ab1"
+        assert track["reference_start"] == aligned["start"]
+        assert track["sequence"] == read[12:-12]
+        assert len(track["qualities"]) == len(track["sequence"])
+        assert len(track["peaks"]) == len(track["sequence"])
+        assert set(track["traces"]) == set("ACGT")
+
+    def test_reverse_track_is_complemented_into_reference_orientation(self, auth_client):
+        from gsynth_engine.sequence import reverse_complement
+
+        forward = self.DESIGN[30:230]
+        reverse_read = reverse_complement(forward)
+        response = auth_client.post(reverse(self.url_name), {
+            "design": self.DESIGN, "circular": False,
+            "traces": [self._upload(reverse_read, name="rev.ab1")],
+        }, format="multipart")
+
+        assert response.status_code == 200, response.data
+        track = response.data["trace_tracks"][0]
+        assert track["reverse_complemented"] is True
+        assert track["sequence"] == forward
+        assert track["peaks"] == sorted(track["peaks"])
+
     def test_matches_what_the_engine_measured(self, auth_client):
         """The response reports the engine's numbers, not its own."""
         from gsynth_engine.chromatogram import read_ab1

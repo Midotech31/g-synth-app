@@ -534,6 +534,7 @@ table.data td.num { font-variant-numeric: tabular-nums; }
   gap: 1.25rem;
   align-items: start;
 }
+.design-layout > * { min-width: 0; }
 .design-input-card { position: sticky; top: 1.15rem; }
 .design-input-card > .card-head { padding: 1rem 1.15rem; }
 .design-form-actions {
@@ -596,7 +597,7 @@ table.data td.num { font-variant-numeric: tabular-nums; }
   .design-stats .stat:nth-child(3) { border-right: 0; }
 }
 @media (max-width: 980px) {
-  .design-layout { grid-template-columns: 1fr; }
+  .design-layout { grid-template-columns: minmax(0, 1fr); }
   .design-input-card { position: static; }
 }
 
@@ -972,6 +973,152 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .trace-base.is-poor { opacity: 0.45; }
 .trace-note { margin-top: 0.5rem; }
 
+/* Reference-aligned Sanger evidence. The reference, consensus and raw peaks
+   share one fixed nucleotide grid; horizontal scrolling preserves that
+   coordinate system on a phone instead of squeezing bases into ambiguity. */
+.reference-alignment {
+  margin: 1rem -0.15rem 0.85rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.9rem;
+}
+.alignment-card .reference-alignment { margin: 0; border-top: 0; padding-top: 0; }
+.alignment-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.alignment-toolbar h3 { font-size: 0.9rem; }
+.alignment-toolbar p { margin-top: 0.16rem; color: var(--ink-soft); font-size: 0.75rem; }
+.alignment-zoom {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--paper-deep);
+}
+.alignment-zoom button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 5px;
+  padding: 0.3rem 0.65rem;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.alignment-zoom button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgb(22 32 44 / 12%);
+  font-weight: 650;
+}
+.alignment-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: #fbfbf9;
+  scrollbar-color: var(--line-strong) var(--paper-deep);
+}
+.alignment-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.alignment-canvas { min-width: 100%; padding: 0.55rem 0 0.7rem; }
+.alignment-row {
+  display: grid;
+  grid-template-columns: 150px max-content;
+  min-height: 26px;
+  align-items: center;
+}
+.alignment-label {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 0.65rem;
+  border-right: 1px solid var(--line);
+  background: #fbfbf9;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+.alignment-label strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 0.67rem;
+}
+.alignment-label span { margin-left: auto; color: var(--ink-faint); font-family: var(--mono); font-size: 0.6rem; }
+.alignment-ruler { position: relative; height: 26px; border-bottom: 1px solid var(--line-strong); }
+.alignment-ruler span {
+  position: absolute;
+  top: 0;
+  height: 26px;
+  padding-left: 3px;
+  border-left: 1px solid #aeb6b9;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+}
+.alignment-sequence { display: flex; height: 26px; }
+.alignment-base {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-right: 1px solid rgb(255 255 255 / 55%);
+  color: #15202b;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.alignment-base.base-a { background: #bfe7c7; }
+.alignment-base.base-c { background: #c9daf4; }
+.alignment-base.base-g { background: #eee0a9; }
+.alignment-base.base-t { background: #f0c6c6; }
+.alignment-base.base-n { background: #e4e7e9; }
+.alignment-base.is-gap { background: transparent; color: #9aa4aa; }
+.alignment-base.is-mismatch { box-shadow: inset 0 -3px 0 var(--danger); color: #6f1e1e; }
+.alignment-read { border-top: 1px solid var(--line); margin-top: 0.42rem; padding-top: 0.35rem; }
+.alignment-read-head { min-height: 31px; }
+.alignment-track { position: relative; height: 100%; }
+.alignment-read-arrow {
+  position: absolute;
+  top: 4px;
+  height: 22px;
+  border-radius: 4px 10px 10px 4px;
+  background: var(--accent);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 650;
+  line-height: 22px;
+  padding-left: 0.45rem;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.alignment-read-arrow span { position: sticky; left: 154px; }
+.alignment-plot-row { min-height: 74px; }
+.alignment-trace { display: block; background: white; }
+.trace-quality-high { fill: rgb(14 110 119 / 4%); }
+.trace-quality-low { fill: rgb(201 118 52 / 13%); }
+.alignment-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.9rem;
+  margin-top: 0.55rem;
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+}
+.alignment-legend span { display: inline-flex; align-items: center; gap: 0.3rem; }
+.alignment-legend i { width: 13px; height: 9px; border: 1px solid var(--line-strong); }
+.alignment-legend .legend-covered { background: rgb(14 110 119 / 8%); }
+.alignment-legend .legend-low { background: rgb(201 118 52 / 18%); }
+.alignment-legend .legend-mismatch { border: 0; border-bottom: 3px solid var(--danger); }
+
 /* A difference the trace does not support is still shown — hiding it would
    be deciding for the reader — but it is toned down, because acting on it
    is usually wrong. */
@@ -1018,6 +1165,8 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     row-gap: 0.75rem;
   }
   .topbar .design-heading { flex: 0 0 100%; width: 100%; }
+  .alignment-toolbar { align-items: stretch; flex-direction: column; }
+  .alignment-zoom { align-self: flex-start; }
   .design-steps { overflow-x: auto; padding-bottom: 0.25rem; }
   .design-steps > i { width: 32px; flex: 0 0 32px; }
   .design-topbar > .btn-primary { width: auto; }
@@ -1165,4 +1314,3 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
    same word to anyone ordering one, and `.pill` uppercases. Same reasoning
    as `.terminal-end`, which fixed this once already elsewhere. */
 .pill-enzyme { text-transform: none; letter-spacing: 0.02em; }
-

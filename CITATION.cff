@@ -22,13 +22,14 @@ authors:
 repository-code: "https://github.com/Midotech31/g-synth-app"
 license: MIT
 version: 1.0.0
-date-released: "2026-08-11"
+date-released: "2026-08-29"
 
 abstract: >-
   G-Synth automates a laboratory gene synthesis and cloning workflow: codon
   optimisation that provably preserves the protein, PCR-free oligo assembly
   with orthogonal overhangs (Merzoug assembly), in-silico cloning into a
-  vector, and verification of the result against Sanger traces. Designs are
+  vector, and quality-aware verification of the result against Sanger traces
+  in a public reference-aligned chromatogram viewer. Designs are
   re-ligated in silico on both strands and checked against the sticky ends the
   chosen restriction enzymes leave before they can be exported, so no oligo
   set is issued that has not been simulated end to end.
