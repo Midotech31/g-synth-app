@@ -40,8 +40,8 @@ coordinates and truncation status survive the API round trip.
 
 - 1,113 biology-engine tests passed.
 - 265 Django/API tests passed.
-- 91 frontend tests passed.
-- 1,469 automated tests passed in total.
+- 92 frontend tests passed.
+- 1,470 automated tests passed in total.
 - Ruff, TypeScript, migration drift and production frontend build passed.
 - npm and Python dependency audits reported no known vulnerabilities.
 - Browser exercise covered pre-ligation locks, explicit ligation, cross-view

@@ -1,11 +1,4 @@
-"""The study assistant — a chat proxy in front of a local Ollama model.
-
-Distinct from every other view in this codebase: it does not call
-`gsynth_engine`, because there is no deterministic biology to compute here.
-What it returns is a language model's answer, not a verified result — the
-request is bounded the same way every other endpoint's is, but nothing
-about the response is checked the way a design or a clone is.
-"""
+"""Optional private study-assistant endpoints."""
 from __future__ import annotations
 
 from django.conf import settings
@@ -24,7 +17,7 @@ TUTOR_NOTICE = (
 
 
 class TutorStatusView(APIView):
-    """GET /api/tutor/status/ — disclose availability before data entry."""
+    """Report study-assistant availability and scientific limits."""
 
     def get(self, request):
         enabled = bool(settings.TUTOR_ENABLED)
@@ -40,12 +33,7 @@ class TutorStatusView(APIView):
 
 
 class TutorView(APIView):
-    """POST /api/tutor/ask/ — ask the study assistant a question.
-
-    503, not 400 or 500, when Ollama cannot be reached: the request itself
-    was fine, the model just is not there to answer it — the same distinction
-    a database being down gets over a query being malformed.
-    """
+    """Submit a bounded question to the configured private service."""
 
     throttle_scope = "tutor"
 

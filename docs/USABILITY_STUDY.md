@@ -67,7 +67,7 @@ Use an anonymous ID; keep consent records separately.
 | Assistive technology (if any) | |
 | Consent recorded | yes / no |
 
-For every task record completion (independent / prompted / failed), elapsed
+For every task record completion (independent / assisted / failed), elapsed
 time, wrong turns, help visits, interpretation, next bench action, and a short
 verbatim uncertainty quote. Any wrong ready/review/block decision is critical.
 

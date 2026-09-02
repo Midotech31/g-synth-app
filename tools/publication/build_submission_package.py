@@ -12,8 +12,6 @@ from pathlib import Path
 
 from build_final_manuscript import (
     add_bullets,
-    add_callout,
-    add_table,
     add_text,
     configure_document,
 )
@@ -27,18 +25,11 @@ INTERFACE = ROOT / "publication_evidence" / "interface_evidence"
 PACKAGE = PUBLICATION / "submission_package"
 MAIN_DOCX = PUBLICATION / "G-Synth_Final_Master_Manuscript.docx"
 SI_DOCX = PUBLICATION / "G-Synth_Master_Supporting_Information.docx"
-SOURCE_DRAFT = Path(
-    "/home/merzoug/Downloads/Article Insuline Algerine (2)/FINAL VERSION/IJBMM/BEJ/ACS/"
-    "Manuscript_Merzoug_et_al_2025_ACS_--SB.docx"
-)
 PACKAGE_BASENAME = "G-Synth_Publication_Package"
 
 NAVY = "112846"
 TEAL = "2E7881"
 GREEN = "3B875F"
-GOLD = "B6782A"
-PALE = "EAF3F4"
-CAUTION = "FFF2CC"
 
 
 def sha256(path: Path) -> str:
@@ -54,6 +45,28 @@ def copy_file(source: Path, destination: Path) -> None:
     shutil.copy2(source, destination)
 
 
+def export_tiff(source: Path, destination: Path, width_in: float) -> dict[str, str | int | float]:
+    """Export RGB TIFF artwork at its intended print size without resampling."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with Image.open(source) as image:
+        rgba = image.convert("RGBA")
+        rgb = Image.new("RGB", rgba.size, "white")
+        rgb.paste(rgba, mask=rgba.getchannel("A"))
+        effective_ppi = image.width / width_in
+        stored_ppi = max(300, round(effective_ppi))
+        rgb.save(destination, compression="tiff_lzw", dpi=(stored_ppi, stored_ppi))
+        return {
+            "file": destination.name,
+            "width_px": image.width,
+            "height_px": image.height,
+            "intended_width_in": width_in,
+            "effective_ppi": round(effective_ppi, 1),
+            "minimum_ppi": 300,
+            "status": "PASS" if effective_ppi >= 300 else "FAIL",
+            "colour_mode": "RGB",
+        }
+
+
 def add_simple_title(doc: Document, title: str, subtitle: str) -> None:
     p = doc.add_paragraph()
     p.paragraph_format.space_before = Pt(10)
@@ -61,24 +74,37 @@ def add_simple_title(doc: Document, title: str, subtitle: str) -> None:
     r = p.add_run(title)
     r.bold = True
     r.font.name = "Calibri"
-    r.font.size = Pt(24)
+    r.font.size = Pt(20)
     r.font.color.rgb = RGBColor.from_string(NAVY)
     s = doc.add_paragraph()
-    s.paragraph_format.space_after = Pt(18)
+    s.paragraph_format.space_after = Pt(10)
     sr = s.add_run(subtitle)
     sr.italic = True
-    sr.font.size = Pt(12)
+    sr.font.size = Pt(10.5)
     sr.font.color.rgb = RGBColor.from_string(TEAL)
+
+
+def configure_cover_letter(doc: Document) -> None:
+    """Apply compact, readable cover-letter typography."""
+    configure_document(doc, "G-Synth — Cover Letter")
+    normal = doc.styles["Normal"]
+    normal.font.size = Pt(9.5)
+    normal.paragraph_format.space_after = Pt(4)
+    normal.paragraph_format.line_spacing = 1.0
+    heading = doc.styles["Heading 1"]
+    heading.font.size = Pt(13.5)
+    heading.paragraph_format.space_before = Pt(9)
+    heading.paragraph_format.space_after = Pt(4)
 
 
 def build_acs_cover_letter() -> Path:
     out = PACKAGE / "03_cover_letters" / "G-Synth_Cover_Letter_ACS_Synthetic_Biology.docx"
     doc = Document()
-    configure_document(doc, "G-Synth — Cover Letter")
+    configure_cover_letter(doc)
     add_simple_title(doc, "Cover Letter", "Submission to ACS Synthetic Biology · Article")
     add_text(doc, "2 September 2026")
-    add_text(doc, "Professor Huimin Zhao\nEditor-in-Chief, ACS Synthetic Biology")
-    add_text(doc, "Dear Professor Zhao,")
+    add_text(doc, "The Editors\nACS Synthetic Biology")
+    add_text(doc, "Dear Editors,")
     add_text(
         doc,
         "Please consider our manuscript, “G-Synth: Small Sequence Design and Extended Sequence Design for auditable synthesis-ready DNA and post-sequencing validation,” for publication as an Article in ACS Synthetic Biology. Mohamed Merzoug is the corresponding author. The coauthors are Zohra Yasmine Zater, Yasmine Saidi, Amaria Ilhem Hammadi, Marwa Aireche, Keltoum Bendida, Hadjer Soumia Bouderbala, Soheir Bouzidi and Djamal Saidi.",
@@ -92,18 +118,14 @@ def build_acs_cover_letter() -> Path:
     add_bullets(
         doc,
         [
-            "1,469 automated tests passed: 1,113 scientific-engine, 265 API and 91 interface tests.",
-            "G-Synth exactly regenerated all four archived insulin glargine A/B synthesis oligonucleotides.",
-            "The staged Design→Hybridization→Cloning workflow exposed the NdeI/XhoI cohesive ends, verified both vector–insert junctions and withheld product analyses until explicit in-silico ligation.",
+            "1,470 automated tests passed: 1,113 scientific-engine, 265 API and 92 interface tests.",
+            "Starting from the mature insulin glargine A/B proteins, G-Synth selected the E. coli host profile, preserved the mature-peptide interpretation, generated synonymous coding sequences and completed SSD, hybridization and pET-21a(+) restriction-cloning gates.",
+            "G-Synth exactly regenerated all four insulin glargine A/B synthesis oligonucleotides recorded in the experiment.",
+            "The staged Design→Hybridization→Cloning workflow exposed the NdeI/XhoI cohesive ends, verified both vector–insert junctions and withheld product analyses and its green confirmation state until explicit in-silico ligation.",
             "Simulated NdeI/XhoI cloning produced coherent 5,490-bp and 5,523-bp pET-21a(+) constructs with preserved reading frames.",
             "G-Synth oriented and assembled the approved F/R chromatograms into 100%-covered, 100%-identical raw consensus sequences; bidirectional overlap was 56.1% for A and 71.2% for B, with 100% agreement in both overlaps.",
             "Independent Biopython alignment reproduced complete reference coverage and identity, providing an executable cross-check of the G-Synth consensus result.",
         ],
-    )
-    doc.add_heading("Lay summary", level=1)
-    add_text(
-        doc,
-        "Designing a DNA molecule often requires several disconnected programs: one chooses codons, another prepares cloning ends, another draws the plasmid and another interprets sequencing data. Small inconsistencies between these steps can remain hidden until laboratory work fails. G-Synth keeps the same DNA design connected throughout the workflow. SSD generates one pair of strands to order; ESD generates multiple directional pairs for longer targets. G-Synth reconstructs both intended strands computationally, checks their cloning ends, places the product in a vector, annotates the construct and compares sequencing traces with the intended reference. In insulin glargine A/B constructs, SSD reproduced the synthesized strands and expected plasmids, after which G-Synth oriented and merged the approved forward and reverse reads to complete, 100%-identical consensus sequences.",
     )
     doc.add_heading("Declarations", level=1)
     add_text(
@@ -122,7 +144,7 @@ def build_acs_cover_letter() -> Path:
 def build_oup_cover_letter() -> Path:
     out = PACKAGE / "03_cover_letters" / "G-Synth_Cover_Letter_Synthetic_Biology_OUP.docx"
     doc = Document()
-    configure_document(doc, "G-Synth — Cover Letter")
+    configure_cover_letter(doc)
     add_simple_title(doc, "Cover Letter", "Submission to Synthetic Biology (Oxford University Press) · Original Article")
     add_text(doc, "2 September 2026")
     add_text(doc, "The Editors\nSynthetic Biology")
@@ -140,8 +162,9 @@ def build_oup_cover_letter() -> Path:
     add_bullets(
         doc,
         [
-            "1,469 automated tests passed across the dependency-free scientific engine, Django API and React interface.",
-            "All four archived insulin glargine A/B synthesis molecules were regenerated exactly from the preserved coding inputs.",
+            "1,470 automated tests passed across the dependency-free scientific engine, Django API and React interface.",
+            "The current demonstration begins with the mature insulin glargine A/B proteins, resolves their peptide role, reverse-translates them with the selected E. coli codon profile and carries both designs through SSD, hybridization and restriction cloning.",
+            "All four insulin glargine A/B synthesis molecules were regenerated exactly from the preserved experimental coding inputs.",
             "NdeI/XhoI hybridization and directional ligation produced coherent 5,490-bp and 5,523-bp recombinant pET-21a(+) constructs.",
             "The four author-designated chromatograms assembled to 100%-covered, 100%-identical A/B consensus sequences, with 100% agreement wherever forward and reverse reads overlapped.",
             "Independent Biopython alignments reproduced the complete coverage and identity results.",
@@ -156,126 +179,6 @@ def build_oup_cover_letter() -> Path:
     add_text(
         doc,
         "Mohamed Merzoug, Ph.D. · Corresponding author\nHigher School of Biological Sciences of Oran · merzoug.mohamed@essb-oran.edu.dz",
-    )
-    doc.save(out)
-    return out
-
-
-def build_readiness_report() -> Path:
-    out = PACKAGE / "08_editorial_readiness" / "G-Synth_Journal_Targeting_and_Editorial_Readiness.docx"
-    doc = Document()
-    configure_document(doc, "G-Synth — Editorial Readiness")
-    add_simple_title(
-        doc,
-        "Journal Targeting and Editorial Readiness",
-        "Evidence-based publication strategy · 2 September 2026",
-    )
-    add_callout(
-        doc,
-        "Overall assessment",
-        "The project is scientifically credible and unusually reproducible for an academic software submission. The retrospective sequencing evidence establishes complete insert-reference consensus coverage and identity. A prospective study would further strengthen the paper by confirming every position bidirectionally and spanning both vector–insert junctions.",
-        fill=PALE,
-    )
-    doc.add_heading("1. Ratings", level=1)
-    add_table(
-        doc,
-        ["Dimension", "Score", "Assessment"],
-        [
-            ["G-Synth scientific project", "9.1 / 10", "Strong molecular invariants, staged hybridization and ligation, open engine and deep automated testing"],
-            ["Final manuscript", "8.8 / 10", "Defensible novelty position, evidence-rich case study, candid limitations and workflow screenshots"],
-            ["Reproducibility", "9.4 / 10", "Executable analyses, checksums, machine-readable evidence and 1,469 passing tests"],
-            ["Experimental validation maturity", "7.4 / 10", "Real bench-derived case study with complete consensus identity; full bidirectional and junction coverage remains prospective"],
-            ["ACS Synthetic Biology fit", "8.6 / 10", "Direct match to DNA assembly, nucleic-acid engineering and computational design scope"],
-            ["Submission readiness today", "7.9 / 10", "Complete file package prepared; release DOI, author approvals and prospective sequencing remain open"],
-        ],
-        [2.15, 1.05, 3.40],
-        font_size=8.5,
-    )
-    doc.add_heading("2. Journal targeting matrix", level=1)
-    add_table(
-        doc,
-        ["Target and format", "Current fit", "Decision and adaptation"],
-        [
-            ["ACS Synthetic Biology — Article", "Best immediate fit", "Full experimental methods and synthetic-biology scope align closely. The master manuscript is already Fast-Format compatible; retain TOC graphic and ACS-specific cover letter."],
-            ["Synthetic Biology (OUP) — Original Article", "Strong and realistic", "Natural scope for an end-to-end open synthetic-biology platform. Use the OUP cover letter and adapt references/style after target confirmation."],
-            ["PLOS Computational Biology — Software Submission", "High prestige, not yet mature", "Requires <3,500 words, anonymous open-source download, reproducible deposited data and evidence of broad utility or adoption. Build adoption before choosing this route."],
-            ["Bioinformatics — Application Note", "Good software visibility", "Requires major compression to the short Application Note format and stronger standardized benchmarking; move most wet-lab detail to SI."],
-            ["Nucleic Acids Research — Web Server Issue", "Aspirational", "Annual proposal route; requires a stable public web service and explicit comparison with similar servers. Add public no-login evaluation and plan for the next proposal cycle."],
-        ],
-        [2.15, 1.35, 3.10],
-        font_size=7.7,
-    )
-    add_callout(
-        doc,
-        "Recommended submission sequence",
-        "Use the journal-neutral master as the scientific source of truth. For an immediate high-level submission, choose ACS Synthetic Biology or Synthetic Biology (OUP) after confirming author approval and the public software/data release. Treat PLOS Computational Biology and the NAR Web Server Issue as second-stage targets after independent adoption, public anonymous access and prospective benchmarking.",
-        fill=PALE,
-    )
-
-    doc.add_heading("3. Realistic publication probability", level=1)
-    add_text(
-        doc,
-        "The following ranges are expert judgment, not acceptance-rate statistics. They reflect scope fit, novelty, evidence depth and the most likely editorial objections.",
-    )
-    add_table(
-        doc,
-        ["Scenario", "Estimated probability", "Interpretation"],
-        [
-            ["ACS Synthetic Biology Article — submitted now", "20–35% acceptance", "Good scope fit, but likely challenged on prospective validation, usability benchmarking and release permanence"],
-            ["ACS Article — after priority evidence gates", "45–60% acceptance", "Plausible after full bidirectional resequencing, DOI-backed release, clean-clone reproduction and independent user evaluation"],
-            ["Synthetic Biology (OUP) — after release gates", "45–65% acceptance", "Strong scope fit and a format compatible with the complete software-plus-case-study narrative"],
-            ["PLOS Computational Biology Software", "10–25% now", "Premature without broad adoption; becomes credible only after public release, external users and a stronger general benchmark"],
-        ],
-        [2.45, 1.35, 2.80],
-        font_size=8.3,
-    )
-    doc.add_heading("4. Why the paper is competitive", level=1)
-    add_bullets(
-        doc,
-        [
-            "The end-to-end claim is narrowly and defensibly defined as DNA design-to-sequence evidence, not protein production or therapeutic equivalence.",
-            "The four order molecules are regenerated exactly from the archived biological inputs, which directly validates the synthesis-planning logic.",
-            "Restriction-enzyme products are derived from strand-specific cut geometry and independently reread after simulated ligation.",
-            "The manuscript reports 100% assembled consensus coverage and identity while separately quantifying bidirectional overlap and agreement.",
-            "The software is inspectable and heavily tested across engine, API and interface layers.",
-        ],
-    )
-    doc.add_heading("5. Likely reviewer objections", level=1)
-    add_bullets(
-        doc,
-        [
-            "No prospective study designed in advance around G-Synth outputs.",
-            "No new sequencing run covering both vector–insert junctions and every insert base at a predefined quality threshold.",
-            "No blinded head-to-head numerical benchmark against Geneious or Benchling using identical decision rules.",
-            "No completed independent usability study with 5–8 bench scientists.",
-            "The public release and versioned Zenodo DOI are not yet frozen, so the manuscript’s software-availability statement is not yet fully true for the working tree.",
-            "The therapeutic-peptide application remains a DNA-construction demonstration; expression, cleavage, oxidative assembly, structure and bioactivity were not assessed.",
-        ],
-    )
-    doc.add_heading("6. Non-negotiable gates before submission", level=1)
-    add_table(
-        doc,
-        ["Gate", "Current state", "Required closure"],
-        [
-            ["Author approval", "Pending", "Written approval of authorship, contributions, disclosures and final text"],
-            ["Versioned software", "Clean-clone validation passed", "Publish the v1.0.0 GitHub Release and create the versioned Zenodo DOI"],
-            ["Sequencing claim", "Complete insert consensus", "Prospectively confirm every insert position bidirectionally and span both vector–insert junctions"],
-            ["Usability evidence", "Protocol prepared", "Run with 5–8 independent bench scientists and report predefined outcomes"],
-            ["Data deposition", "Local package prepared", "Deposit raw traces, references, evidence JSON and scripts in a stable public repository"],
-            ["Journal upload", "Prepared", "Upload manuscript, SI PDF, TOC graphic, cover letter and review-only reproducibility archive"],
-        ],
-        [1.65, 1.35, 3.60],
-        font_size=8.3,
-    )
-    doc.add_heading("7. Current policy evidence", level=1)
-    add_text(
-        doc,
-        "The ACS Synthetic Biology guidelines updated 27 August 2026 explicitly include DNA synthesis or assembly methodologies, nucleic-acid engineering and computational methods for biological design. Articles require an unreferenced abstract of 250 words or fewer, up to six keywords, a graphical TOC image, reproducible experimental detail and separate Supporting Information; a cover letter must explain journal fit and include an approximately 150-word lay summary. ACS strongly encourages public underlying data and a Data Availability Statement. PLOS Computational Biology requires software submissions to describe an open-source tool of broad utility, stay below 3,500 words, provide anonymously downloadable source, documentation and reproducible test data, and deposit an archival copy. Bioinformatics defines Application Notes as short descriptions of novel software, databases, network services or interfaces. NAR's Web Server Issue requires authors to identify similar servers and is managed through an annual proposal process. The master package preserves enough evidence for adaptation without pretending that one journal's format fits every target.",
-    )
-    add_text(
-        doc,
-        "Official sources: ACS Synthetic Biology Information for Authors, https://researcher-resources.acs.org/publish/author_guidelines?coden=asbcd6; ACS Research Data Policy, https://researcher-resources.acs.org/publish/data_policy; PLOS Computational Biology Submission Guidelines, https://journals.plos.org/ploscompbiol/s/submission-guidelines; Bioinformatics Author Guidelines, https://academic.oup.com/bioinformatics/pages/author-guidelines; NAR Web Server Issue, https://academic.oup.com/nar/pages/submission_webserver; Synthetic Biology Author Guidelines, https://academic.oup.com/synbio/pages/author-guidelines.",
-        italic=True,
     )
     doc.save(out)
     return out
@@ -333,24 +236,31 @@ def copy_submission_materials() -> None:
         copy_file(si_pdf, PACKAGE / "02_supporting_information" / si_pdf.name)
 
     graphics = {
-        ROOT / "publication_evidence/manuscript_figures/Figure_1_GSynth_workflow_and_architecture.png": "Figure_1_GSynth_Workflow_Architecture.png",
-        INTERFACE / "Hybridization_Workflow.png": "Figure_2_GSynth_Hybridization_Detailed.png",
-        INTERFACE / "Cloning_PreLigation.jpg": "Figure_3A_GSynth_Ligation_Ready.jpg",
-        INTERFACE / "Cloning_Ligated_Product.jpg": "Figure_3B_GSynth_Ligation_Product.jpg",
-        INTERFACE / "Design_Release_Gate.png": "Figure_4_GSynth_Design_Release_Gate.png",
-        INTERFACE / "Annotated_Glargine_A.jpg": "Figure_5A_GSynth_Annotated_Glargine_A.jpg",
-        INTERFACE / "Annotated_Glargine_B.jpg": "Figure_5B_GSynth_Annotated_Glargine_B.jpg",
-        ROOT / "publication_evidence/manuscript_figures/Figure_4_GSynth_reference_aligned_viewer.jpg": "Figure_6_GSynth_Reference_Aligned_Viewer.jpg",
-        ROOT / "publication_evidence/sequencing_validation/Figure_GSynth_Sanger_Approved_Traces.png": "Figure_7_GSynth_Approved_Trace_Evidence_Map.png",
+        ROOT / "publication_evidence/manuscript_figures/Figure_1_GSynth_workflow_and_architecture.png": ("Figure_1_GSynth_Workflow_Architecture.tif", 6.60),
+        INTERFACE / "Hybridization_Workflow.jpg": ("Figure_2_GSynth_Hybridization_Detailed.tif", 6.60),
+        INTERFACE / "Cloning_PreLigation.jpg": ("Figure_3A_GSynth_Ligation_Ready.tif", 5.38),
+        INTERFACE / "Cloning_Ligated_Product.jpg": ("Figure_3B_GSynth_Ligation_Product.tif", 5.38),
+        INTERFACE / "Design_Release_Gate.jpg": ("Figure_4_GSynth_Design_Release_Gate.tif", 4.75),
+        INTERFACE / "Annotated_Glargine_A.jpg": ("Figure_5A_GSynth_Annotated_Glargine_A.tif", 4.75),
+        INTERFACE / "Annotated_Glargine_B.jpg": ("Figure_5B_GSynth_Annotated_Glargine_B.tif", 4.75),
+        ROOT / "publication_evidence/manuscript_figures/Figure_4_GSynth_reference_aligned_viewer.jpg": ("Figure_6_GSynth_Reference_Aligned_Viewer.tif", 6.00),
+        ROOT / "publication_evidence/sequencing_validation/Figure_GSynth_Sanger_Approved_Traces.png": ("Figure_7_GSynth_Approved_Trace_Evidence_Map.tif", 6.60),
     }
-    for source, name in graphics.items():
-        copy_file(source, PACKAGE / "04_graphics" / name)
+    quality_rows = []
+    for source, (name, width_in) in graphics.items():
+        quality_rows.append(export_tiff(source, PACKAGE / "04_graphics" / name, width_in))
+    quality_path = PACKAGE / "04_graphics" / "FIGURE_QUALITY.csv"
+    with quality_path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(quality_rows[0]))
+        writer.writeheader()
+        writer.writerows(quality_rows)
 
     evidence_files = [
         ROOT / "publication_evidence/glargine_ab_design_and_cloning.json",
         ROOT / "publication_evidence/sequencing_validation/glargine_approved_trace_validation.json",
         ROOT / "publication_evidence/codon_host_profile_validation.json",
         ROOT / "publication_evidence/peptide_and_enzyme_validation.json",
+        ROOT / "tools/publication/insulin_glargine_experimental_record.json",
     ]
     for source in evidence_files:
         copy_file(source, PACKAGE / "05_machine_readable_data" / source.name)
@@ -367,16 +277,12 @@ def copy_submission_materials() -> None:
         copy_file(source, PACKAGE / "05_machine_readable_data" / source.name)
     for source in sorted(raw_traces):
         copy_file(source, PACKAGE / "05_machine_readable_data" / "validated_traces" / source.name)
-    if SOURCE_DRAFT.exists():
-        copy_file(SOURCE_DRAFT, PACKAGE / "05_machine_readable_data" / "review_only_source_record" / "Insulin_Glargine_Source_Experimental_Draft.docx")
-
     for source in [
         ROOT / "tools/publication/design_glargine_case_study.py",
         ROOT / "tools/publication/validate_insulin_correct_traces.py",
         ROOT / "tools/publication/validate_codon_host_profiles.py",
         ROOT / "tools/publication/validate_peptide_and_enzyme_logic.py",
         ROOT / "tools/update_hive_codon_tables.py",
-        ROOT / "tools/publication/primary_acs_draft_record.json",
     ]:
         copy_file(source, PACKAGE / "06_reproducibility" / source.name)
 
@@ -390,7 +296,7 @@ def copy_submission_materials() -> None:
         "target_journal": "Journal-neutral master; ACS Synthetic Biology and Synthetic Biology (OUP) variants included",
         "target_article_type": "Full software research article",
         "source_version": "1.0.0",
-        "test_counts": {"engine": 1113, "api": 265, "interface": 91, "total": 1469},
+        "test_counts": {"engine": 1113, "api": 265, "interface": 92, "total": 1470},
         "case_study": {
             "A_recombinant_bp": design["chains"]["A"]["cloning"]["recombinant_length_bp"],
             "B_recombinant_bp": design["chains"]["B"]["cloning"]["recombinant_length_bp"],
@@ -424,32 +330,17 @@ Biology or Synthetic Biology (Oxford University Press). Select only the matching
 2. `02_supporting_information/G-Synth_Master_Supporting_Information.pdf` — Supporting Information.
 3. `03_cover_letters/` — select the ACS or OUP letter; do not upload both.
 4. `04_graphics/G-Synth_TOC_Graphic_3.33x1.875in_600dpi.png` — Graphic for Manuscript / TOC Graphic.
-5. Separate numbered figures in `04_graphics/` — optional at initial submission; retain for revision/production.
+5. Numbered RGB TIFF figures in `04_graphics/` — publication-size artwork at 300 ppi or higher.
 6. `G-Synth_Review_Only_Reproducibility.zip` — Supporting Information for Review Only.
 
-## Do not upload as publication SI
-
-`08_editorial_readiness/` is an internal journal-targeting document. The source experimental draft under
-`05_machine_readable_data/review_only_source_record/` is review-only provenance and should not be
-published without approval from all source-study authors.
-
-## Open gates
+## Submission prerequisites
 
 - Obtain written approval from all authors.
 - Publish the exact validated commit; create the v1.0.0 GitHub Release and Zenodo DOI.
-- Replace future-tense DOI language in the manuscript after DOI creation.
+- Insert the versioned DOI in the manuscript and citation metadata.
 - Obtain full-quality bidirectional sequencing across both junctions and every insert base.
 - Complete the independent 5–8 scientist usability study.
 - Confirm raw-trace public-deposition permission and repository accession.
-
-The package deliberately does not represent these open items as completed.
-
-## Journal targeting
-
-- Immediate full-article routes: ACS Synthetic Biology or Synthetic Biology (OUP).
-- PLOS Computational Biology Software is a later target after public release and independent adoption.
-- Bioinformatics Application Note would require a substantially shorter manuscript and comparative benchmarking.
-- Nucleic Acids Research Web Server Issue requires a stable public service and its annual proposal route.
 
 ## Consensus interpretation
 
@@ -477,7 +368,7 @@ Figure 2. Detailed G-Synth hybridization view for the glargine A-chain construct
 
 Figure 3A. Pre-ligation cloning gate. G-Synth evaluates six compatibility conditions before enabling ligation and displays the vector and insert junctions at nucleotide resolution.
 
-Figure 3B. Post-ligation product. After explicit ligation, G-Synth reports the 5,490-bp recombinant product and renders its circular map with the inserted construct.
+Figure 3B. Post-ligation product. After explicit ligation, G-Synth reports the 5,490-bp recombinant product, confirms both closed junctions in an accessible green status region and enables the downstream construct workbench.
 
 Figure 4. G-Synth design view for the glargine A-chain input. The release gate reports exact two-strand reconstruction, terminal-end compatibility and the NdeI start-codon note before displaying the orderable construct.
 
@@ -491,16 +382,36 @@ Figure 7. G-Synth F/R consensus validation from the four author-designated chrom
 """
     (PACKAGE / "04_graphics" / "FIGURE_CAPTIONS.txt").write_text(captions)
 
+    alt_text = """Figure 1. Flow diagram linking G-Synth design, hybridization, cloning and sequencing verification to the scientific engine, API and web interface.
+
+Figure 2. Detailed antiparallel glargine A duplex with a completely paired core and exposed NdeI- and XhoI-derived cohesive ends.
+
+Figure 3A. Pre-ligation cloning view showing the glargine A insert, vector ends, both nucleotide junctions and six passed compatibility checks.
+
+Figure 3B. Post-ligation cloning view with a green confirmation panel, a 5,490-bp recombinant product and the two closed junction sequences.
+
+Figure 4. Glargine A design workspace showing the exact two-strand reconstruction gate, compatible terminal ends and NdeI start-codon note.
+
+Figure 5A. Circular pET-21a(+)-glargine A map with editable features, codon-aligned translation and NdeI/XhoI junctions.
+
+Figure 5B. Circular pET-21a(+)-glargine B map with editable features, codon-aligned translation and NdeI/XhoI junctions.
+
+Figure 6. Reference-aligned chromatogram panels showing base calls, consensus, quality and four-channel Sanger peaks for representative A- and B-chain reads.
+
+Figure 7. Coverage maps for A and B showing complete consensus coverage and identity, with green regions marking bidirectional read overlap.
+"""
+    (PACKAGE / "04_graphics" / "FIGURE_ALT_TEXT.txt").write_text(alt_text)
+
     reproduce = """#!/usr/bin/env bash
 set -euo pipefail
 
 REPO_ROOT=${1:-.}
 DATA_ROOT=${2:-publication/submission_package/05_machine_readable_data}
-SOURCE_DRAFT="$DATA_ROOT/review_only_source_record/Insulin_Glargine_Source_Experimental_Draft.docx"
+SOURCE_RECORD="$DATA_ROOT/insulin_glargine_experimental_record.json"
 
 cd "$REPO_ROOT"
 python tools/publication/design_glargine_case_study.py \
-  --manuscript "$SOURCE_DRAFT" \
+  --source-record "$SOURCE_RECORD" \
   --output publication_evidence/glargine_ab_design_and_cloning.json
 python tools/publication/validate_insulin_correct_traces.py \
   --root "$DATA_ROOT" \
@@ -535,10 +446,7 @@ def build_source_snapshot() -> Path:
             if relative.parts[:2] in {
                 ("publication_evidence", "pre_post"),
                 ("publication_evidence", "sanger"),
-                ("publication_evidence", "archived_not_for_validation"),
             }:
-                continue
-            if relative.parts[:3] == ("tools", "publication", "archived_not_for_validation"):
                 continue
             if relative.parts and relative.parts[0] == "publication":
                 continue
@@ -586,28 +494,16 @@ def build_full_zip() -> Path:
 
 
 def main() -> None:
-    # The package is a generated deliverable. Rebuilding from an empty directory
-    # prevents superseded chromatograms or manifests from surviving a revision.
     if PACKAGE.exists():
         shutil.rmtree(PACKAGE)
     for directory in (
         "01_manuscript", "02_supporting_information", "03_cover_letters",
         "04_graphics", "05_machine_readable_data", "06_reproducibility",
-        "07_software", "08_editorial_readiness", "09_checksums",
+        "07_software", "09_checksums",
     ):
         (PACKAGE / directory).mkdir(parents=True, exist_ok=True)
-    for obsolete in (
-        PUBLICATION / "G-Synth_ACS_Submission_Package_2026-08-31.zip",
-        PUBLICATION / "G-Synth_ACS_Submission_Package_2026-08-31",
-        PUBLICATION / "G-Synth_ACS_Submission_Package_2026-08-31 (2)",
-    ):
-        if obsolete.is_dir():
-            shutil.rmtree(obsolete)
-        elif obsolete.exists():
-            obsolete.unlink()
     build_acs_cover_letter()
     build_oup_cover_letter()
-    build_readiness_report()
     build_toc_graphic()
     copy_submission_materials()
     write_package_guides()
@@ -617,7 +513,6 @@ def main() -> None:
     package_zip = build_full_zip()
     print(PACKAGE / "03_cover_letters" / "G-Synth_Cover_Letter_ACS_Synthetic_Biology.docx")
     print(PACKAGE / "03_cover_letters" / "G-Synth_Cover_Letter_Synthetic_Biology_OUP.docx")
-    print(PACKAGE / "08_editorial_readiness" / "G-Synth_Journal_Targeting_and_Editorial_Readiness.docx")
     print(package_zip)
 
 

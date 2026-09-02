@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Build the G-Synth manuscript and Supporting Information DOCX files.
-
-The source insulin manuscript is evidence, not a layout template.  Documents use
-the standard_business_brief preset with a named "journal manuscript" override:
-single-column US Letter, restrained colour, scientific captions and compact
-references.  Values are applied explicitly instead of relying on Word defaults.
-"""
+"""Build the G-Synth manuscript and Supporting Information."""
 
 from __future__ import annotations
 
@@ -18,14 +12,16 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 PUBLICATION = ROOT / "publication"
 EVIDENCE = ROOT / "publication_evidence"
 FIG = EVIDENCE / "manuscript_figures"
 DESIGN_JSON = EVIDENCE / "glargine_ab_design_and_cloning.json"
+PEPTIDE_JSON = EVIDENCE / "peptide_and_enzyme_validation.json"
 SEQ_JSON = EVIDENCE / "sequencing_validation" / "glargine_approved_trace_validation.json"
-PRIMARY_RECORD_JSON = ROOT / "tools" / "publication" / "primary_acs_draft_record.json"
+EXPERIMENTAL_RECORD_JSON = ROOT / "tools" / "publication" / "insulin_glargine_experimental_record.json"
 SOURCE_FIG = EVIDENCE / "source_experimental_figures"
 INTERFACE = EVIDENCE / "interface_evidence"
 
@@ -327,7 +323,17 @@ def add_table(doc: Document, headers: list[str], rows: list[list[str]], widths: 
     doc.add_paragraph().paragraph_format.space_after = Pt(1)
 
 
-def add_figure(doc: Document, path: Path, caption: str, width=6.6) -> None:
+def add_figure(
+    doc: Document,
+    path: Path,
+    caption: str,
+    width: float = 6.6,
+    minimum_ppi: int = 300,
+) -> None:
+    """Insert a raster figure without exceeding its publication-quality width."""
+    alt_text = caption.split(". ", 1)[-1]
+    with Image.open(path) as image:
+        width = min(width, image.width / minimum_ppi)
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.space_before = Pt(4)
@@ -335,9 +341,29 @@ def add_figure(doc: Document, path: Path, caption: str, width=6.6) -> None:
     p.paragraph_format.keep_with_next = True
     picture = p.add_run().add_picture(str(path), width=Inches(width))
     picture._inline.docPr.set("title", path.stem)
-    picture._inline.docPr.set("descr", caption)
+    picture._inline.docPr.set("descr", alt_text)
     cap = doc.add_paragraph(style="Caption")
     cap.add_run(caption)
+    alt = doc.add_paragraph(style="Caption")
+    alt.paragraph_format.space_before = Pt(0)
+    alt.paragraph_format.space_after = Pt(8)
+    alt_run = alt.add_run(f"Alt text: {alt_text}")
+    alt_run.italic = True
+    alt_run.font.color.rgb = RGBColor.from_string(MUTED)
+
+    legends = getattr(doc, "_gsynth_figure_legends", None)
+    if legends is None:
+        legends = []
+        doc._gsynth_figure_legends = legends
+    legends.append((caption, alt.text))
+
+
+def add_figure_legend_list(doc: Document) -> None:
+    """Append the complete figure legend and alt-text list."""
+    doc.add_heading("Figure Legends and Alt Text", level=1)
+    for caption, alt_text in getattr(doc, "_gsynth_figure_legends", []):
+        add_text(doc, caption, bold_lead=caption.split(".", 1)[0] + ".")
+        add_text(doc, alt_text, italic=True)
 
 
 def add_reference_list(doc: Document, references: list[str]) -> None:
@@ -352,7 +378,7 @@ def add_reference_list(doc: Document, references: list[str]) -> None:
 
 
 def main_references(primary: dict) -> list[str]:
-    """Retain every reference from the primary draft, then add software literature."""
+    """Return the experimental and software references."""
     return primary["references"] + [
         "Hillson, N. J.; Rosengarten, R. D.; Keasling, J. D. j5 DNA Assembly Design Automation Software. ACS Synth. Biol. 2012, 1, 14–21. https://doi.org/10.1021/sb2000116.",
         "Haines, M. C.; Carling, B.; Marshall, J.; et al. basicsynbio and the BASIC SEVA Collection: Software and Vectors for an Established DNA Assembly Method. Synth. Biol. 2022, 7, ysac023. https://doi.org/10.1093/synbio/ysac023.",
@@ -390,22 +416,23 @@ def main_references(primary: dict) -> list[str]:
     ]
 
 
-def build_main(design: dict, seq: dict, primary: dict) -> None:
+def build_main(design: dict, peptide: dict, seq: dict, primary: dict) -> None:
     doc = Document()
     biopython_version = seq.get("analysis", {}).get("biopython_version", "version recorded in the evidence JSON")
     approved = seq["chains"]
+    de_novo = peptide["de_novo_glargine_workflow"]
     a_consensus = approved["A"]["gsynth_forward_reverse_consensus_raw_q0"]
     b_consensus = approved["B"]["gsynth_forward_reverse_consensus_raw_q0"]
     configure_document(doc, "G-Synth — end-to-end nucleic-acid design and validation")
     add_title_block(
         doc,
         "G-Synth: Small Sequence Design and Extended Sequence Design for auditable synthesis-ready DNA and post-sequencing validation",
-        "Software implementation and experimental validation with PCR-free insulin glargine A/B-chain constructs",
+        "Software development and protein-to-sequence validation with PCR-free insulin glargine A/B-chain constructs",
     )
     add_authors(doc)
     doc.add_heading("Abstract", level=1)
     add_text(doc,
-        f"Nucleic-acid design for synthesis is often fragmented across codon tools, restriction maps, plasmid editors and sequencing viewers, complicating proof that an ordered molecule is the one later cloned and assessed. We developed G-Synth, an open-source application and Python engine implementing 15 source-traceable host codon profiles and two synthesis-centred workflows: Small Sequence Design (SSD) for one complementary oligonucleotide pair and Extended Sequence Design (ESD) for tiled, directional pairs. Both derive strand-specific restriction products and block release unless in-silico annealing and ordered ligation reconstruct both intended strands exactly. A staged Design→Hybridization→Restriction-cloning workflow exposes unpaired bases as cohesive ends in compact and nucleotide-level double-strand views, verifies complementarity with a digested vector and requires explicit ligation before product analysis. The same record supports peptide back-translation with explicit initiator handling, editable annotation, PCR/digest/gel simulation and quality-aware Sanger validation. The separated engine, API and interface passed 1,113, 265 and 91 tests, respectively. In an experimentally grounded case study, SSD regenerated insulin glargine A- and B-chain constructs; all four oligonucleotides exactly matched archived synthesis records. NdeI/XhoI cloning into pET-21a(+) preserved the intended open reading frames and generated 5,490-bp and 5,523-bp recombinant plasmids. G-Synth assembled the four author-designated chromatograms into 100%-covered, 100%-identical consensus sequences. Bidirectional overlap was {a_consensus['bidirectional_overlap_percent']:.1f}% for A and {b_consensus['bidirectional_overlap_percent']:.1f}% for B, with 100% F/R agreement; independent Biopython analysis reproduced complete coverage and identity. The exact SSD/ESD release-gate combination was not identified in prior design-automation literature and is, to our knowledge, first automated and disclosed here. Protein expression, folding and bioactivity were not tested."
+        f"Nucleic-acid design for synthesis is often fragmented across codon tools, restriction maps, plasmid editors and sequencing viewers, complicating proof that an ordered molecule is the one later cloned and assessed. We developed G-Synth, an open-source application and dependency-free Python engine implementing 15 source-traceable host codon profiles and two synthesis-centred workflows: Small Sequence Design (SSD) for one complementary oligonucleotide pair and Extended Sequence Design (ESD) for tiled, directional pairs. Both derive strand-specific restriction products and block release unless in-silico annealing and ordered ligation reconstruct both intended strands exactly. The implementation separates the tested molecular engine, a Django REST service and a React/TypeScript interface. We first exercised the current workflow from the mature insulin glargine A- and B-chain amino-acid sequences. G-Synth preserved both non-methionine N termini, reverse-translated them with the selected Escherichia coli profile, applied synthesis and NdeI/XhoI constraints, generated SSD order molecules, verified their duplexes and produced clonable 5,490-bp and 5,523-bp pET-21a(+) models. These new synonymous DNA designs were validated computationally. In a separate retrospective experimental track, SSD regenerated the constructs synthesized at the bench; all four oligonucleotides matched their order records exactly. G-Synth then assembled the four author-designated chromatograms into 100%-covered, 100%-identical consensus sequences. Bidirectional overlap was {a_consensus['bidirectional_overlap_percent']:.1f}% for A and {b_consensus['bidirectional_overlap_percent']:.1f}% for B, with 100% F/R agreement; independent Biopython analysis reproduced complete coverage and identity. The engine, API and interface passed 1,113, 265 and 92 tests, respectively. The exact SSD/ESD release-gate combination was not identified in prior design-automation literature and is, to our knowledge, first automated and disclosed here. Protein expression, folding and bioactivity were not tested."
     )
     add_text(doc, "Keywords: synthetic biology; gene synthesis; restriction cloning; Sanger sequencing; software validation; insulin glargine.")
 
@@ -420,13 +447,13 @@ def build_main(design: dict, seq: dict, primary: dict) -> None:
         "These problems require a workflow in which each exported sequence is derived from explicit molecular rules and then re-read from the simulated duplex. G-Synth therefore defines SSD for constructs released as one forward/reverse synthesis pair and ESD for longer constructs decomposed into multiple hybridized pairs joined by unique, directional internal overhangs. Their shared end-to-end unit is a traceable molecular record: biological target → synthesis-ready order molecules → reconstructed duplex → recombinant plasmid → annotated construct → sequencing evidence. The engine derives enzyme products from recognition and cut positions, constructs the full coding cassette, creates every strand, re-anneals and re-ligates the strands in silico, checks the outer ends and coding frame, simulates vector digestion and ligation, and maps capillary reads back to the same reference."
     )
     add_text(doc,
-        "Insulin glargine A- and B-chain constructs offered a stringent retrospective case study because their long complementary oligonucleotides had been independently synthesized, hybridized, cloned into pET-21a(+), transformed into Escherichia coli DH5α and sequenced. The original draft used Benchling for reverse-complement operations and Geneious Prime for visual cloning and alignment. Here, those inputs and primary trace files were reanalysed with G-Synth as the primary system. The objectives were to (i) reproduce the exact archived orderable molecules from the optimized chain sequences; (ii) validate terminal-end geometry, junctions, open reading frames and plasmid context; (iii) assemble the physical F/R trace evidence and distinguish complete consensus coverage from bidirectional overlap; and (iv) compare G-Synth's focused, auditable workflow with established software categories."
+        "Insulin glargine A- and B-chain constructs offered both a current end-to-end demonstration and a stringent retrospective case study. The analysis therefore used two explicitly separated tracks. First, G-Synth began from the mature amino-acid sequences, performed E. coli-conditioned reverse translation and carried the resulting synonymous DNA through SSD, hybridization and restriction cloning. Second, the nucleotide inputs and four molecules synthesized, hybridized, cloned into pET-21a(+), transformed into Escherichia coli DH5α and sequenced in the source study were reanalysed without substitution. Benchling had supplied reverse-complement operations and Geneious Prime the visual cloning and alignment checks in that study; G-Synth is the primary system in the present analysis. The objectives were to (i) demonstrate the complete current protein-to-clone workflow; (ii) reproduce the exact experimental order molecules; (iii) validate terminal-end geometry, junctions, open reading frames and plasmid context; (iv) assemble the physical F/R trace evidence while distinguishing consensus coverage from bidirectional overlap; and (v) compare G-Synth's focused, auditable workflow with established software categories."
     )
 
-    doc.add_heading("2. Results: software design and implementation", level=1)
-    doc.add_heading("2.1 Separation of scientific logic, service layer and interface", level=2)
+    doc.add_heading("2. Software development, implementation and scientific logic", level=1)
+    doc.add_heading("2.1 Architecture and development tools", level=2)
     add_text(doc,
-        "G-Synth comprises three layers (Figure 1). The gsynth_engine Python package contains sequence normalization, codon optimization, nearest-neighbour thermodynamics, enzyme definitions, duplex construction, multi-oligonucleotide assembly, PCR, cloning, ligation, annotation, gel simulation and read verification. It has no web-framework dependency. A Django REST API validates requests, applies access control and serializes immutable calculation outputs together with project provenance. A React/TypeScript workspace renders the outputs, supports editable annotations and guides the user through Design, PCR, Clone, Check, Compare and Learn. This separation makes the engine importable in scripts and permits molecular regression tests to execute without a database or browser."
+        "G-Synth was implemented as three deliberately separated layers (Figure 1). The gsynth_engine package is a dependency-free Python 3.11+ scientific core containing sequence normalization, codon optimization, nearest-neighbour thermodynamics, enzyme definitions, duplex construction, multi-oligonucleotide assembly, PCR, cloning, ligation, annotation, gel simulation and read verification. A Django 5.2/Django REST Framework service validates JSON requests, applies JWT-based account isolation and serializes immutable calculation outputs with project provenance; SQLite supports local development and PostgreSQL is required for production deployment. A React 18 and TypeScript 5 single-page workspace, compiled with Vite, renders engine outputs and uses SeqViz for sequence maps without reimplementing molecular calculations. Production serving uses Gunicorn and WhiteNoise. Pytest, property and golden-reference tests validate the engine and API; Vitest, Testing Library, TypeScript compilation and production builds validate the interface; Ruff enforces Python static quality. Biopython is used only for independent file-format and alignment cross-checks, not as a hidden runtime dependency of the engine [66]. This architecture follows robustness, workflow-readiness and research-software traceability recommendations [72–74]."
     )
     add_text(doc,
         "Codon optimization is explicitly conditioned on the selected expression host. Fifteen profiles cover bacterial (Escherichia coli, Bacillus subtilis, Pseudomonas putida, Lactococcus lactis, Corynebacterium glutamicum and Streptomyces coelicolor), yeast (Saccharomyces cerevisiae, Komagataella phaffii, Kluyveromyces lactis and Yarrowia lipolytica), mammalian (human and Chinese-hamster species proxies), insect (Spodoptera frugiperda and Drosophila melanogaster species proxies) and plant (Nicotiana benthamiana) systems. Each profile preserves all 64 raw codon counts, NCBI taxon, source dataset, sample size, GC and snapshot checksum. Counts from the September 2021 FDA HIVE-CUTs/CoCoPUTs release are normalized within each synonymous family [83,84]; RefSeq species aggregates are preferred, with a disclosed GenBank fallback when that snapshot lacks a RefSeq table. Every candidate is translated after optimization, and amino-acid identity is a blocking invariant. A species-wide result is labelled profile-relative CAI rather than strict CAI or predicted yield; a documented highly expressed reference-gene set can override it for strain-, tissue- or cell-line-specific analysis [82,85–87]."
@@ -453,24 +480,24 @@ def build_main(design: dict, seq: dict, primary: dict) -> None:
         "A verified SSD or ESD design can be transferred directly to this view with its left and right enzyme identities. Editing either enzyme invalidates the inherited molecules and requires redesign, preventing a sequence from being relabelled with ends it does not possess. Only an exactly complementary duplex can continue to cloning. This implements a visible state transition from an orderable pair, through simulated annealing, to an insert whose exposed ends can be compared with the independently digested vector."
     )
     add_figure(doc,
-        INTERFACE / "Hybridization_Workflow.png",
+        INTERFACE / "Hybridization_Workflow.jpg",
         "Figure 2. G-Synth hybridization view after direct transfer from SSD. Both order molecules remain entered 5′→3′; the lower strand is drawn antiparallel. The 123-bp core is completely paired, while the NdeI-derived 5′-TA and XhoI-derived 5′-TCGA products remain visibly unpaired as cohesive ends.",
     )
 
     doc.add_heading("2.5 Cloning, annotation and virtual experiments", level=2)
     add_text(doc,
-        "The cloning module imports FASTA, GenBank and SnapGene DNA files and includes verified pET-21a(+) and pET-21(+) sequences. It checks vector identity, requires each selected enzyme to cut once and presents the workflow as Vector + duplex Insert → Product. Before ligation, six compatibility checks report strand pairing, unique vector cuts, orientation, site regeneration and reading-frame consequences. Simple and detailed junction views place each exposed insert end beside the complementary vector end. The product map, diagnostic gel and exports remain hidden until the user explicitly selects Ligate compatible ends; this button simulates joining the phosphodiester backbone and is not represented as an experimental ligation. The coordinate-level annotated view handles circular-origin crossings, strand direction and codon-aligned translation. Curated exact matches to common promoters, operators, tags, linkers and cleavage motifs are suggestions, not silently accepted claims; users can create, name, move or delete features and preserve edits in GenBank export."
+        "The cloning module imports FASTA, GenBank and SnapGene DNA files and includes verified pET-21a(+) and pET-21(+) sequences. It checks vector identity, requires each selected enzyme to cut once and presents the workflow as Vector + duplex Insert → Product. Before ligation, six compatibility checks report strand pairing, unique vector cuts, orientation, site regeneration and reading-frame consequences. Simple and detailed junction views place each exposed insert end beside the complementary vector end; the joined sequence is explicitly labelled as an expected product until the action is performed. The product map, diagnostic gel and exports remain hidden until the user selects Ligate compatible ends. Only then does an accessible green confirmation panel display the verified recombinant length, the Vector + Insert → Product relationship and close-up nucleotide sequences for both closed junctions. This state transition simulates joining the phosphodiester backbone and is not represented as an experimental ligation. The coordinate-level annotated view handles circular-origin crossings, strand direction and codon-aligned translation. Curated exact matches to common promoters, operators, tags, linkers and cleavage motifs are suggestions, not silently accepted claims; users can create, name, move or delete features and preserve edits in GenBank export."
     )
     add_text(doc,
         "PCR simulation separates a primer's annealing 3′ segment from its intentionally unpaired 5′ extension. The extension becomes part of the amplicon only after polymerase copying, a distinction shown explicitly in the hybridization view. Diagnostic digests produce fragment sizes from the simulated molecule, and virtual gels position those products relative to explicit 100-bp, 1-kb and broad-range marker lists. These gels are labelled as in-silico predictions because migration, topology, partial digestion, staining and band intensity are experimental properties."
     )
     add_figure(doc,
         INTERFACE / "Cloning_PreLigation.jpg",
-        "Figure 3A. Pre-ligation compatibility gate. G-Synth shows the NdeI and XhoI vector–insert junctions, their opposite polarities and all six passed checks while withholding recombinant-product analyses.",
+        "Figure 3A. Pre-ligation compatibility gate for the current glargine A design. G-Synth shows the 125-bp insert, the NdeI and XhoI vector–insert junctions, their opposite polarities and all six passed checks while labelling the joined sequence as expected and withholding recombinant-product analyses.",
     )
     add_figure(doc,
         INTERFACE / "Cloning_Ligated_Product.jpg",
-        "Figure 3B. Post-ligation state for the glargine A-chain construct. The 5,490-bp product is created only after explicit in-silico ligation, after which the plasmid map, diagnostic digest, gel and exports become available.",
+        "Figure 3B. Post-ligation state for the current glargine A-chain construct. A green confirmation panel reports the 5,490-bp recombinant product and shows both closed nucleotide junctions only after explicit in-silico ligation; the plasmid map, diagnostic digest, gel and exports then become available.",
     )
 
     doc.add_heading("2.6 Quality-aware capillary-trace verification", level=2)
@@ -485,27 +512,51 @@ def build_main(design: dict, seq: dict, primary: dict) -> None:
         "This focus supports applications in which small or modular DNA constructs must move rapidly from concept to synthesis: therapeutic-peptide precursors; affinity-tag and protease-cleavage cassettes; vaccine or diagnostic antigens; peptide standards and positive controls; recombinant growth factors, cytokine fragments and antimicrobial peptides; enzyme domains; regulatory elements; reporter constructs; and modular synthetic-biology parts. The glargine A/B case study is especially relevant because therapeutic peptides impose simultaneous constraints on exact amino-acid identity, purification architecture, cleavage logic, reading frame and post-cloning verification. G-Synth addresses the DNA design-to-sequence portion end to end. Expression yield, processing, oxidative folding, higher-order structure, potency, safety and regulatory comparability remain separate experimental stages."
     )
 
-    doc.add_heading("3. Validation results", level=1)
+    doc.add_heading("3. End-to-end G-Synth workflow from insulin glargine protein sequences", level=1)
+    doc.add_heading("3.1 Protein input, biological role and host-conditioned reverse translation", level=2)
     add_text(doc,
-        "Validation combined unit, property, API and interface tests with a retrospective experimental case study. The engine suite contains golden examples, error-path tests, host-profile invariants, peptide-start decisions, enzyme-wide properties and antiparallel-hybridization cases covering 5′/3′ overhangs, blunt ends, ambiguity, mismatches and thermodynamic reporting boundaries. The defining assembly property is equality between the intended construct and both strands reconstructed from the exported oligonucleotides. API tests cover request validation, host selection, peptide-to-DNA serialization, authentication, projects, sequence import, hybridization, PCR and security. Interface tests cover the design and validation views, host-profile and peptide-role selection, automatic Design-to-Hybridization-to-Restriction-cloning handoff, simultaneous compact and nucleotide-level duplex evidence, editable annotations, primer-tail hybridization, gels, Learn content and responsive behaviour. The complete suites were executed from the manuscript working tree on 2 September 2026: 1,113/1,113 engine, 265/265 API and 91/91 interface tests passed."
+        "The current G-Synth workflow began with the amino-acid sequences of the mature insulin glargine chains: GIVEQCCTSICSLYQLENYCG for A and FVNQHLCGSHLVEALYLVCGERGFFYTPKTRR for B. Neither input begins with methionine because each represents a mature chain or precursor-derived chain segment rather than a complete standalone translation product. Automatic peptide-role inference therefore resolved both as mature peptide/fusion inserts, preserved every supplied residue and did not introduce an artificial N-terminal methionine. This decision remained user-overridable and was recorded in the output provenance."
+    )
+    add_text(doc,
+        "Escherichia coli was selected as the intended expression host. G-Synth reverse-translated each peptide with the committed September 2021 HIVE-CUTs/CoCoPUTs species profile while excluding internal NdeI and XhoI sites, low-frequency profile codons, homopolymers longer than five bases, repeats of 15 nt or longer and 50-nt windows outside 40–60% GC. A TAA stop codon was retained. Translation of each candidate was then compared with the supplied peptide plus termination as a blocking invariant. Both sequences passed without warnings: A was 66 bp, with profile-relative CAI 1.000 and 50.0% GC; B was 99 bp, with profile-relative CAI 0.944 and 53.5% GC. These values describe fit to the selected species-wide codon profile and are not predictions of expression yield."
+    )
+    add_table(doc,
+        ["Chain", "Protein input", "G-Synth E. coli-conditioned DNA (5′→3′)", "Profile fit"],
+        [
+            ["A", de_novo["A"]["input_peptide"], de_novo["A"]["back_translated_coding_sequence_5_to_3"], f"CAI {de_novo['A']['profile_relative_cai']:.3f}; GC {de_novo['A']['gc_percent']:.1f}%"],
+            ["B", de_novo["B"]["input_peptide"], de_novo["B"]["back_translated_coding_sequence_5_to_3"], f"CAI {de_novo['B']['profile_relative_cai']:.3f}; GC {de_novo['B']['gc_percent']:.1f}%"],
+        ], [0.42, 1.35, 3.65, 1.18], font_size=6.9)
+
+    doc.add_heading("3.2 SSD, duplex verification and restriction-cloning simulation", level=2)
+    add_text(doc,
+        "Each newly back-translated sequence was transferred directly to SSD as a non-standalone insert. G-Synth placed it after the NdeI-supplied initiator and the MGSSHHHHHHSSGLVPRGS purification/linker/thrombin cassette, then generated the strand-specific NdeI and XhoI products. The A design contained 125-nt forward and 127-nt reverse order molecules; B contained 158-nt forward and 160-nt reverse molecules. In both cases, simulated antiparallel annealing reconstructed the full duplex core exactly and left only the expected 5′-TA and 5′-TCGA cohesive ends exposed. The verified duplexes passed the vector-cut, end-compatibility, orientation, reading-frame and site-regeneration gates and produced 5,490-bp and 5,523-bp pET-21a(+) models after explicit in-silico ligation."
+    )
+    add_text(doc,
+        "The G-Synth DNA sequences differ synonymously from the physically synthesized experimental constructs while encoding the same peptides. They therefore demonstrate the current protein-to-clone workflow and its computational invariants but were not the molecules tested at the bench. Experimental validation was assigned only to the preserved experimental-sequence track in Section 4. This separation prevents retrospective bench data from being presented as physical validation of newly generated codon choices. Exact new order molecules, hashes and junction records are supplied in the Supporting Information and machine-readable evidence."
+    )
+
+    doc.add_heading("3.3 Software and molecular validation framework", level=2)
+    add_text(doc,
+        "Validation combined unit, property, API and interface tests with a retrospective experimental case study. The engine suite contains golden examples, error-path tests, host-profile invariants, peptide-start decisions, enzyme-wide properties and antiparallel-hybridization cases covering 5′/3′ overhangs, blunt ends, ambiguity, mismatches and thermodynamic reporting boundaries. The defining assembly property is equality between the intended construct and both strands reconstructed from the exported oligonucleotides. API tests cover request validation, host selection, peptide-to-DNA serialization, authentication, projects, sequence import, hybridization, PCR and security. Interface tests cover the design and validation views, host-profile and peptide-role selection, automatic Design-to-Hybridization-to-Restriction-cloning handoff, simultaneous compact and nucleotide-level duplex evidence, editable annotations, primer-tail hybridization, gels, Learn content, accessible ligation confirmation and responsive behaviour. The complete suites were executed from the manuscript working tree on 2 September 2026: 1,113/1,113 engine, 265/265 API and 92/92 interface tests passed."
     )
     add_table(doc,
         ["Validation layer", "Primary question", "Result"],
         [
             ["Molecular engine", "Do algorithms preserve molecular invariants and reject invalid inputs?", "1,113 passed"],
             ["HTTP/API", "Are calculations exposed consistently with accounts, projects and security controls?", "265 passed"],
-            ["Web interface", "Are outputs rendered and interactions retained without reimplementing biology?", "91 passed"],
-            ["Insulin glargine design", "Do archived A/B inputs regenerate the four molecules synthesized at the bench?", "4/4 exact"],
+            ["Web interface", "Are outputs rendered and interactions retained without reimplementing biology?", "92 passed"],
+            ["De-novo glargine workflow", "Do protein inputs preserve identity through host optimization, SSD, hybridization and cloning?", "A and B passed computational gates"],
+            ["Experimental glargine design", "Do the recorded A/B inputs regenerate the four molecules synthesized at the bench?", "4/4 exact"],
             ["Cloning simulation", "Are NdeI/XhoI ends, junctions and ORFs coherent in pET-21a(+)?", "A and B passed"],
             ["Sequencing evidence", "Do oriented F/R reads assemble across each insert and agree in their overlap?", "100% consensus coverage and identity; 100% overlap agreement"],
         ], [1.25, 3.85, 1.5])
 
-    doc.add_heading("4. Insulin glargine A/B-chain case study", level=1)
-    doc.add_heading("4.1 Input sequences and cassette logic", level=2)
+    doc.add_heading("4. Retrospective validation with experimentally tested glargine constructs", level=1)
+    doc.add_heading("4.1 Experimental nucleotide inputs and cassette logic", level=2)
     add_text(doc,
-        "The optimized A-chain coding insert was 66 bp and encoded GIVEQCCTSICSLYQLENYCG; the B-chain insert was 99 bp and encoded FVNQHLCGSHLVEALYLVCGERGFFYTPKTRR. The second sequence includes the two C-terminal arginine residues characteristic of insulin glargine's B-chain precursor context. For each construct, G-Synth placed the insert after MGSSHHHHHHSSGLVPRGS, retained TAA termination and selected NdeI at the 5′ end and XhoI at the 3′ end. NdeI's retained bases supply the initiating ATG, so adding a separate ATG would duplicate the start. The resulting products were MGSSHHHHHHSSGLVPRGSGIVEQCCTSICSLYQLENYCG and MGSSHHHHHHSSGLVPRGSFVNQHLCGSHLVEALYLVCGERGFFYTPKTRR."
+        "For experimental traceability, G-Synth next received the exact optimized nucleotide inputs preserved in the experimental record rather than substituting the newly generated synonymous sequences from Section 3. The tested A-chain insert was 66 bp and encoded GIVEQCCTSICSLYQLENYCG; the tested B-chain insert was 99 bp and encoded FVNQHLCGSHLVEALYLVCGERGFFYTPKTRR. The second sequence includes the two C-terminal arginine residues characteristic of insulin glargine's B-chain precursor context. For each construct, G-Synth placed the insert after MGSSHHHHHHSSGLVPRGS, retained TAA termination and selected NdeI at the 5′ end and XhoI at the 3′ end. NdeI's retained bases supply the initiating ATG, so adding a separate ATG would duplicate the start. The resulting products were MGSSHHHHHHSSGLVPRGSGIVEQCCTSICSLYQLENYCG and MGSSHHHHHHSSGLVPRGSFVNQHLCGSHLVEALYLVCGERGFFYTPKTRR."
     )
-    add_figure(doc, INTERFACE / "Design_Release_Gate.png",
+    add_figure(doc, INTERFACE / "Design_Release_Gate.jpg",
         "Figure 4. G-Synth design view for the glargine A-chain input. The release gate reports exact two-strand reconstruction, terminal-end compatibility and the NdeI start-codon note before displaying the orderable construct.")
 
     a = design["chains"]["A"]
@@ -518,12 +569,12 @@ def build_main(design: dict, seq: dict, primary: dict) -> None:
             ["Forward / reverse GC", f"{a['design']['forward_gc_percent']:.1f} / {a['design']['reverse_gc_percent']:.1f}%", f"{b['design']['forward_gc_percent']:.1f} / {b['design']['reverse_gc_percent']:.1f}%"],
             ["Forward / reverse Tm", f"{a['design']['forward_tm_c']:.1f} / {a['design']['reverse_tm_c']:.1f} °C", f"{b['design']['forward_tm_c']:.1f} / {b['design']['reverse_tm_c']:.1f} °C"],
             ["Observed terminal products", "5′ TA / 5′ TCGA", "5′ TA / 5′ TCGA"],
-            ["Exact match to archived synthesis record", "Forward and reverse", "Forward and reverse"],
+            ["Exact match to experimental synthesis record", "Forward and reverse", "Forward and reverse"],
             ["Recombinant pET-21a(+) length", f"{a['cloning']['recombinant_length_bp']:,} bp", f"{b['cloning']['recombinant_length_bp']:,} bp"],
             ["Junction restriction sites", "NdeI and XhoI regenerated", "NdeI and XhoI regenerated"],
         ], [2.25, 2.18, 2.17])
     add_text(doc,
-        "The reverse oligonucleotide is two nucleotides longer than the forward molecule in each pair (127 versus 125 nt for A; 160 versus 158 nt for B). This is an expected consequence of the strand-specific cohesive-end remainders, not a discrepancy. All four generated sequences were identical to the corresponding archived order records, and the complementary cores reconstructed without mismatch."
+        "The reverse oligonucleotide is two nucleotides longer than the forward molecule in each pair (127 versus 125 nt for A; 160 versus 158 nt for B). This is an expected consequence of the strand-specific cohesive-end remainders, not a discrepancy. All four generated sequences were identical to the corresponding experimental order records, and the complementary cores reconstructed without mismatch."
     )
 
     doc.add_heading("4.2 pET-21a(+) cloning and feature-level validation", level=2)
@@ -537,7 +588,7 @@ def build_main(design: dict, seq: dict, primary: dict) -> None:
 
     doc.add_heading("4.3 Experimental synthesis and cloning evidence", level=2)
     add_text(doc,
-        "The retrospective data originated from an independent wet-laboratory project at the Genomics Technology Platform of the Higher School of Biological Sciences of Oran. Forward and reverse strands were synthesized on a MerMade 4 instrument at 1 µmol scale, purified, and annealed in 2× SSC with 0.1% SDS after 5 min at 95 °C followed by gradual cooling. The source draft reports single-stranded concentrations of 1,688.51–1,709.40 ng/µL. After hybridization, ScanDrop 260/280 ratios were 1.92 for A and 1.88 for B; Bioanalyzer sizes were 129 bp and 173 bp. These apparent sizes exceed the 123-bp and 156-bp duplex references and should be interpreted within the sizing limitations of the assay rather than as base-resolved sequence evidence."
+        "The retrospective data originated from an independent wet-laboratory project at the Genomics Technology Platform of the Higher School of Biological Sciences of Oran. Forward and reverse strands were synthesized on a MerMade 4 instrument at 1 µmol scale, purified, and annealed in 2× SSC with 0.1% SDS after 5 min at 95 °C followed by gradual cooling. The experimental record reports single-stranded concentrations of 1,688.51–1,709.40 ng/µL. After hybridization, ScanDrop 260/280 ratios were 1.92 for A and 1.88 for B; Bioanalyzer sizes were 129 bp and 173 bp. These apparent sizes exceed the 123-bp and 156-bp duplex references and should be interpreted within the sizing limitations of the assay rather than as base-resolved sequence evidence."
     )
     add_text(doc,
         "pET-21a(+) was double-digested with NdeI and XhoI, gel-purified and ligated to each hybridized insert at a nominal 3:1 insert:vector molar ratio. Ligation products were transformed into E. coli DH5α and selected on ampicillin. Colony PCR and capillary sequencing were performed as described in the source experimental record. The present software paper reuses these physical observations as a case study but does not claim expression, purification, oxidative refolding, receptor activity or therapeutic equivalence."
@@ -554,7 +605,7 @@ def build_main(design: dict, seq: dict, primary: dict) -> None:
             ["B", "156 bp", f"{b_consensus['coverage_percent']:.1f}%", f"{b_consensus['identity_percent']:.1f}%", "0", f"{b_consensus['bidirectional_overlap_percent']:.1f}%", f"{b_consensus['bidirectional_overlap_agreement_percent']:.1f}%", "100.0%"],
         ], [0.38, 0.58, 0.82, 0.78, 0.82, 0.67, 0.78, 0.82], font_size=7.3)
     add_text(doc,
-        f"The assembled consensus covered 100% of both references with 100% identity and no consensus differences. A contained {a_consensus['bidirectional_overlap_percent']:.1f}% bidirectional overlap and B contained {b_consensus['bidirectional_overlap_percent']:.1f}%; all overlapping F/R calls agreed (100%). Thus the paired reads jointly span each complete insert reference, while the overlap is independently observed on both orientations. Independent local alignments in Biopython {biopython_version} reproduced 100% combined coverage and 100% identity across aligned bases. The archived Geneious Prime figures reported visually concordant alignments but were not re-executed in the scripted environment."
+        f"The assembled consensus covered 100% of both references with 100% identity and no consensus differences. A contained {a_consensus['bidirectional_overlap_percent']:.1f}% bidirectional overlap and B contained {b_consensus['bidirectional_overlap_percent']:.1f}%; all overlapping F/R calls agreed (100%). Thus the paired reads jointly span each complete insert reference, while the overlap is independently observed on both orientations. Independent local alignments in Biopython {biopython_version} reproduced 100% combined coverage and 100% identity across aligned bases. The Geneious Prime figures from the experimental study reported visually concordant alignments but were not re-executed in the scripted environment."
     )
     add_callout(doc,
         "Scientific interpretation",
@@ -581,12 +632,12 @@ def build_main(design: dict, seq: dict, primary: dict) -> None:
             ["Biopython", "Programmatic parsing, alignment and molecular-biology primitives", "Independent executable numerical comparator; equivalent logic can be scripted"],
         ], [1.45, 2.55, 2.6], font_size=7.7)
     add_text(doc,
-        "This table is a workflow-positioning comparison, not a speed or accuracy benchmark. No proprietary Geneious algorithm was reverse-engineered, and no claim is made that G-Synth has broader functionality. Instead, the archived Geneious views provide an independent qualitative check, while the numerical cross-check uses openly scriptable Biopython alignment. A future prospective benchmark should use blinded constructs, identical trimming thresholds and predefined acceptance criteria across platforms."
+        "This table is a workflow-positioning comparison, not a speed or accuracy benchmark. No proprietary Geneious algorithm was reverse-engineered, and no claim is made that G-Synth has broader functionality. Instead, the experimental Geneious views provide an independent qualitative check, while the numerical cross-check uses openly scriptable Biopython alignment. A future prospective benchmark should use blinded constructs, identical trimming thresholds and predefined acceptance criteria across platforms."
     )
 
     doc.add_heading("6. Discussion", level=1)
     add_text(doc,
-        "The insulin case study demonstrates a useful distinction between design correctness, complete assembled coverage and bidirectional support. The exact match between four G-Synth-generated oligonucleotides and the archived synthesis records, together with correct duplex reconstruction and pET-21a(+) junctions, establishes that the application's design logic reproduces the intended molecular plan. G-Synth's F/R assembly yields complete consensus coverage, 100% identity and 100% agreement across the bidirectional overlaps. Positions outside those overlaps are supported by one oriented read rather than two, a distinction the software reports explicitly instead of obscuring within a single coverage value."
+        "The insulin case study separates three evidential levels. First, the current protein-input workflow demonstrates that G-Synth can preserve the mature A- and B-chain amino-acid sequences through E. coli-conditioned reverse translation, SSD, duplex reconstruction and restriction-cloning simulation. Second, exact regeneration of the four experimental order molecules establishes retrospective agreement between G-Synth's design logic and the molecular plan that reached the bench. Third, F/R assembly yields complete consensus coverage, 100% identity and 100% agreement across the bidirectional overlaps for those tested constructs. Positions outside the overlaps are supported by one oriented read rather than two, a distinction the software reports explicitly instead of obscuring within a single coverage value. The physical data validate the experimentally synthesized sequences, not the newly generated synonymous codon choices."
     )
     add_text(doc,
         "Restriction-aware design is particularly vulnerable to plausible-looking errors because recognition sites are visually familiar while cleavage products are strand-specific. Storing cut positions and calculating remainders avoids pair-specific tail constants. Reading the ends back from the reconstructed molecule adds an independent internal check. The same philosophy applies to primer extensions and virtual gels: G-Synth shows what the model establishes and labels what remains experimental."
@@ -600,13 +651,13 @@ def build_main(design: dict, seq: dict, primary: dict) -> None:
 
     doc.add_heading("7. Conclusions", level=1)
     add_text(doc,
-        "G-Synth formalizes Small Sequence Design and Extended Sequence Design as auditable synthesis-order workflows and carries the same digital molecule through peptide back-translation or host-selected codon optimization, oligonucleotide ordering, exact reconstruction, explicit hybridization, staged ligation, editable annotation, virtual PCR/digest/gel experiments and quality-aware post-sequencing review. The software passed 1,469 automated tests across its engine, API and interface. In the insulin glargine case study, SSD exactly regenerated all archived A/B oligonucleotides, produced coherent NdeI/XhoI recombinant pET-21a(+) designs and assembled the approved F/R chromatograms into 100%-covered, 100%-identical consensus sequences with perfect agreement in their bidirectional overlaps. The central contribution is not generic end-to-end software, but the first disclosed automation, to our knowledge, of the specifically defined SSD/ESD two-strand release gate and its continuity into post-sequencing evidence."
+        "G-Synth formalizes Small Sequence Design and Extended Sequence Design as auditable synthesis-order workflows and carries a digital molecule from peptide input through host-selected reverse translation, oligonucleotide ordering, exact reconstruction, explicit hybridization, staged ligation, editable annotation, virtual PCR/digest/gel experiments and quality-aware post-sequencing review. The current insulin glargine demonstration began with the mature A- and B-chain proteins and passed every computational gate through pET-21a(+) cloning. In the separate retrospective track, SSD exactly regenerated all experimentally synthesized A/B oligonucleotides and assembled the approved F/R chromatograms into 100%-covered, 100%-identical consensus sequences with perfect agreement in their bidirectional overlaps. The software passed 1,470 automated tests across its engine, API and interface. The central contribution is not generic end-to-end software, but the first disclosed automation, to our knowledge, of the specifically defined SSD/ESD two-strand release gate and its continuity into post-sequencing evidence."
     )
 
     doc.add_heading("8. Materials and Methods", level=1)
     doc.add_heading("8.1 Reproducible software analyses", level=2)
     add_text(doc,
-        f"The design and cloning case study was executed with tools/publication/design_glargine_case_study.py. The script records the source-manuscript SHA-256 hash, regenerates the oligonucleotides, asserts exact equality with the archived Table 3 molecules, translates the cassette, simulates pET-21a(+) cloning and writes publication_evidence/glargine_ab_design_and_cloning.json. Trace reanalysis was executed with tools/publication/validate_insulin_correct_traces.py, which admits only the four author-designated files, hashes every reference and trace, constructs oriented G-Synth F/R consensus sequences, quantifies bidirectional overlap and agreement, performs an independent Biopython {biopython_version} local alignment and writes a JSON evidence record plus figure. Full commands are supplied in the Supporting Information."
+        f"The current protein-to-clone workflow and peptide-start decisions were executed with tools/publication/validate_peptide_and_enzyme_logic.py. The script records both amino-acid inputs, the selected host profile, constraints, optimized coding sequences, translations, SSD molecules, duplex equality, cohesive ends, cloned-product lengths, junctions and hashes in publication_evidence/peptide_and_enzyme_validation.json. The retrospective design and cloning case study was executed with tools/publication/design_glargine_case_study.py. That script records the experimental-source-record SHA-256 hash, regenerates the oligonucleotides, asserts exact equality with the recorded synthesis molecules, translates the cassette, simulates pET-21a(+) cloning and writes publication_evidence/glargine_ab_design_and_cloning.json. Trace reanalysis used tools/publication/validate_insulin_correct_traces.py, which admits only the four author-designated files, hashes every reference and trace, constructs oriented G-Synth F/R consensus sequences, quantifies bidirectional overlap and agreement, performs an independent Biopython {biopython_version} local alignment and writes a JSON evidence record plus figure. Full commands are supplied in the Supporting Information."
     )
     add_text(doc,
         "The codon profiles were reconstructed with tools/update_hive_codon_tables.py from FDA HIVE service object 537 and committed as gsynth_engine/data/codon_usage_hive_2021.json. The updater requests genomic species data with descendant taxa, prefers RefSeq and falls back to GenBank only for K. phaffii and N. benthamiana, validates the returned taxon, requires exactly 64 non-negative codon counts and checks that their sum equals the reported total. The application divides each raw count by the maximum count among synonymous codons for that amino acid. The shipped September 2021 snapshot was retrieved on 2 September 2026 and is identified by SHA-256 in the API. Because these are species-wide genomic profiles rather than prespecified highly expressed genes, the geometric-mean score is reported as profile-relative CAI. No expression-yield inference is made. The machine-readable validation record publication_evidence/codon_host_profile_validation.json confirms 15 complete and numerically distinct 64-codon weight vectors and preservation of a 100-residue benchmark protein under every profile."
@@ -623,7 +674,10 @@ def build_main(design: dict, seq: dict, primary: dict) -> None:
     )
     doc.add_heading("8.3 Biological inputs, cassette design and G-Synth analysis", level=2)
     add_text(doc,
-        "Insulin glargine A- and B-chain amino-acid sequences were retrieved from DrugBank record DB00047 (database version 5.1.10). The primary experimental study used GenScript reverse translation and the VectorBuilder codon-optimization tool for Escherichia coli; the exact optimized nucleotide inputs were preserved unchanged. Each cassette comprised an initiating ATG, the N-terminal peptide MGSSHHHHHHSSGLVPRGS (6×His tag, linkers and thrombin-recognition segment), the optimized glargine chain and TAA. G-Synth SSD took the preserved optimized sequence as input, derived NdeI- and XhoI-compatible strand products from cut geometry, generated the order molecules, re-annealed them in silico, verified exact reconstruction on both strands, translated the reconstructed coding sequence, and simulated directional insertion into pET-21a(+). Benchling and ExPASy operations reported in the primary draft are retained as historical design provenance; the present validation was performed first in G-Synth."
+        "Insulin glargine A- and B-chain amino-acid sequences were retrieved from DrugBank record DB00047 (database version 5.1.10). In the current workflow, the chain sequences were entered directly as peptides. Automatic mode classified both non-methionine N termini as mature peptide/fusion inserts. G-Synth used its E. coli HIVE-CUTs/CoCoPUTs profile, retained TAA termination and optimized under 40–60% local GC, five-base homopolymer, 15-nt repeat, low-frequency-codon and internal NdeI/XhoI constraints. Every resulting DNA was re-translated before SSD. Each cassette comprised the NdeI-provided initiator, MGSSHHHHHHSSGLVPRGS (6×His tag, linkers and thrombin-recognition segment), the G-Synth-optimized chain and TAA. SSD derived the NdeI- and XhoI-compatible strand products from cut geometry, generated both order molecules, re-annealed them in silico, verified exact reconstruction on both strands, translated the reconstructed coding sequence and simulated directional insertion into pET-21a(+)."
+    )
+    add_text(doc,
+        "The source experimental study used GenScript reverse translation and VectorBuilder codon optimization for E. coli. Those coding sequences were preserved unchanged in a second analysis track because they, rather than the new G-Synth synonymous designs, were physically synthesized. G-Synth repeated SSD, hybridization, translation and cloning on the experimental inputs and required exact equality with the recorded order molecules. Benchling and ExPASy operations are reported as experimental provenance; the present primary validation was performed with G-Synth."
     )
     doc.add_heading("8.4 Oligonucleotide synthesis, deprotection and purification", level=2)
     add_text(doc,
@@ -648,16 +702,16 @@ def build_main(design: dict, seq: dict, primary: dict) -> None:
         "Each 20-µL BigDye Terminator v3.1 reaction contained 20 ng purified DNA, 2 µL BigDye Terminator v3.1, 3 µL 5× sequencing buffer and 1 µL forward or reverse primer at 3 µM. Cycling comprised 96 °C for 60 s followed by 35 cycles of 96 °C for 10 s, 50 °C for 5 s and 60 °C for 4 min. Products were ethanol-precipitated and analysed on an Applied Biosystems 3500 Genetic Analyzer with POP-7 polymer at the ESSBO Genomics Technology Platform."
     )
     add_text(doc,
-        "Only A Forward Seq.ab1, A Reverse Seq.ab1, B Forward Seq.ab1 and B Reverse Seq.ab1 were admitted to the present analysis. Content signatures identified the files as SCF despite their extensions. G-Synth parsed calls, qualities, peak locations and four-channel traces; evaluated both orientations; transformed placed reads into reference orientation; and merged them position by position. Consensus calls were selected by supporting-read count and then cumulative quality; exact ties were emitted as N. Consensus coverage, identity, bidirectional overlap and overlap agreement were computed separately. Because the source experiment had no prespecified trace-quality acceptance threshold, no post hoc cutoff was used for the primary retrospective endpoint. Biopython PairwiseAligner supplied an independent executable numerical comparison, and the archived Geneious Prime 2024.0.7 figure using these same four approved files supplied a secondary qualitative confirmation."
+        "Only A Forward Seq.ab1, A Reverse Seq.ab1, B Forward Seq.ab1 and B Reverse Seq.ab1 were admitted to the present analysis. Content signatures identified the files as SCF despite their extensions. G-Synth parsed calls, qualities, peak locations and four-channel traces; evaluated both orientations; transformed placed reads into reference orientation; and merged them position by position. Consensus calls were selected by supporting-read count and then cumulative quality; exact ties were emitted as N. Consensus coverage, identity, bidirectional overlap and overlap agreement were computed separately. Because the source experiment had no prespecified trace-quality acceptance threshold, no post hoc cutoff was used for the primary retrospective endpoint. Biopython PairwiseAligner supplied an independent executable numerical comparison, and the Geneious Prime 2024.0.7 figure from the same experiment supplied a secondary qualitative confirmation."
     )
 
     doc.add_heading("Data and Software Availability", level=1)
     add_text(doc,
-        "The G-Synth source code, tests and documentation are available under the MIT License at https://github.com/Midotech31/g-synth-app. A versioned archival DOI will be inserted after repository release and Zenodo deposition. Reproducibility scripts, the immutable primary-draft record and JSON evidence are under tools/publication/ and publication_evidence/. Glargine records PQ362993 and PQ362994 are in GenBank. Raw capillary files contain no human data; deposition details will be finalized before submission or supplied confidentially to reviewers when permitted."
+        "The G-Synth source code, tests and documentation are available under the MIT License at https://github.com/Midotech31/g-synth-app. A versioned archival DOI will be inserted after repository release and Zenodo deposition. Reproducibility scripts, the experimental source record and JSON evidence are under tools/publication/ and publication_evidence/. Glargine records PQ362993 and PQ362994 are in GenBank. Raw capillary files contain no human data; deposition details will be finalized before submission or supplied confidentially to reviewers when permitted."
     )
     doc.add_heading("Supporting Information", level=1)
     add_text(doc,
-        "Complete designs and oligonucleotides; algorithmic invariants and executable commands; experimental and QC records; trace manifest; interface evidence; comparison notes; correction ledger; and release checklist (DOCX and PDF)."
+        "Complete designs and oligonucleotides; algorithmic invariants and executable commands; experimental and QC records; trace manifest; interface evidence; comparison data; and release checklist (DOCX and PDF)."
     )
     doc.add_heading("Author Contributions", level=1)
     add_text(doc,
@@ -674,30 +728,56 @@ def build_main(design: dict, seq: dict, primary: dict) -> None:
     doc.add_heading("Conflict of Interest", level=1)
     add_text(doc, "The authors declare no competing financial interest.")
 
+    add_figure_legend_list(doc)
     doc.add_heading("References", level=1)
     add_reference_list(doc, main_references(primary))
     PUBLICATION.mkdir(parents=True, exist_ok=True)
     doc.save(MAIN_OUT)
 
 
-def build_si(design: dict, seq: dict, primary: dict) -> None:
+def build_si(design: dict, peptide: dict, seq: dict, primary: dict) -> None:
     doc = Document()
     biopython_version = seq.get("analysis", {}).get("biopython_version", "version recorded in the evidence JSON")
+    de_novo = peptide["de_novo_glargine_workflow"]
     configure_document(doc, "G-Synth — Supporting Information")
     add_title_block(doc, "Supporting Information",
         "G-Synth: Small Sequence Design and Extended Sequence Design for auditable synthesis-ready DNA and post-sequencing validation")
     add_authors(doc)
     add_text(doc,
-        "Contents: complete glargine sequences; SSD/ESD algorithmic invariants; reproducibility commands; unabridged experimental methods, synthesis script and QC record from the primary ACS draft; trace-file manifest; G-Synth evidence; secondary Geneious comparisons; and a scientific correction ledger."
+        "Contents: complete glargine sequences; SSD/ESD algorithmic invariants; reproducibility commands; unabridged experimental methods, synthesis script and QC record; trace-file manifest; G-Synth evidence; and secondary Geneious comparisons."
     )
 
     doc.add_heading("S1. Exact glargine design inputs and outputs", level=1)
+    doc.add_heading("S1.1 Current G-Synth workflow from protein input", level=2)
+    add_text(doc,
+        "The following outputs were generated directly from the mature glargine-chain amino-acid sequences with the E. coli profile and the documented synthesis constraints. They are current computational designs. Because they differ synonymously from the physically tested constructs, they were not assigned retrospective experimental validation."
+    )
+    for chain in ("A", "B"):
+        current = de_novo[chain]
+        add_text(doc, f"Glargine {chain}-chain protein input: {current['input_peptide']}")
+        add_callout(doc, f"{chain}-chain G-Synth coding DNA (5′→3′)", current["back_translated_coding_sequence_5_to_3"], fill=LIGHT)
+        add_text(doc,
+            f"Resolved role: {current['resolved_peptide_role']}; initiator methionine added: no; "
+            f"profile-relative CAI: {current['profile_relative_cai']:.3f}; GC: {current['gc_percent']:.1f}%; "
+            f"low-frequency codons: {current['low_frequency_codons']}; recombinant model: "
+            f"{current['restriction_cloning']['recombinant_length_bp']:,} bp."
+        )
+        add_text(doc, f"Forward order molecule ({current['ssd']['forward_length_nt']} nt):")
+        add_callout(doc, "5′→3′ forward", current["ssd"]["forward_order_molecule_5_to_3"], fill=PALE_TEAL)
+        add_text(doc, f"Reverse order molecule ({current['ssd']['reverse_length_nt']} nt):")
+        add_callout(doc, "5′→3′ reverse", current["ssd"]["reverse_order_molecule_5_to_3"], fill=PALE_GREEN)
+        add_text(doc,
+            "Validation flags: peptide translation preserved; internal NdeI/XhoI absent; exact duplex core; "
+            "5′-TA/5′-TCGA terminal products; expected cassette translation; restriction-clonable pET-21a(+) model."
+        )
+
+    doc.add_heading("S1.2 Retrospective experimental inputs and outputs", level=2)
     add_table(doc,
-        ["Sequence type", "Description", "Sequence (preserved from primary draft)"],
+        ["Sequence type", "Description", "Sequence recorded in the experimental study"],
         primary["tables"][2][1:], [1.15, 1.55, 3.9], font_size=7.7)
     for chain in ("A", "B"):
         d = design["chains"][chain]
-        doc.add_heading(f"S1.{1 if chain == 'A' else 2} Insulin glargine {chain}-chain", level=2)
+        doc.add_heading(f"S1.2.{1 if chain == 'A' else 2} Experimental insulin glargine {chain}-chain", level=3)
         add_text(doc, f"Optimized coding input ({d['input']['length_bp']} bp):")
         add_callout(doc, "5′→3′ input", d["input"]["optimised_coding_sequence"], fill=LIGHT)
         add_text(doc, f"Expected chain peptide: {d['input']['expected_chain_peptide']}")
@@ -706,7 +786,7 @@ def build_si(design: dict, seq: dict, primary: dict) -> None:
         add_text(doc, f"Reverse order molecule ({d['design']['reverse_length_nt']} nt):")
         add_callout(doc, "5′→3′ reverse", d["design"]["reverse_oligo_5_to_3"], fill=PALE_GREEN)
         add_text(doc, f"Translated cassette: {d['design']['translated_product']}")
-        add_text(doc, "Validation flags: exact archived forward match; exact archived reverse match; exact duplex core; expected product translation.")
+        add_text(doc, "Validation flags: exact experimental forward match; exact experimental reverse match; exact duplex core; expected product translation.")
 
     add_table(doc,
         ["Order molecule", "Nucleotide sequence (5′→3′)", "Accession / translated product"],
@@ -730,7 +810,8 @@ def build_si(design: dict, seq: dict, primary: dict) -> None:
     doc.add_heading("S3. Reproducibility", level=1)
     add_text(doc, "Execute from the repository root with Python 3.12.13 and the locked project dependencies:")
     commands = (
-        "python tools/publication/design_glargine_case_study.py --manuscript <source-draft.docx> --output publication_evidence/glargine_ab_design_and_cloning.json\n"
+        "python tools/publication/validate_peptide_and_enzyme_logic.py\n"
+        "python tools/publication/design_glargine_case_study.py --source-record tools/publication/insulin_glargine_experimental_record.json --output publication_evidence/glargine_ab_design_and_cloning.json\n"
         "python tools/publication/validate_insulin_correct_traces.py --root <reference-data-root> --trace-dir publication_evidence/validated_traces --output-dir publication_evidence/sequencing_validation\n"
         "python -m pytest gsynth_engine/tests -q\n"
         "cd django_app && python -m pytest -q\n"
@@ -740,15 +821,17 @@ def build_si(design: dict, seq: dict, primary: dict) -> None:
     add_table(doc,
         ["Evidence object", "Location", "Purpose"],
         [
+            ["Protein-to-clone JSON", "publication_evidence/peptide_and_enzyme_validation.json", "Current glargine protein inputs, codon outputs, SSD molecules, duplexes, junctions and hashes"],
             ["Design/cloning JSON", "publication_evidence/glargine_ab_design_and_cloning.json", "Exact molecules, segments, translations, junctions, warnings and source hash"],
             ["Sequencing JSON", "publication_evidence/sequencing_validation/glargine_approved_trace_validation.json", "Approved-file policy, hashes, primary F/R consensus metrics, post hoc quality sensitivity and Biopython check"],
             ["Design script", "tools/publication/design_glargine_case_study.py", "Executable glargine case study with equality assertions"],
             ["Trace script", "tools/publication/validate_insulin_correct_traces.py", "Executable four-file sequencing analysis and figure generation"],
+            ["Protein workflow script", "tools/publication/validate_peptide_and_enzyme_logic.py", "Executable peptide-role, reverse-translation, SSD, cloning and enzyme checks"],
         ], [1.25, 2.8, 2.55], font_size=8.2)
 
     doc.add_heading("S4. Unabridged experimental oligonucleotide synthesis and cloning record", level=1)
     add_text(doc,
-        f"The record below was extracted from the primary ACS draft {primary['source_filename']} (SHA-256 {primary['source_sha256']}) without removing technical steps. Laboratory notebooks and instrument exports remain the authoritative operational record. Oligonucleotides were synthesized on a MerMade 4 instrument using 1-µmol, 1000-Å universal supports and DMT-off processing."
+        "The record below preserves the complete experimental procedures relevant to the G-Synth validation. Laboratory notebooks and instrument exports remain the authoritative operational record. Oligonucleotides were synthesized on a MerMade 4 instrument using 1-µmol, 1000-Å universal supports and DMT-off processing."
     )
     add_text(doc,
         "Purification used an equal volume of cold butanol, 30 s vortexing, 30 min at −20 °C and 15 min centrifugation at 14,000 rpm and 4 °C. Pellets were washed twice with 1 mL 70% ethanol at −20 °C, centrifuged for 10 min, air-dried and resuspended. Exact rotor radius is not recorded, so relative centrifugal force cannot be reconstructed from rpm; future protocols should report ×g."
@@ -777,6 +860,7 @@ def build_si(design: dict, seq: dict, primary: dict) -> None:
         ["Script detail", "Reagent / manufacturer", "No./V primes", "Injection", "Reaction", "Equalize"],
         synthesis_rows, [1.02, 2.62, 0.72, 0.72, 0.72, 0.8], font_size=6.65)
 
+    doc.add_page_break()
     doc.add_heading("S6. Primer record", level=1)
     primers = [
         ["SpAB F", "ATGGGTTCTTCTCACCACCACCA", "58.6", "123 A / 156 B"],
@@ -796,9 +880,9 @@ def build_si(design: dict, seq: dict, primary: dict) -> None:
 
     doc.add_heading("S7. Wet-laboratory PCR and colony-screening evidence", level=1)
     add_figure(doc, SOURCE_FIG / "Figure_S3_Precloning_PCR.png",
-        "Figure S3. PCR products obtained with insert-specific primers before cloning, reproduced from the primary experimental draft. SM, GeneRuler Express DNA Ladder; lanes 1–2, A insert; lanes 3–4, B insert.")
+        "Figure S3. PCR products obtained with insert-specific primers before cloning. SM, GeneRuler Express DNA Ladder; lanes 1–2, A insert; lanes 3–4, B insert.")
     add_figure(doc, SOURCE_FIG / "Figure_S4_Colony_PCR.png",
-        "Figure S4. Colony-screening PCR reproduced from the primary experimental draft. Lanes 1 and 3 are A and B products with insert-specific primers; lanes 2 and 4 are the corresponding products with T7 primers.")
+        "Figure S4. Colony-screening PCR. Lanes 1 and 3 are A and B products with insert-specific primers; lanes 2 and 4 are the corresponding products with T7 primers.")
 
     doc.add_heading("S8. Sequencing evidence manifest", level=1)
     add_text(doc,
@@ -826,47 +910,34 @@ def build_si(design: dict, seq: dict, primary: dict) -> None:
         "Figure S5. Primary G-Synth F/R consensus evidence map. The two oriented reads jointly cover each reference completely; green shading marks bidirectional overlap, with 100% agreement in both constructs.")
 
     doc.add_heading("S9. Supplementary interface evidence", level=1)
-    add_figure(doc, INTERFACE / "Primer_Hybridization.png",
+    add_figure(doc, INTERFACE / "Primer_Hybridization.jpg",
         "Figure S6. Primer–template hybridization view. The annealing 3′ segment is base-paired; the 5′ cloning extension is explicitly unpaired in cycle 1 and appears in the predicted product after extension.", width=4.0)
-    add_figure(doc, INTERFACE / "Hybridization_Workflow.png",
+    add_figure(doc, INTERFACE / "Hybridization_Workflow.jpg",
         "Figure S7. Detailed SSD duplex hybridization. The two order molecules form a 123-bp exact antiparallel core; the NdeI-derived 5′-TA and XhoI-derived 5′-TCGA terminal products remain exposed and are labelled as cohesive ends.", width=6.35)
     add_figure(doc, INTERFACE / "Cloning_PreLigation.jpg",
-        "Figure S8. Pre-ligation vector–insert compatibility gate. The simple view preserves enzyme identity, overhang sequence and physical polarity while withholding product analyses.", width=6.35)
+        "Figure S8. Pre-ligation vector–insert compatibility gate for the current glargine A design. The detailed view preserves enzyme identity, overhang sequence and physical polarity, and labels the joined duplex as an expected product while withholding product analyses.", width=6.35)
     add_figure(doc, INTERFACE / "Cloning_Ligated_Product.jpg",
-        "Figure S9. Product state after explicit in-silico ligation. The recombinant length and downstream map are displayed only after both junctions have passed.", width=6.35)
-    add_figure(doc, INTERFACE / "HindIII_Diagnostic_Gel.png",
+        "Figure S9. Product state after explicit in-silico ligation. The green status region reports the recombinant length and presents close-up sequence evidence for both closed junctions only after all blocking checks have passed.", width=6.35)
+    add_figure(doc, INTERFACE / "HindIII_Diagnostic_Gel.jpg",
         "Figure S10. HindIII-containing diagnostic digest and predicted gel. The restriction site and complete digest fragments are displayed with a named broad-range marker. The panel is labelled as an in-silico prediction.", width=4.4)
-    add_figure(doc, INTERFACE / "HindIII_Restriction_Map.png",
+    add_figure(doc, INTERFACE / "HindIII_Restriction_Map.jpg",
         "Figure S11. Restriction map showing HindIII as a named site derived from cut geometry.", width=5.4)
 
     doc.add_heading("S10. Secondary Geneious comparison and independent confirmation", level=1)
     add_text(doc,
-        f"The supplied experimental draft used Benchling for reverse complements and Geneious Prime 2024.0.7 for cloning views and trace alignments. G-Synth independently regenerated the same four synthesis molecules from the two optimized coding inputs, and its recombinant maps placed the inserts downstream of the pET-21a(+) T7/lac expression elements with preserved coding frames. The archived Geneious figures and G-Synth therefore agree qualitatively on construct identity and placement. A new automated Geneious run was not performed because the reproducibility environment did not include a licensed command-line execution path. Biopython {biopython_version} was used as the independent, executable alignment comparator."
+        f"The source experimental study used Benchling for reverse complements and Geneious Prime 2024.0.7 for cloning views and trace alignments. G-Synth independently regenerated the same four synthesis molecules from the two optimized coding inputs, and its recombinant maps placed the inserts downstream of the pET-21a(+) T7/lac expression elements with preserved coding frames. The Geneious figures and G-Synth therefore agree qualitatively on construct identity and placement. A new automated Geneious run was not performed because the reproducibility environment did not include a licensed command-line execution path. Biopython {biopython_version} was used as the independent, executable alignment comparator."
     )
     add_text(doc,
         "A prospective head-to-head study should freeze one set of reference plasmids and raw trace files, define identical trimming thresholds and variant rules, blind sample labels, and compare: read placement; orientation calls; covered intervals; mismatches/indels; consensus; runtime; manual interventions; exportability; and final verdict. The present study is a functional cross-check, not a statistical superiority benchmark."
     )
     add_figure(doc, SOURCE_FIG / "Figure_S6_Geneious_Duplex_Secondary_Comparison.png",
-        "Figure S12. Archived Geneious Prime 2024.0.7 duplex representation of NdeI/XhoI-compatible A- and B-chain inserts. This is secondary qualitative concordance; G-Synth SSD is the primary in-silico reconstruction.")
+        "Figure S12. Geneious Prime 2024.0.7 duplex representation of NdeI/XhoI-compatible A- and B-chain inserts from the experimental study. This is secondary qualitative concordance; G-Synth SSD is the primary in-silico reconstruction.")
     add_figure(doc, SOURCE_FIG / "Figure_S7_Geneious_Annotation_Secondary_Comparison.png",
-        "Figure S13. Archived Geneious Prime construct annotation for the glargine A- and B-chain pET-21a(+) designs. G-Synth generated the primary coordinate, ORF and junction validation reported in the main article.")
+        "Figure S13. Geneious Prime construct annotation for the glargine A- and B-chain pET-21a(+) designs from the experimental study. G-Synth generated the primary coordinate, ORF and junction validation reported in the main article.")
     add_figure(doc, SOURCE_FIG / "Figure_S5_Geneious_Approved_Trace_Secondary_Comparison.png",
-        "Figure S14. Archived Geneious Prime alignment made with the same four author-approved construct-confirmation files used by G-Synth. It provides secondary visual concordance and was not treated as an independent blinded benchmark.")
+        "Figure S14. Geneious Prime alignment made with the same four author-approved construct-confirmation files used by G-Synth. It provides secondary visual concordance and was not treated as an independent blinded benchmark.")
 
-    doc.add_heading("S11. Scientific correction ledger for the supplied draft", level=1)
-    add_table(doc,
-        ["Source-draft implication", "Correction in the G-Synth manuscript", "Reason"],
-        [
-            ["Sequencing showed complete 100% identity", "Oriented F/R assembly produced 100% consensus coverage and identity; overlap support was 56.1% (A) and 71.2% (B), with 100% F/R agreement", "Separates assembled coverage from bidirectional confirmation without obscuring the complete consensus"],
-            ["The method eliminates enzymatic digestion", "Insert preparation is PCR-free and pre-engineered; the pET-21a(+) vector is still digested with NdeI/XhoI", "Vector digestion is experimentally required"],
-            ["The constructs enable insulin glargine production", "Construct design and cloning were validated; expression, cleavage, refolding and bioactivity were not tested", "DNA construction does not establish functional insulin"],
-            ["His-tags and linkers ensure folding remains unaffected", "Sequence presence and tag position are reported; folding and cleavage remain experimental", "No protein-level evidence was supplied"],
-            ["The workflow is broadly scalable and cost-effective", "Potential advantages are framed as hypotheses for prospective benchmarking", "No controlled cost, yield or scale comparison was performed"],
-            ["Geneious is the primary validator", "G-Synth is the primary design/cloning/trace system; archived Geneious views and executable Biopython provide independent confirmation", "Matches the software paper's validation hierarchy"],
-            ["One oligo length per insert", "Forward/reverse lengths are reported separately (125/127 nt and 158/160 nt)", "Cohesive-end geometry is strand-asymmetric"],
-        ], [1.9, 2.9, 1.8], font_size=7.8)
-
-    doc.add_heading("S12. Release and submission checklist", level=1)
+    doc.add_heading("S11. Release and submission checklist", level=1)
     add_bullets(doc, [
         "Obtain written approval from every listed author for author order, affiliations, CRediT roles and AI disclosure.",
         "Run prospective bidirectional sequencing until both junctions and 100% of each insert are covered at the predefined quality threshold.",
@@ -882,10 +953,11 @@ def build_si(design: dict, seq: dict, primary: dict) -> None:
 
 def main() -> None:
     design = json.loads(DESIGN_JSON.read_text())
+    peptide = json.loads(PEPTIDE_JSON.read_text())
     seq = json.loads(SEQ_JSON.read_text())
-    primary = json.loads(PRIMARY_RECORD_JSON.read_text())
-    build_main(design, seq, primary)
-    build_si(design, seq, primary)
+    primary = json.loads(EXPERIMENTAL_RECORD_JSON.read_text())
+    build_main(design, peptide, seq, primary)
+    build_si(design, peptide, seq, primary)
     print(MAIN_OUT)
     print(SI_OUT)
 

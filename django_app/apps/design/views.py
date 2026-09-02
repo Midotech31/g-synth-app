@@ -506,12 +506,10 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan) -> dict:
             result, duplex_mismatches=duplex_mismatches,
         ).to_dict(),
         "warnings": result.warnings,
-        # Empty means these two molecules really do join.
+        # Empty when all cloning checks pass.
         "problems": result.problems,
         "is_clonable": result.is_clonable,
-        # None when the caller supplied an insert that was already cut: there
-        # was no SSD design, and inventing one to fill the field would
-        # describe a construct nobody asked for.
+        # Pre-digested inserts have no generated SSD payload.
         "insert": _ssd_payload(ssd) if ssd is not None else None,
         "assembly": _assembly_payload(plan, result.name) if plan else None,
     }
@@ -916,10 +914,7 @@ class PrimerExportView(APIView):
 
 
 class LigationView(APIView):
-    """POST /api/design/ligation/ — masses to pipette, at several ratios.
-
-    Nobody runs one ligation, so the response is the whole series.
-    """
+    """Return a practical series of insert-to-vector ligation ratios."""
 
     def post(self, request):
         serializer = LigationRequestSerializer(data=request.data)

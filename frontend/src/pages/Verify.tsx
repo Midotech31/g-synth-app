@@ -726,8 +726,8 @@ export default function Verify() {
               ligation ? (
                 <>
                   <div className="notice notice-info">
-                    Set up all three. Nobody runs one ligation — they run a
-                    small series and pick whichever plate gives colonies.
+                    Prepare the complete ratio series and compare colony recovery
+                    across the three reactions.
                   </div>
                   <div className="card">
                     <div className="card-head"><h2>Insert : vector</h2></div>

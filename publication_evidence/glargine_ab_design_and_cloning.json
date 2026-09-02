@@ -7,9 +7,9 @@
     "cassette": "MGSSHHHHHHSSGLVPRGS",
     "vector": "pET-21a(+)"
   },
-  "source_manuscript": {
-    "path": "/home/merzoug/Downloads/Article Insuline Algerine (2)/FINAL VERSION/IJBMM/BEJ/ACS/Manuscript_Merzoug_et_al_2025_ACS_--SB.docx",
-    "sha256": "2338c8d46ecfd709ce4e1bf8007a752719fbd35795fb356b0dbfa953d187b810"
+  "experimental_source_record": {
+    "path": "tools/publication/insulin_glargine_experimental_record.json",
+    "sha256": "d1e615fc17f68296025d870689201eeec7b6c2d49c32e559d633688d67c966dd"
   },
   "chains": {
     "A": {
@@ -33,8 +33,8 @@
         "coding_sequence": "ATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTGGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAAC",
         "translated_product": "MGSSHHHHHHSSGLVPRGSGIVEQCCTSICSLYQLENYCG*",
         "expected_product_match": true,
-        "manuscript_table_3_forward_exact_match": true,
-        "manuscript_table_3_reverse_exact_match": true,
+        "experimental_record_forward_exact_match": true,
+        "experimental_record_reverse_exact_match": true,
         "duplex_core_exact_match": true,
         "segments": [
           {
@@ -157,8 +157,8 @@
         "coding_sequence": "ATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTTTTGTGAACCAGCATCTGTGCGGCAGCCATCTGGTGGAAGCGCTGTACCTGGTGTGCGGCGAACGCGGCTTTTTTTACACCCCAAAAACCCGCCGCTAAC",
         "translated_product": "MGSSHHHHHHSSGLVPRGSFVNQHLCGSHLVEALYLVCGERGFFYTPKTRR*",
         "expected_product_match": true,
-        "manuscript_table_3_forward_exact_match": true,
-        "manuscript_table_3_reverse_exact_match": true,
+        "experimental_record_forward_exact_match": true,
+        "experimental_record_reverse_exact_match": true,
         "duplex_core_exact_match": true,
         "segments": [
           {

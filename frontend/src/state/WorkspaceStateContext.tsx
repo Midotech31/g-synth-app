@@ -36,15 +36,14 @@ export function WorkspaceStateProvider({ children, identity = "anonymous" }: { c
   });
 
   useEffect(() => {
-    // Results are reproducible outputs, not drafts. Recompute them after a
-    // refresh so an old verdict can never be paired with newly restored input.
+    // Recompute derived results after restoring editable inputs.
     const draftEntries = Object.entries(store).filter(([key]) => (
       !/\.(result|report|primers|ligation|saved|selected|traceFiles|project)$/.test(key)
     ));
     try {
       window.sessionStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(draftEntries)));
     } catch {
-      // Private browsing or a storage quota must not make the workspace fail.
+      // Session persistence is optional.
     }
   }, [storageKey, store]);
 

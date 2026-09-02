@@ -187,12 +187,7 @@ def ligation_series(
     ratios: tuple[float, ...] = (1.0, 3.0, 5.0),
     ends: str = "5'",
 ) -> list[LigationPlan]:
-    """The same reaction at several ratios, which is how it is set up.
-
-    Nobody runs one ligation: they run a small series and pick whichever
-    plate gives colonies. Handing back the whole series is what the bench
-    actually needs.
-    """
+    """Return a practical insert-to-vector molar-ratio series."""
     return [
         plan_ligation(
             vector_length=vector_length, insert_length=insert_length,

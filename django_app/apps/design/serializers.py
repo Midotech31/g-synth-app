@@ -182,14 +182,7 @@ class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
         default=True,
         help_text="False clones the SSD duplex directly, without fragmenting it.",
     )
-    #: Skip designing an insert and ligate the one supplied.
-    #:
-    #: A PCR product that has already been cut is an insert, not a gene: its
-    #: sticky ends exist and adding sites and tags around them a second time
-    #: would build something nobody asked for. When this is set, `sequence`
-    #: is the cut fragment's top strand and `insert_reverse` its bottom —
-    #: both are needed, because the stagger between them is the overhang, and
-    #: from one strand alone half the geometry cannot be seen.
+    #: Ligate a supplied pre-digested duplex without adding new terminal sites.
     pre_digested = serializers.BooleanField(default=False)
     insert_reverse = serializers.CharField(
         max_length=200_000, required=False, allow_blank=True, default="",
@@ -446,8 +439,7 @@ class PcrRequestSerializer(serializers.Serializer):
                                           allow_null=True, default=None)
     right_enzyme = serializers.ChoiceField(choices=ENZYME_NAMES, required=False,
                                            allow_null=True, default=None)
-    # Bounded above because the clamp is synthesised into every primer: a
-    # request for a thousand bases of clamp is an oligo nobody can order.
+    # Restrict terminal clamp length to practical oligonucleotide synthesis.
     clamp = serializers.IntegerField(min_value=0, max_value=20, default=DEFAULT_CLAMP)
     keep_frame = serializers.BooleanField(default=False)
     start_codon_mode = serializers.ChoiceField(

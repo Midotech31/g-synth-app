@@ -67,7 +67,7 @@ conditions must still be checked against the relevant supplier datasheet.
     aminopeptidases.** *Biochemistry.* 2010;49(26):5588–5599.
     <https://doi.org/10.1021/bi1005464>
 
-## Implementation note
+## Versioned scientific datasets
 
 The restriction definitions are a versioned application dataset derived from
 REBASE geometry through Biopython plus curated overrides. A reference URL alone

@@ -105,8 +105,6 @@ class ChangePasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"new_password": "The new password must differ from the current one."}
             )
-        # Here the account exists, so the similarity check has the real
-        # stored email and name rather than a stand-in.
         _check_password(attrs["new_password"], user)
         return attrs
 
@@ -114,7 +112,6 @@ class ChangePasswordSerializer(serializers.Serializer):
         user = self.context["request"].user
         user.set_password(self.validated_data["new_password"])
         user.save(update_fields=["password"])
-        # Cut off every token issued under the old password.
         user.revoke_all_tokens()
         return user
 

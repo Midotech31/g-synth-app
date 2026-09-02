@@ -184,7 +184,7 @@ Scientific scope and validation materials:
 - [`docs/WORKED_CLONING_EXAMPLES.md`](docs/WORKED_CLONING_EXAMPLES.md) — cohesive, mixed-polarity, blunt, and blocking cases.
 - [`docs/SCIENTIFIC_REFERENCES.md`](docs/SCIENTIFIC_REFERENCES.md) — sources behind the assumptions.
 - [`publication_evidence/codon_host_profile_validation.json`](publication_evidence/codon_host_profile_validation.json) — machine-readable host-table provenance, completeness, numerical distinctness and protein-invariance checks.
-- [`publication_evidence/peptide_and_enzyme_validation.json`](publication_evidence/peptide_and_enzyme_validation.json) — peptide-start decisions, host-wise translation invariance, enzyme-name coverage and HindIII geometry.
+- [`publication_evidence/peptide_and_enzyme_validation.json`](publication_evidence/peptide_and_enzyme_validation.json) — current glargine A/B protein-to-SSD-to-clone evidence, peptide-start decisions, host-wise translation invariance, enzyme-name coverage and HindIII geometry.
 - [`docs/USABILITY_STUDY.md`](docs/USABILITY_STUDY.md) — the human-validation protocol and release criteria.
 - [`docs/WET_LAB_VALIDATION.md`](docs/WET_LAB_VALIDATION.md) — physical construct-to-sequencing evidence and acceptance criteria.
 - [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md) — current accessibility and responsive-design guarantees and validation limits.

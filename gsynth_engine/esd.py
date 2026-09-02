@@ -300,23 +300,14 @@ def _confusable_with(overhang: str) -> set[str]:
 
 
 class _OverhangPool:
-    """The overhangs still available, and why each of the rest is not.
-
-    Asking "does this clash with anything already placed?" by comparing
-    against every placed overhang is quadratic in the number of junctions,
-    which is fine for a peptide and not for a gene: a 100 kb input spent six
-    seconds here. Since what a placed overhang excludes never changes, the
-    exclusions are computed once, when it is placed, and every later question
-    is a set lookup.
-    """
+    """Track available overhangs and cached incompatibilities."""
 
     def __init__(self, forbidden: set[str]) -> None:
         self.taken: set[str] = set()
         self.forbidden = set(forbidden)
-        #: Words a placed junction would cross-ligate with.
+        #: Overhangs that may cross-ligate with an internal junction.
         self._near_junction: set[str] = set()
-        #: The same for the terminal restriction overhangs, kept separate so
-        #: the two cases can still be told apart in the message.
+        #: Overhangs that may cross-ligate with a terminal restriction end.
         self._near_terminal: set[str] = set()
         for end in forbidden:
             self._near_terminal |= _confusable_with(end)

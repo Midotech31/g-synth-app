@@ -1,0 +1,553 @@
+{
+  "schema": "g-synth-experimental-record-v1",
+  "source_document_sha256": "2338c8d46ecfd709ce4e1bf8007a752719fbd35795fb356b0dbfa953d187b810",
+  "references": [
+    "Sebastian, S. A.; Co, E. L.; Mehendale, M.; Hameed, M. Insulin Analogs in the Treatment of Type II Diabetes and Future Perspectives. Disease-a-Month 2023, 69 (3), 101417. https://doi.org/10.1016/j.disamonth.2022.101417.",
+    "Sherr, J. L.; Heinemann, L.; Fleming, G. A.; Bergenstal, R. M.; Bruttomesso, D.; Hanaire, H.; Holl, R. W.; Petrie, J. R.; Peters, A. L.; Evans, M. Automated Insulin Delivery: Benefits, Challenges, and Recommendations. A Consensus Report of the Joint Diabetes Technology Working Group of the European Association for the Study of Diabetes and the American Diabetes Association. Diabetes Care 2022, 45 (12), 3058–3074. https://doi.org/10.2337/dci22-0018.",
+    "Zargar, A. A.; Kumar, R.; Kumar, A.; Gangwar, R.; Sharma, A. Centenary of Insulin Therapy: A Review. CDR 2024, 20 (1), e200323214785. https://doi.org/10.2174/1573399819666230320162745.",
+    "Lefever, E.; Vliebergh, J.; Mathieu, C. Improving the Treatment of Patients with Diabetes Using Insulin Analogues: Current Findings and Future Directions. Expert Opinion on Drug Safety 2021, 20 (2), 155–169. https://doi.org/10.1080/14740338.2021.1856813.",
+    "Pharmaceutical Biocatalysis: Fundamentals, Enzyme Inhibitors, and Enzymes in Health and Diseases; Grunwald, P., Ed.; Jenny Stanford series on biocatalysis; Jenny Stanford Publishing: Singapore, 2019.",
+    "Hwang, H.-G.; Kim, K.-J.; Lee, S.-H.; Kim, C.-K.; Min, C.-K.; Yun, J.-M.; Lee, S. U.; Son, Y.-J. Recombinant Glargine Insulin Production Process Using Escherichia Coli. Journal of Microbiology and Biotechnology 2016, 26 (10), 1781–1789. https://doi.org/10.4014/jmb.1602.02053.",
+    "Baeshen, N. A.; Baeshen, M. N.; Sheikh, A.; Bora, R. S.; Ahmed, M. M. M.; Ramadan, H. A. I.; Saini, K. S.; Redwan, E. M. Cell Factories for Insulin Production. Microb Cell Fact 2014, 13 (1), 141. https://doi.org/10.1186/s12934-014-0141-0.",
+    "Kaki, S. B.; Naga Prasad, A.; Chintagunta, A. D.; Dirisala, V. R.; Sampath Kumar, N. S.; Naidu, S. J. K.; Ramesh, B. Industrial Scale Production of Recombinant Human Insulin Using Escherichia Coli BL-21. Iran J Sci Technol Trans Sci 2022, 46 (2), 373–383. https://doi.org/10.1007/s40995-022-01269-7.",
+    "Govender, K.; Naicker, T.; Lin, J.; Baijnath, S.; Chuturgoon, A. A.; Abdul, N. S.; Docrat, T.; Kruger, H. G.; Govender, T. A Novel and More Efficient Biosynthesis Approach for Human Insulin Production in Escherichia Coli (E. Coli). AMB Expr 2020, 10 (1), 43. https://doi.org/10.1186/s13568-020-00969-w.",
+    "McGill, J. B.; Hirsch, I. B.; Parkin, C. G.; Aleppo, G.; Levy, C. J.; Gavin, J. R. The Current and Future Role of Insulin Therapy in the Management of Type 2 Diabetes: A Narrative Review. Diabetes Ther 2024, 15 (5), 1085–1098. https://doi.org/10.1007/s13300-024-01569-8.",
+    "Prasanna Kumar, K. M.; Chowdhury, S.; Bantwal, G.; Unnikrishnan, A. G.; Kalra, S.; Aggarwal, S.; Singh, A. K.; Pandit, K.; Shukla, R.; Vishwanathan, V.; Khobragade, K.; Sarda, P. S. Insulin Access Enhancement in India: Expert Views on Integrating Interchangeable Biosimilar Insulin Glargine. Cureus 2024, 16 (5), e60983. https://doi.org/10.7759/cureus.60983.",
+    "Upadhyay, A.; Manzoor, A.; Bhushan, B.; Tewari, S. Indian Industries and Biologicals. In Quality Control and Regulatory Aspects for Biologicals; CRC Press, 2024; pp 61–81.",
+    "Brooks, S. M.; Alper, H. S. Applications, Challenges, and Needs for Employing Synthetic Biology beyond the Lab. Nat Commun 2021, 12 (1), 1390. https://doi.org/10.1038/s41467-021-21740-0.",
+    "Jingqin, Y.; HUANG, W.; Chao, P.; Li, Z.; Hengliang, W. Applications of Synthetic Biology in Developing Polysaccharide Conjugate Vaccines. Synthetic Biology Journal 2024, 5 (2), 338.",
+    "Naseri, G.; Koffas, M. A. G. Application of Combinatorial Optimization Strategies in Synthetic Biology. Nat Commun 2020, 11 (1), 2446. https://doi.org/10.1038/s41467-020-16175-y.",
+    "Yan, X.; Liu, X.; Zhao, C.; Chen, G.-Q. Applications of Synthetic Biology in Medical and Pharmaceutical Fields. Sig Transduct Target Ther 2023, 8 (1), 199. https://doi.org/10.1038/s41392-023-01440-5.",
+    "Muñoz-Talavera, A.; Gómez-Lim, M. Á.; Salazar-Olivo, L. A.; Reinders, J.; Lim, K.; Escobedo-Moratilla, A.; López-Calleja, A. C.; Islas-Carbajal, M. C.; Rincón-Sánchez, A. R. Expression of the Biologically Active Insulin Analog SCI-57 in Nicotiana Benthamiana. Front. Pharmacol. 2019, 10, 1335. https://doi.org/10.3389/fphar.2019.01335.",
+    "Sarkar, A.; Kim, E. Y.; Jang, T.; Hongdusit, A.; Kim, H.; Choi, J.-M.; Fox, J. M. Microbially Guided Discovery and Biosynthesis of Biologically Active Natural Products. ACS Synth. Biol. 2021, 10 (6), 1505–1519. https://doi.org/10.1021/acssynbio.1c00074.",
+    "Lipinszki, Z.; Vernyik, V.; Farago, N.; Sari, T.; Puskas, L. G.; Blattner, F. R.; Posfai, G.; Gyorfy, Z. Enhancing the Translational Capacity of E. Coli by Resolving the Codon Bias. ACS Synth. Biol. 2018, 7 (11), 2656–2664. https://doi.org/10.1021/acssynbio.8b00332.",
+    "Fu, H.; Liang, Y.; Zhong, X.; Pan, Z.; Huang, L.; Zhang, H.; Xu, Y.; Zhou, W.; Liu, Z. Codon Optimization with Deep Learning to Enhance Protein Expression. Sci Rep 2020, 10 (1), 17617. https://doi.org/10.1038/s41598-020-74091-z.",
+    "Parvathy, S. T.; Udayasuriyan, V.; Bhadana, V. Codon Usage Bias. Mol Biol Rep 2022, 49 (1), 539–565. https://doi.org/10.1007/s11033-021-06749-4.",
+    "Fischer, M. D.; Mgboji, E.; Liu, Z. Pyrite Cloning: A Single Tube and Programmed Reaction Cloning with Restriction Enzymes. Plant Methods 2018, 14 (1), 91. https://doi.org/10.1186/s13007-018-0359-7.",
+    "Liu, C.-J.; Jiang, H.; Wu, L.; Zhu, L.-Y.; Meng, E.; Zhang, D.-Y. OEPR Cloning: An Efficient and Seamless Cloning Strategy for Large- and Multi-Fragments. Sci Rep 2017, 7 (1), 44648. https://doi.org/10.1038/srep44648.",
+    "Marillonnet, S.; Grützner, R. Synthetic DNA Assembly Using Golden Gate Cloning and the Hierarchical Modular Cloning Pipeline. CP Molecular Biology 2020, 130 (1), e115. https://doi.org/10.1002/cpmb.115.",
+    "Yan, P.; Zeng, Y.; Shen, W.; Tuo, D.; Li, X.; Zhou, P. Nimble Cloning: A Simple, Versatile, and Efficient System for Standardized Molecular Cloning. Front. Bioeng. Biotechnol. 2020, 7, 460. https://doi.org/10.3389/fbioe.2019.00460.",
+    "Pörtner, R. Biopharmaceutical Manufacturing: Progress, Trends and Challenges. 2024.",
+    "Rathore, A. S.; Sarin, D. What Should Next-Generation Analytical Platforms for Biopharmaceutical Production Look Like? Trends in Biotechnology 2024, 42 (3), 282–292. https://doi.org/10.1016/j.tibtech.2023.08.008.",
+    "Zhang, J.; Shen, Y.; Dai, Y.; Xu, X.; Su, Y.; Li, J. Cloning, Prokaryotic Expression, Purification, and Functional Verification of the Insulin Gene in Black Carp (Mylopharyngodon Piceus). Aquaculture and Fisheries 2023, 8 (1), 18–25. https://doi.org/10.1016/j.aaf.2021.03.005.",
+    "Godman, B.; Haque, M.; Leong, T.; Allocati, E.; Kumar, S.; Islam, S.; Charan, J.; Akter, F.; Kurdi, A.; Vassalo, C.; Bakar, M. A.; Rahim, S. A.; Sultana, N.; Deeba, F.; Khan, M. A. H.; Alam, A. B. M. M.; Jahan, I.; Kamal, Z. M.; Hasin, H.; Munzur-E-Murshid; Nahar, S.; Haque, M.; Dutta, S.; Abhayanand, J. P.; Kaur, R. J.; Rwegerera, G. M.; Nascimento, R. C. R. M. D.; Dias Godói, I. P.; Irfan, M.; Amu, A. A.; Matowa, P.; Acolatse, J.; Incoom, R.; Sefah, I. A.; Acharya, J.; Opanga, S.; Njeri, L. W.; Kimonge, D.; Kwon, H.-Y.; Bae, S.; Khuan, K. K. P.; Abubakar, A. R.; Sani, I. H.; Khan, T. A.; Hussain, S.; Saleem, Z.; Malande, O. O.; Piloya-Were, T.; Gambogi, R.; Hernandez Ortiz, C.; Alutuli, L.; Kalungia, A. C.; Hoxha, I.; Marković-Peković, V.; Tubic, B.; Petrova, G.; Tachkov, K.; Laius, O.; Harsanyi, A.; Inotai, A.; Jakupi, A.; Henkuzens, S.; Garuoliene, K.; Gulbinovič, J.; Wladysiuk, M.; Rutkowski, J.; Mardare, I.; Fürst, J.; McTaggart, S.; MacBride-Stewart, S.; Pontes, C.; Zara, C.; Tagoe, E. T.; Banzi, R.; Wale, J.; Jakovljevic, M. The Current Situation Regarding Long-Acting Insulin Analogues Including Biosimilars Among African, Asian, European, and South American Countries; Findings and Implications for the Future. Front. Public Health 2021, 9, 671961. https://doi.org/10.3389/fpubh.2021.671961.",
+    "Kang, H.; Wadhwa, M.; Knezevic, I.; Ondari, C.; Simao, M. WHO Guidelines on Biosimilars: Toward Improved Access to Safe and Effective Products. Annals of the New York Academy of Sciences 2023, 1521 (1), 96–103. https://doi.org/10.1111/nyas.14965.",
+    "Weiskorn, J.; Saboo, B.; Danne, T. Current and Future Strategies in Insulin Development and Treatment. Horm Res Paediatr 2024. https://doi.org/10.1159/000540424.",
+    "Boyhan, D.; Daniell, H. Low‐cost Production of Proinsulin in Tobacco and Lettuce Chloroplasts for Injectable or Oral Delivery of Functional Insulin and C‐peptide. Plant Biotechnology Journal 2011, 9 (5), 585–598. https://doi.org/10.1111/j.1467-7652.2010.00582.x.",
+    "Lee, J.; Rha, E.; Yeom, S.-J.; Lee, D.-H.; Choi, E.-S. Generating in Vivo Cloning Vectors for Parallel Cloning of Large Gene Clusters by Homologous Recombination. Plos One 2013. https://doi.org/10.1371/journal.pone.0079979.",
+    "Unger, T.; Jacobovitch, Y.; Dantes, A.; Bernheim, R.; Peleg, Y. Applications of the Restriction Free (RF) Cloning Procedure for Molecular Manipulations and Protein Expression. Journal of Structural Biology 2010. https://doi.org/10.1016/j.jsb.2010.06.016.",
+    "Roush, D.; Iammarino, M.; Chmielowski, R.; Insaidoo, F.; McCoy, M. A.; Ortigosa, A.; Rauscher, M. Insulin Purification—Innovation Continuum via Synthesis of Fundamentals, Technology, and Modeling. Biotech & Bioengineering 2024, 121 (8), 2409–2422. https://doi.org/10.1002/bit.28427.",
+    "Sahoo, A.; Das, P. K.; Dasu, V. V.; Patra, S. Insulin Evolution: A Holistic View of Recombinant Production Advancements. International Journal of Biological Macromolecules 2024, 277, 133951. https://doi.org/10.1016/j.ijbiomac.2024.133951.",
+    "Gibson, D. G.; Young, L.; Chuang, R.-Y.; Venter, J. C.; Hutchison, C. A.; Smith, H. O. Enzymatic Assembly of DNA Molecules up to Several Hundred Kilobases. Nat Methods 2009, 6 (5), 343–345. https://doi.org/10.1038/nmeth.1318.",
+    "Engler, C.; Gruetzner, R.; Kandzia, R.; Marillonnet, S. Golden Gate Shuffling: A One-Pot DNA Shuffling Method Based on Type IIs Restriction Enzymes. PLoS ONE 2009, 4 (5), e5553. https://doi.org/10.1371/journal.pone.0005553.",
+    "Chao, R.; Yuan, Y.; Zhao, H. Recent Advances in DNA Assembly Technologies. FEMS Yeast Res 2014, n/a-n/a. https://doi.org/10.1111/1567-1364.12171.",
+    "Hughes, R. A.; Ellington, A. D. Synthetic DNA Synthesis and Assembly: Putting the Synthetic in Synthetic Biology. Cold Spring Harb Perspect Biol 2017, 9 (1), a023812. https://doi.org/10.1101/cshperspect.a023812.",
+    "Fu, H.; Liang, Y.; Zhong, X.; Pan, Z.; Huang, L.; Zhang, H.; Xu, Y.; Zhou, W.; Liu, Z. Codon Optimization with Deep Learning to Enhance Protein Expression. Sci Rep 2020, 10 (1), 17617. https://doi.org/10.1038/s41598-020-74091-z.",
+    "Pryor, J. M.; Potapov, V.; Kucera, R. B.; Bilotti, K.; Cantor, E. J.; Lohman, G. J. S. Enabling One-Pot Golden Gate Assemblies of Unprecedented Complexity Using Data-Optimized Assembly Design. PLoS ONE 2020, 15 (9), e0238592. https://doi.org/10.1371/journal.pone.0238592.",
+    "Storch, M.; Casini, A.; Mackrow, B.; Fleming, T.; Trewhitt, H.; Ellis, T.; Baldwin, G. S. BASIC: A New Biopart Assembly Standard for Idempotent Cloning Provides Accurate, Single-Tier DNA Assembly for Synthetic Biology. ACS synthetic biology 2015, 4 (7), 781–787.",
+    "Ma, Y.; Zhang, Z.; Jia, B.; Yuan, Y. Automated High-Throughput DNA Synthesis and Assembly. Heliyon 2024, 10 (6), e26967. https://doi.org/10.1016/j.heliyon.2024.e26967.",
+    "Mayer, J. P.; Zhang, F.; DiMarchi, R. D. Insulin Structure and Function. Biopolymers 2007, 88 (5), 687–713. https://doi.org/10.1002/bip.20734.",
+    "Miyazaki, T.; Ishizaki, M.; Dohra, H.; Park, S.; Terzic, A.; Kato, T.; Kohsaka, T.; Park, E. Y. Insulin-like Peptide 3 Expressed in the Silkworm Possesses Intrinsic Disulfide Bonds and Full Biological Activity. Sci Rep 2017, 7 (1), 17339. https://doi.org/10.1038/s41598-017-17707-1.",
+    "Steiner, D. F.; Park, S. ‐Y.; Støy, J.; Philipson, L. H.; Bell, G. I. A Brief Perspective on Insulin Production. Diabetes Obesity Metabolism 2009, 11 (s4), 189–196. https://doi.org/10.1111/j.1463-1326.2009.01106.x.",
+    "Yu, D.; Tan, Y.; Sun, Z.; Sun, X.; Sheng, X.; Zhou, T.; Liu, L.; Mo, Y.; Jiang, B.; Ouyang, N.; Yin, X.; Duan, M.; Yuan, D. In Vitro Seamless Stack Enzymatic Assembly of DNA Molecules Based on a Strategy Involving Splicing of Restriction Sites. Sci Rep 2017, 7 (1), 14261. https://doi.org/10.1038/s41598-017-14496-5.",
+    "Zeng, F.; Zang, J.; Zhang, S.; Hao, Z.; Dong, J.; Lin, Y. AFEAP Cloning: A Precise and Efficient Method for Large DNA Sequence Assembly. BMC Biotechnol 2017, 17 (1), 81. https://doi.org/10.1186/s12896-017-0394-x.",
+    "Zhang, Z.-X.; Nong, F.-T.; Wang, Y.-Z.; Yan, C.-X.; Gu, Y.; Song, P.; Sun, X.-M. Strategies for Efficient Production of Recombinant Proteins in Escherichia Coli: Alleviating the Host Burden and Enhancing Protein Activity. Microb Cell Fact 2022, 21 (1), 191. https://doi.org/10.1186/s12934-022-01917-y.",
+    "Fidan, O.; Secgin, Z. Molecular Farming for the Production of Recombinant Pharmaceutical Proteins in Plants. In Applications of Plant Molecular Farming; Kole, C., Chaurasia, A., Hefferon, K. L., Panigrahi, J., Eds.; Concepts and Strategies in Plant Sciences; Springer Nature Singapore: Singapore, 2024; pp 235–258. https://doi.org/10.1007/978-981-97-0176-6_9.",
+    "Lebendiker, M. Purification and Quality Control of Recombinant Proteins Expressed in Mammalian Cells: A Practical Review. In Recombinant Protein Expression in Mammalian Cells; Hacker, D. L., Ed.; Methods in Molecular Biology; Springer US: New York, NY, 2024; Vol. 2810, pp 329–353. https://doi.org/10.1007/978-1-0716-3878-1_21.",
+    "Luitjens, A.; Van Corven, E. Production and Purification of Recombinant Proteins. In Pharmaceutical Biotechnology; Crommelin, D. J. A., Sindelar, R. D., Meibohm, B., Eds.; Springer International Publishing: Cham, 2024; pp 69–94. https://doi.org/10.1007/978-3-031-30023-3_4.",
+    "Bhoria, S.; Yadav, J.; Yadav, H.; Chaudhary, D.; Jaiwal, R.; Jaiwal, P. K. Current Advances and Future Prospects in Production of Recombinant Insulin and Other Proteins to Treat Diabetes Mellitus. Biotechnol Lett 2022, 44 (5–6), 643–669. https://doi.org/10.1007/s10529-022-03247-w.",
+    "Panda, C.; Kumar, S.; Gupta, S.; Pandey, L. M. Insulin Fibrillation under Physicochemical Parameters of Bioprocessing and Intervention by Peptides and Surface-Active Agents. Critical Reviews in Biotechnology 2024, 1–22. https://doi.org/10.1080/07388551.2024.2387167.",
+    "Schmidt, F. R. Recombinant Expression Systems in the Pharmaceutical Industry. Appl Microbiol Biotechnol 2004, 65 (4), 363–372. https://doi.org/10.1007/s00253-004-1656-9.",
+    "Siew, Y. Y.; Zhang, W. Downstream Processing of Recombinant Human Insulin and Its Analogues Production from E. Coli Inclusion Bodies. Bioresour. Bioprocess. 2021, 8 (1), 65. https://doi.org/10.1186/s40643-021-00419-w."
+  ],
+  "tables": [
+    [
+      [
+        "",
+        "Parameters",
+        "",
+        "Insert A F",
+        "Insert A R",
+        "Insert B F",
+        "Insert B R"
+      ],
+      [
+        "ScanDrop",
+        "Concentration (ng/µL)",
+        "ssDNA",
+        "1702.52",
+        "1709.40",
+        "1688.51",
+        "1703.60"
+      ],
+      [
+        "ScanDrop",
+        "Concentration (ng/µL)",
+        "dsDNA",
+        "830",
+        "830",
+        "1936",
+        "1936"
+      ],
+      [
+        "ScanDrop",
+        "260/280 Ratio",
+        "dsDNA",
+        "1.92",
+        "1.92",
+        "1.88",
+        "1.88"
+      ],
+      [
+        "Bioanalyzer",
+        "Size (bp)",
+        "dsDNA",
+        "129",
+        "129",
+        "173",
+        "173"
+      ],
+      [
+        "Bioanalyzer",
+        "Concentration (ng/µL)",
+        "dsDNA",
+        "1.15",
+        "1.15",
+        "3.39",
+        "3.39"
+      ]
+    ],
+    [
+      [
+        "Primer Name",
+        "Primer Sequence (5’ → 3’)",
+        "Tm (°C)",
+        "Expected Size (bp)",
+        "Source"
+      ],
+      [
+        "SpAB F",
+        "ATGGGTTCTTCTCACCACCACCA",
+        "58.6",
+        "123 for A and 156 for B",
+        "Designed in this study"
+      ],
+      [
+        "SpA R",
+        "TTAGCCGCAGTAGTTTTCCA",
+        "52.3",
+        "123 for A and 156 for B",
+        "Designed in this study"
+      ],
+      [
+        "SpB R",
+        "TTAGCGGCGGGTTTTTGG",
+        "53.8",
+        "123 for A and 156 for B",
+        "Designed in this study"
+      ],
+      [
+        "SeqAB F",
+        "TGCATCCATATGGGTTCTTCTCACCACCACCA",
+        "67.2",
+        "144 for A and 177 for B",
+        "Designed in this study"
+      ],
+      [
+        "SeqA R",
+        "TGCATCCTCGAGTTAGCCGCAGTAGTTTTCCA",
+        "65.8",
+        "144 for A and 177 for B",
+        "Designed in this study"
+      ],
+      [
+        "SeqB R",
+        "TGCATCCTCGAGTTAGCGGCGGGTTTTTGG",
+        "66.4",
+        "144 for A and 177 for B",
+        "Designed in this study"
+      ],
+      [
+        "T7 F",
+        "TAATACGACTCACTATAGGG",
+        "52.0",
+        "307 for A and 340 for B",
+        "Addgene Sequencing Primers"
+      ],
+      [
+        "T7 R",
+        "GCTAGTTATTGCTCAGCGG",
+        "54.3",
+        "307 for A and 340 for B",
+        "Addgene Sequencing Primers"
+      ]
+    ],
+    [
+      [
+        "Sequence Type",
+        "Description",
+        "Sequence"
+      ],
+      [
+        "Peptide Sequences",
+        "Insulin Glargine A-Chain",
+        "GIVEQCCTSICSLYQLENYCG"
+      ],
+      [
+        "Peptide Sequences",
+        "Insulin Glargine B-Chain",
+        "FVNQHLCGSHLVEALYLVCGERGFFYTPKTRR"
+      ],
+      [
+        "Optimized Nucleotide Sequences",
+        "Insulin Glargine A-Chain",
+        "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA"
+      ],
+      [
+        "Optimized Nucleotide Sequences",
+        "Insulin Glargine B-Chain",
+        "TTTGTGAACCAGCATCTGTGCGGCAGCCATCTGGTGGAAGCGCTGTACCTGGTGTGCGGCGAACGCGGCTTTTTTTACACCCCAAAAACCCGCCGCTAA"
+      ]
+    ],
+    [
+      [
+        "Sequence Type",
+        "Nucleotide Sequence",
+        "Accession numbers / Peptide Sequence"
+      ],
+      [
+        "Synthetic Insulin Glargine A-Chain Forward Sequence",
+        "TATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTGGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAAC",
+        "GenBank accession number PQ362993 MGSSHHHHHHSSGLVPRGSGIVEQCCTSICSLYQLENYCG (4352.87 Da)"
+      ],
+      [
+        "Synthetic Insulin Glargine A-Chain Reverse Sequence",
+        "TCGAGTTAGCCGCAGTAGTTTTCCAGCTGGTACAGGCTGCAGATGCTGGTGCAGCACTGTTCCACGATGCCAGAACCACGCGGCACCAGACCAGAAGAGTGGTGGTGGTGGTGGTGAGAAGAACCCA",
+        "GenBank accession number PQ362993 MGSSHHHHHHSSGLVPRGSGIVEQCCTSICSLYQLENYCG (4352.87 Da)"
+      ],
+      [
+        "Synthetic Insulin Glargine B-Chain Forward Sequence",
+        "TATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTTTTGTGAACCAGCATCTGTGCGGCAGCCATCTGGTGGAAGCGCTGTACCTGGTGTGCGGCGAACGCGGCTTTTTTTACACCCCAAAAACCCGCCGCTAAC",
+        "GenBank accession number PQ362994 MGSSHHHHHHSSGLVPRGSFVNQHLCGSHLVEALYLVCGERGFFYTPKTRR (5768.54 Da)"
+      ],
+      [
+        "Synthetic Insulin Glargine B-Chain Reverse Sequence",
+        "TCGAGTTAGCGGCGGGTTTTTGGGGTGTAAAAAAAGCCGCGTTCGCCGCACACCAGGTACAGCGCTTCCACCAGATGGCTGCCGCACAGATGCTGGTTCACAAAAGAACCACGCGGCACCAGACCAGAAGAGTGGTGGTGGTGGTGGTGAGAAGAACCCA",
+        "GenBank accession number PQ362994 MGSSHHHHHHSSGLVPRGSFVNQHLCGSHLVEALYLVCGERGFFYTPKTRR (5768.54 Da)"
+      ]
+    ],
+    [
+      [
+        "Script Detail",
+        "Reagents, Manufacturer",
+        "Nº /V of Primes",
+        "Injection Volume",
+        "Reaction Duration",
+        "Equalize Duration"
+      ],
+      [
+        "INITIALIZATION",
+        "INITIALIZATION",
+        "INITIALIZATION",
+        "INITIALIZATION",
+        "INITIALIZATION",
+        "INITIALIZATION"
+      ],
+      [
+        "3 × Washing",
+        "Anhydrous Acetonitrile, (emp BIOTECH, Berlin, Germany)",
+        "1 / 10",
+        "180 µL",
+        "00:00:02",
+        "00:00:12"
+      ],
+      [
+        "RUN STEPS",
+        "RUN STEPS",
+        "RUN STEPS",
+        "RUN STEPS",
+        "RUN STEPS",
+        "RUN STEPS"
+      ],
+      [
+        "Deblocking 1",
+        "3% Trichloroacetic Acid (TCA) in dichloromethane, (emp BIOTECH, Berlin, Germany)",
+        "1 / 10",
+        "130 µL",
+        "00:00:02",
+        "00:00:59"
+      ],
+      [
+        "Deblocking 2",
+        "3% Trichloroacetic Acid (TCA) in dichloromethane, (emp BIOTECH, Berlin, Germany)",
+        "1 / 10",
+        "100 µL",
+        "00:00:02",
+        "00:00:45"
+      ],
+      [
+        "2 × Washing",
+        "Anhydrous Acetonitrile, emp BIOTECH",
+        "1 / 10",
+        "180 µL",
+        "00:00:02",
+        "00:00:12"
+      ],
+      [
+        "Coupling 1 (2 subinjections)",
+        "Activator reagent, (emp BIOTECH, Berlin, Germany)",
+        "1 / 10",
+        "70 µL",
+        "00:00:02",
+        "00:01:20"
+      ],
+      [
+        "Coupling 1 (2 subinjections)",
+        "DNA Amidites (A, C, G, T), (Biosearch Technologies, Petaluma, CA, USA)",
+        "1 / 10",
+        "50 µL",
+        "00:00:02",
+        "00:01:20"
+      ],
+      [
+        "Coupling 2 (2 subinjections)",
+        "Activator reagent, emp BIOTECH",
+        "1 / 10",
+        "50 µL",
+        "00:00:02",
+        "00:00:40"
+      ],
+      [
+        "Coupling 2 (2 subinjections)",
+        "DNA Amidites (A, C, G, T), (Biosearch Technologies, Petaluma, CA, USA)",
+        "1 / 10",
+        "30 µL",
+        "00:00:02",
+        "00:00:40"
+      ],
+      [
+        "Washing",
+        "Anhydrous Acetonitrile, (emp BIOTECH, Berlin, Germany)",
+        "1 / 10",
+        "180 µL",
+        "00:00:02",
+        "00:00:12"
+      ],
+      [
+        "Capping (2 subinjections)",
+        "Cap A: Acetic anhydride in THF, emp BIOTECH",
+        "1 / 10",
+        "65 µL",
+        "00:00:02",
+        "00:00:50"
+      ],
+      [
+        "Capping (2 subinjections)",
+        "Cap B: Acetic anhydride in THF, emp BIOTECH",
+        "1 / 10",
+        "65 µL",
+        "00:00:02",
+        "00:00:50"
+      ],
+      [
+        "Washing",
+        "Anhydrous Acetonitrile, (emp BIOTECH, Berlin, Germany)",
+        "1 / 10",
+        "180 µL",
+        "00:00:02",
+        "00:00:12"
+      ],
+      [
+        "Oxidation",
+        "Iodine in water/pyridine/THF (0.02 M), emp BIOTECH",
+        "1 / 10",
+        "80 µL",
+        "00:00:02",
+        "00:01:00"
+      ],
+      [
+        "2 × Washing",
+        "Anhydrous Acetonitrile, (emp BIOTECH, Berlin, Germany)",
+        "1 / 10",
+        "180 µL",
+        "00:00:02",
+        "00:00:12"
+      ],
+      [
+        "FINALIZATION",
+        "FINALIZATION",
+        "FINALIZATION",
+        "FINALIZATION",
+        "FINALIZATION",
+        "FINALIZATION"
+      ],
+      [
+        "3 × Deblocking",
+        "3% Trichloroacetic Acid (TCA) in dichloromethane, (emp BIOTECH, Berlin, Germany)",
+        "1 / 10",
+        "150 µL",
+        "00:00:02",
+        "00:00:45"
+      ],
+      [
+        "3 × Washing",
+        "Anhydrous Acetonitrile, (emp BIOTECH, Berlin, Germany)",
+        "1 / 10",
+        "180 µL",
+        "00:00:02",
+        "00:00:12"
+      ],
+      [
+        "DEPROTECTION OUTSIDE THE OLIGOSYNTHESIZER",
+        "DEPROTECTION OUTSIDE THE OLIGOSYNTHESIZER",
+        "DEPROTECTION OUTSIDE THE OLIGOSYNTHESIZER",
+        "DEPROTECTION OUTSIDE THE OLIGOSYNTHESIZER",
+        "DEPROTECTION OUTSIDE THE OLIGOSYNTHESIZER",
+        "DEPROTECTION OUTSIDE THE OLIGOSYNTHESIZER"
+      ],
+      [
+        "Cleavage & Deprotection",
+        "Concentrated ammonia solution, (Sigma-Aldrich, St. Louis, MO, USA)",
+        "/",
+        "1 mL",
+        "18 h at 70°C",
+        "/"
+      ]
+    ]
+  ],
+  "methods": [
+    {
+      "style": "Heading 1",
+      "text": "Methods"
+    },
+    {
+      "style": "Heading 2",
+      "text": "Media, strains and primers"
+    },
+    {
+      "style": "Normal (Web)",
+      "text": "In this study, LB medium (Sigma-Aldrich, St. Louis, MO, USA) and SOC medium (Thermo Fisher Scientific, Waltham, MA, USA) were used for bacterial growth. Competent Escherichia coli DH5α cells (Thermo Fisher Scientific) were employed for transformations."
+    },
+    {
+      "style": "Normal (Web)",
+      "text": "Primers used in the study (Table 2) were synthesized using a MerMade 4 oligonucleotide synthesizer (LGC Biosearch Technologies, Hoddesdon, UK) at the Genomics Technology Platform of ESSBO."
+    },
+    {
+      "style": "Normal",
+      "text": "Table 2: Sets of Primers used in this study"
+    },
+    {
+      "style": "Heading 2",
+      "text": "Construct design and synthesis"
+    },
+    {
+      "style": "Normal",
+      "text": "The inserts for the A and B chains were designed to include an N-terminal His-tag, a start codon (ATG), and a stop codon (TAA). Additionally, overhanging ends compatible with NdeI and XhoI restriction sites were incorporated to facilitate cloning into the predigested pET21a+ plasmid vector. All inserts used in this study are synthesized at the Genomics Technology Platform of ESSBO."
+    },
+    {
+      "style": "Normal",
+      "text": "The amino acid sequences of the A and B chains of insulin glargine were retrieved from the DrugBank database (DrugBank ID: DB00047, DrugBank version 5.1.10) (see table 3)."
+    },
+    {
+      "style": "Normal",
+      "text": "The corresponding nucleotide sequences were derived using the reverse translation tool provided by GenScript. Codon optimization, critical for maximizing expression efficiency in Escherichia coli, was performed using the AI and VectorBuilder codon optimization tool (https://en.vectorbuilder.com/tool/codon-optimization.html). The optimized sequences are presented in Table 3."
+    },
+    {
+      "style": "Normal",
+      "text": "Table 3: Peptide and optimized nucleotide sequences"
+    },
+    {
+      "style": "Normal",
+      "text": "To facilitate cloning, the optimized sequences were further refined by adding linkers to both the 5' and 3' ends, enabling seamless ligation. A start codon (ATG) was introduced at the 5' end to ensure proper initiation of translation. Additionally, a 5' His-tag sequence (MGSSHHHHHHSSGLVPRGS), flanked by flexible linkers, was incorporated to allow efficient protein purification via affinity chromatography. This His-tag includes a thrombin recognition site at its C-terminus, permitting potential cleavage if necessary. A stop codon (TAA) was also added at the 3' end to ensure proper termination of translation. In future constructs, particularly in the A-chain, the thrombin recognition site could be replaced with a TEV protease recognition site to allow complete removal of the His-tag following cleavage."
+    },
+    {
+      "style": "Normal",
+      "text": "Complementary strands were generated using the reverse complement tool in the open-source software Benchling (https://benchling.com/). The sequences were then verified against the original peptide sequences using the Expasy translation tool (https://web.expasy.org/translate/). The final optimized sequences selected for synthesis are listed in Table 4."
+    },
+    {
+      "style": "Normal",
+      "text": "Benchling was employed to analyze these sequences, confirming the absence of restriction enzyme sites that could interfere with cloning, as well as verifying the absence of repetitive or internal complementary sequences that might lead to secondary structure formation. Cloning simulations within Geneious Prime (version 2024.0.7) were conducted to validate the seamless integration of the target sequences, ensuring they were adequately prepared for synthesis."
+    },
+    {
+      "style": "Normal",
+      "text": "Table 4: Final peptide and optimized nucleotide sequences"
+    },
+    {
+      "style": "Heading 2",
+      "text": "Optimized sequences synthesis and purification"
+    },
+    {
+      "style": "Normal",
+      "text": "Single-stranded forward and reverse A and B chain sequences were synthesized using the MerMade 4 oligonucleotide synthesizer (LGC Biosearch Technologies, Hoddesdon, UK), with a Universal Support Column, DMT off (N-iPr), 1000 Å, 1 µmol, MerMade (LGC Biosearch Technologies, Hoddesdon, UK). A specialized protocol optimized for sequences exceeding 130 base pairs was employed (detailed script provided in Table 5)."
+    },
+    {
+      "style": "Normal",
+      "text": "Purification was performed using an optimized butanol precipitation method. Equal volumes of cold butanol (-20°C) were added to the oligonucleotide solution, followed by 30 seconds of vortexing and a 30-minute incubation at -20°C. The mixture was centrifuged at 14,000 rpm for 15 minutes at 4°C to pellet the oligonucleotides. The pellet was washed twice with 1 mL of 70% ethanol (-20°C), with each wash followed by centrifugation at 14,000 rpm for 10 minutes at 4°C. After air-drying the pellet for 10-15 minutes, the oligonucleotides were resuspended in ultrapure sterile water, resulting in high-purity sequences ready for downstream applications."
+    },
+    {
+      "style": "Normal",
+      "text": "The purity and concentration of the synthesized oligonucleotides were verified using a ScanDrop spectrophotometer (Analytik Jena, Germany) and agarose gel electrophoresis (2% agarose gel, Sigma, St. Louis, MO, USA; 100V for 45 minutes). This combination ensured accurate assessment of oligonucleotide quality before proceeding to the hybridization step."
+    },
+    {
+      "style": "Normal",
+      "text": "Table 5. Optimized DNA synthesis script (1 µmol, 1000 Å, DMT-off, MerMade)"
+    },
+    {
+      "style": "Heading 2",
+      "text": "Hybridization of complementary strands"
+    },
+    {
+      "style": "Normal",
+      "text": "Complementary single-stranded purified sequences were hybridized in a 2x Saline-Sodium Citrate (SSC) buffer containing 0.1% SDS. The buffer was prepared by diluting a 20x SSC stock solution, comprising 3 M NaCl (Sigma-Aldrich, St. Louis, MO, USA), 0.3 M sodium citrate (Biochem Chemopharma, France), and 0.1% SDS (Sigma-Aldrich, St. Louis, MO, USA), adjusted to pH 7.0. For each hybridization reaction, 10 µL of each sequence was mixed with 20 µL of the 2x SSC buffer. The mixture was heated to 95°C for 5 minutes to eliminate potential secondary structures or autohybridization within the synthesized sequences, then gradually cooled to room temperature over 30 minutes to allow proper hybridization. Samples were stored at 4°C for short-term storage and at – 80°C for long-term storage."
+    },
+    {
+      "style": "Heading 2",
+      "text": "Post-hybridization quality assessment and sequence verification"
+    },
+    {
+      "style": "Normal",
+      "text": "Following hybridization, the integrity and purity of the obtained double-stranded sequences, specifically the A and B chain inserts, were assessed using the ScanDrop and an Agilent 2100 Bioanalyzer, utilizing the DNA 1000 Kit. This kit is designed for analyzing DNA fragments ranging from 25 to 1,000 base pairs, offering a sizing resolution of ±5% and a quantitation reproducibility with a coefficient of variation (CV) of 15% for sequences between 100 and 500 base pairs. Agarose gel electrophoresis (2% agarose gel, Sigma, St. Louis, MO, USA; 100V for 45 minutes) was also employed to verify the size and purity of the dsDNA."
+    },
+    {
+      "style": "Normal",
+      "text": "Sequencing was performed to confirm the accuracy of the hybridized products and the entirety of the synthesized inserts, using specific primers for the A and B sequences, as detailed in Table 2. The sequencing reactions were conducted using the BigDye™ Terminator v3.1 Cycle Sequencing Kit (Applied Biosystems, Thermo Fisher Scientific, United States). Each reaction included 20 ng of purified dsDNA in a final volume of 20 µL, comprising 2 µL of BigDye Terminator v3.1, 3 µL of 5× Sequencing buffer, and 1 µL of either forward or reverse primer (3 µM). The PCR cycling conditions were as follows: an initial denaturation at 96°C for 60 seconds, followed by 35 cycles of denaturation at 96°C for 10 seconds, annealing at 50°C for 5 seconds, and extension at 60°C for 4 minutes. The BigDye PCR products were purified using ethanol precipitation."
+    },
+    {
+      "style": "Normal",
+      "text": "DNA sequencing was carried out at the Genomics Technology Platform of the Higher School of Biological Sciences of Oran (Oran, Algeria), utilizing an Applied Biosystems 3500 Genetic Analyzer with the POP-7 polymer (Applied Biosystems, Thermo Fisher Scientific, United States) for capillary electrophoresis, in accordance with standard sequencing protocols. Alignments of the obtained forward and reverse sequences were performed using Geneious Prime (version 2024.0.7)."
+    },
+    {
+      "style": "Heading 2",
+      "text": "Vector preparation and ligation"
+    },
+    {
+      "style": "Normal",
+      "text": "The expression vector pET21(a)+ was digested with the NdeI and XhoI restriction enzymes to prepare it for the integration of ready-to-ligate double-stranded A-Chain and B inserts, including sticky ends. The reaction mixture consisted of 1 µg of pET21 DNA (Sigma-Aldrich, St. Louis, MO, USA), 1 µL of NdeI (10 U/µL), 1 µL of XhoI (10 U/µL), and 5 µL of 10× Cutsmart buffer (New England Biolabs, UK), with the final volume adjusted to 50 µL using nuclease-free water. The reaction was incubated at 37°C for 2 hours."
+    },
+    {
+      "style": "Normal",
+      "text": "The digested plasmid was run on a 1% agarose gel and subsequently purified using a DNA purification kit suitable for gel extraction (Invitrogen, Carlsbad, CA, USA). Ligation was performed using a 3:1 molar ratio of insert to vector (calculated using the NEBioCalculator: https://nebiocalculator.neb.com/#!/ligation). The ligation reaction included 50 ng of digested pET21 vector, an appropriate amount of the insert, 1 µL of T4 DNA ligase (400 U/µL, Invitrogen, Carlsbad, CA, USA) and 2 µL of 10× T4 DNA ligase buffer (Invitrogen, Carlsbad, CA, USA), with a total reaction volume of 20 µL. The ligation was incubated at 16°C for 2 hours, followed by an overnight incubation at 4°C."
+    },
+    {
+      "style": "Heading 2",
+      "text": "Post-ligation verification and transformation"
+    },
+    {
+      "style": "Normal",
+      "text": "The ligated products were first analyzed using ScanDrop and a Bioanalyzer to confirm the integrity and size of the constructs. This was followed by agarose gel electrophoresis (2% agarose gel, Sigma, St. Louis, MO, USA; 100V for 45 minutes) to assess purity. Competent E. coli DH5α cells (Thermo Fisher Scientific, Waltham, MA, USA) were transformed with the ligated plasmids using a standard transformation protocol, which included a 50-second heat shock at 42°C, followed by recovery in SOC medium (Thermo Fisher Scientific, Waltham, MA, USA). The transformed cells were then plated on LB agar containing 100 µg/mL ampicillin (Sigma-Aldrich, St. Louis, MO, USA). Colonies were screened by colony PCR using T7 and insert-specific primers to verify the presence of the insert. Positive clones were further subjected to plasmid extraction using a plasmid miniprep kit (Thermo Fisher Scientific, Waltham, MA, USA). The presence of the inserts was subsequently confirmed by sequencing, and in silico analysis was performed using Geneious Prime (version 2024.0.7)."
+    }
+  ],
+  "figure_policy": {
+    "included": {
+      "image1.png": "Figure_S2_WetLab_Oligonucleotide_QC.png",
+      "image2.png": "Figure_S6_Geneious_Duplex_Secondary_Comparison.png",
+      "image3.png": "Figure_S7_Geneious_Annotation_Secondary_Comparison.png",
+      "image4.png": "Figure_S3_Precloning_PCR.png",
+      "image6.png": "Figure_S4_Colony_PCR.png",
+      "image7.png": "Figure_S5_Geneious_Approved_Trace_Secondary_Comparison.png"
+    },
+    "excluded": {
+      "image5.png": "Pre-cloning trace montage excluded from sequencing validation; only A Forward Seq.ab1, A Reverse Seq.ab1, B Forward Seq.ab1 and B Reverse Seq.ab1 are author-approved."
+    }
+  }
+}

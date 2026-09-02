@@ -1,30 +1,14 @@
-"""Generate the G-Synth mark: a double helix with leaves breaking from it.
-
-Drawn rather than traced. The strands are a real sine projection, so the
-crossings land where they should and the ribbon pinches on the diagonal the
-way a helix reads — hand-placed beziers get that subtly wrong, and it shows
-once the mark is used above about 80px.
-
-A whole turn, starting and ending on a crossing, so the two ribbons converge
-at top and bottom instead of splaying apart like open scissors.
-
-The artwork this produces is committed — `frontend/src/components/Logo.tsx`
-and `frontend/public/favicon.svg` — so nothing has to run at build time. This
-file is here so the shapes can be adjusted and regenerated rather than
-hand-edited as path data, which is how vector art quietly rots.
-
-    python tools/generate_logo.py        # writes mark.svg beside this file
-"""
+"""Render the G-Synth double-helix and leaf brand mark."""
 import math
 import pathlib
 
 CX, AMP = 40.0, 21.0
 TOP, BOT = 14.0, 126.0
-TURNS = 1.0                   # start and end on a crossing
+TURNS = 1.0
 W_MAX, W_MIN = 9.0, 2.4
 STEPS = 110
 
-VIEWBOX = (12, 9, 80, 121)   # measured off the art, not guessed
+VIEWBOX = (12, 9, 80, 121)
 
 NAVY, MID, TEAL = "#0b2545", "#1b5c86", "#34a0bd"
 
@@ -43,11 +27,9 @@ def strand(phase: float) -> str:
         x = CX + AMP * math.sin(t)
 
         half = (W_MIN + (W_MAX - W_MIN) * abs(math.sin(t))) / 2
-        # Round the extreme ends off so the ribbon finishes on a soft point.
         half *= 0.42 + 0.58 * min(1.0, f / 0.05, (1 - f) / 0.05)
 
-        # Perpendicular to the tangent: width measured across the ribbon, not
-        # horizontally, or it bulges wherever the curve is steep.
+        # Offset along the normal to preserve ribbon width through curves.
         dx = AMP * math.cos(t) * TURNS * 2 * math.pi
         dy = BOT - TOP
         n = math.hypot(dx, dy)
@@ -61,11 +43,7 @@ def strand(phase: float) -> str:
 
 
 def rungs() -> list[str]:
-    """The base pairs — sparse on purpose.
-
-    One per 36° of phase, and none within half an amplitude of a crossing:
-    packed any tighter they stop reading as rungs and fill the lobe in solid.
-    """
+    """Return legible base-pair rungs away from helix crossings."""
     out = []
     for i in range(1, 10):
         f = i / 10
@@ -131,13 +109,12 @@ svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="12 9 80 121" fill="no
     {chr(10).join("    " + r for r in rungs()).strip()}
   </g>
 
-  <!-- The gene becomes a plant. That is the whole claim of the thing. -->
   <path d="{leaf(*INNER)}" fill="{NAVY}"/>
   <path d="{leaf(*OUTER)}" fill="url(#gsLeaf)"/>
   <path d="{midrib(*OUTER)}" stroke="#ffffff" stroke-width="1.1" opacity="0.26"/>
 </svg>
 '''
 
-out = pathlib.Path(__file__).with_name("mark.svg")   # the reference render
+out = pathlib.Path(__file__).with_name("mark.svg")
 out.write_text(svg)
 print("wrote", out, len(svg), "bytes")

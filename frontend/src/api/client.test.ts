@@ -1,19 +1,4 @@
-/**
- * The client sits between a signed-in user and the engine, and two of its
- * jobs fail invisibly.
- *
- * A page that issues several requests at once meets several 401s at once.
- * Refresh tokens rotate, so a second refresh arrives carrying a token the
- * first has already spent: the server rejects it and the user is signed out
- * in the middle of a design, with nothing in the interface to say why. The
- * client answers concurrent expiries with one shared refresh, and that is
- * checked below by counting what reached the wire — the code reads as if it
- * shares the promise whether it does or not.
- *
- * The other is error text. Engine messages are shown verbatim, so a DRF body
- * has to survive the trip into `ApiError` intact; flattened to
- * "Request failed (400)" it tells nobody which field to fix.
- */
+/** API session refresh, error propagation, and request tests. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ApiError, DesignParams } from "./client";

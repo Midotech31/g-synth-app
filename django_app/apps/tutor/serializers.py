@@ -1,10 +1,4 @@
-"""Request shape for the study assistant.
-
-No biology here — this is a chat proxy, not an engine endpoint. The bounds
-below exist for the same reason every engine-facing serializer has them: a
-field with no maximum is a denial of service waiting to happen, even though
-what sits behind this one is a language model rather than an algorithm.
-"""
+"""Validated request shape for the optional study assistant."""
 from __future__ import annotations
 
 from rest_framework import serializers

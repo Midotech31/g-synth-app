@@ -674,10 +674,7 @@ def clone(
 
     protein = ""
     if orf_start is not None and 0 <= orf_start < len(insert_top):
-        # Read the frame in the *plasmid*, not in the insert. A C-terminal
-        # fusion runs off the end of the insert and into the vector, so
-        # stopping at the insert's last base would report a protein nobody
-        # will ever purify.
+        # Translate through the plasmid to retain downstream vector fusions.
         protein, stop_at = _translate_in_plasmid(plasmid, insert_start + orf_start)
 
         if protein and protein[0] != "M":

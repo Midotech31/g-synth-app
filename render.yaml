@@ -1,35 +1,20 @@
-# Render blueprint for G-Synth: the API and the workspace that talks to it.
-#
-# Two services, because they are two different things. The API is a Python
-# process that has to stay running; the workspace is a folder of files that
-# a CDN serves. Rendering them as one would mean paying for a web process to
-# hand out static assets.
-#
-# Deploy: https://dashboard.render.com/blueprints → New Blueprint Instance
-# Full walkthrough: django_app/DEPLOY.md
-#
-# The only value you supply by hand is DATABASE_URL (`sync: false` below);
-# Render prompts for it during setup. Everything else is wired between the
-# two services here, including the origin each has to trust — get that by
-# hand and the browser blocks every request with a CORS error that names
-# nothing useful.
+# Render blueprint for the G-Synth API and static web application.
+# Deployment guide: django_app/DEPLOY.md
 
 services:
-  # ── The API ──────────────────────────────────────────────────────────
+  # API
   - type: web
     name: gsynth-api
     runtime: python
     plan: free
-    region: frankfurt          # closest free region to Oran
+    region: frankfurt
     rootDir: django_app
     branch: main
 
     buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput"
     startCommand: "python manage.py migrate --noinput && gunicorn config.wsgi:application --workers 2 --access-logfile -"
 
-    # Render restarts the service if this stops returning 2xx. The path is
-    # exempt from SECURE_SSL_REDIRECT (see config/settings/prod.py) so the
-    # plain-HTTP internal probe isn't answered with a redirect.
+    # Internal health endpoint exempt from HTTPS redirection.
     healthCheckPath: /api/health/
 
     envVars:
@@ -39,38 +24,24 @@ services:
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings.prod
 
-      # Render generates a strong random value and keeps it stable across
-      # deploys. config.settings.prod refuses to boot without it.
       - key: DJANGO_SECRET_KEY
         generateValue: true
 
-      # Keep the verified public hostname explicit. Render's Blueprint
-      # `fromService.envVarKey` lookup left this value empty during deployment,
-      # so Django rejected every internal health probe with 400.
       - key: ALLOWED_HOSTS
         value: gsynth-api-c2p9.onrender.com
 
-      # The workspace's verified public origin. The API rejects a browser
-      # request from anywhere else, so this is the one value that decides
-      # whether the app works at all in production.
       - key: CORS_ALLOWED_ORIGINS
         value: https://gsynth-app.onrender.com
 
-      # The optional AI study assistant is deliberately off on the public
-      # deployment. Enable it only after provisioning and approving a private
-      # Ollama-compatible endpoint; all deterministic design tools are
-      # independent of it.
+      # Optional private study assistant; core scientific tools are independent.
       - key: TUTOR_ENABLED
         value: "false"
 
-      # Postgres connection string. Render asks for this when you create the
-      # blueprint: paste the Supabase "Session pooler" URL. Required —
-      # without it the app refuses to start rather than silently falling back
-      # to a SQLite file that every redeploy would erase.
+      # Required PostgreSQL connection string.
       - key: DATABASE_URL
         sync: false
 
-  # ── The workspace ────────────────────────────────────────────────────
+  # Static web application
   - type: web
     name: gsynth-app
     runtime: static
@@ -80,22 +51,16 @@ services:
     buildCommand: "npm ci && npm run build"
     staticPublishPath: ./dist
 
-    # React Router owns the paths. Without this, opening /clone directly —
-    # or reloading anywhere but the root — asks the CDN for a file that was
-    # never built and gets a 404.
+    # Serve client-side routes through the application shell.
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
 
     envVars:
-      # Frontend tooling and jsdom require a current LTS runtime. Pin it so a
-      # Render default change cannot make an otherwise reproducible build fail.
       - key: NODE_VERSION
         value: "22.22.2"
 
-      # Baked in at build time. In development this is empty and Vite proxies
-      # /api to :8000; in production the two services are separate origins,
-      # so the client needs the API's absolute URL.
+      # Public API origin embedded at build time.
       - key: VITE_API_BASE
         value: https://gsynth-api-c2p9.onrender.com

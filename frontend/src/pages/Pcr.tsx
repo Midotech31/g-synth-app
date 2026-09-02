@@ -98,9 +98,7 @@ export default function Pcr() {
   const [result, setResult, clearResult] = useWorkspaceState<PcrResult | null>("pcr.result", null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  // Incremented whenever the inputs change or a new request starts. If an
-  // older request finishes after an edit, its primers belong to the previous
-  // form state and must not be put back on screen.
+  // Discard responses computed from superseded input state.
   const requestVersion = useRef(0);
 
   useEffect(() => {
@@ -160,9 +158,7 @@ export default function Pcr() {
     }
   }
 
-  /** Hand the cut insert to Clone. Both strands travel: the stagger between
-   *  them is the overhang, and Clone measures the ends off them rather than
-   *  trusting what it is told. */
+  /** Transfer both strands and their measured cut geometry to Cloning. */
   function sendToClone() {
     if (!result?.digest) return;
     navigate("/clone", {

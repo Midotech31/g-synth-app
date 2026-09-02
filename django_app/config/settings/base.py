@@ -1,17 +1,4 @@
-"""
-Base Django settings for G-Synth web platform.
-
-Environment-driven — read every deployment-specific value through
-`environ`. dev.py and prod.py inherit from this file and only override
-what actually differs.
-
-IMPORTANT — how defaults work here:
-    Defaults are supplied at the *call site* (`env("X", default=...)`),
-    never on the `Env()` constructor. A schema-level default silently
-    satisfies every later read, which makes it impossible for prod.py to
-    demand a value. Keeping defaults at the call site lets prod.py drop
-    them and fail loudly on a missing env var.
-"""
+"""Environment-driven base settings for the G-Synth API."""
 import sys
 from datetime import timedelta
 from pathlib import Path
@@ -20,19 +7,15 @@ import environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-# gsynth_engine lives at the repository root, one level above django_app, so
-# the API imports the single tested implementation of the design logic.
+# Shared scientific engine
 REPO_ROOT = BASE_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# Only DEBUG carries a schema default — it is not security-sensitive and
-# every settings module overrides it explicitly anyway.
 env = environ.Env(DEBUG=(bool, False))
 environ.Env.read_env(BASE_DIR / ".env")
 
-# The value below is public (it is committed to the repository). It exists
-# so a fresh checkout runs without setup. prod.py refuses to boot with it.
+# Production settings reject this development-only key.
 INSECURE_DEV_SECRET_KEY = "dev-insecure-do-not-use-in-production-32chars-min"
 
 SECRET_KEY = env("DJANGO_SECRET_KEY", default=INSECURE_DEV_SECRET_KEY)
@@ -52,8 +35,7 @@ DJANGO_APPS = [
 ]
 THIRD_PARTY_APPS = [
     "rest_framework",
-    # Persists refresh tokens so they can actually be revoked — required for
-    # logout and for cutting off stolen tokens on password change.
+    # Required for logout and credential-change revocation.
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
 ]
@@ -98,9 +80,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Database — SQLite by default so a fresh checkout runs; prod.py *requires*
-# DATABASE_URL so a misconfigured deploy can never silently land on an
-# ephemeral SQLite file inside a container.
+# Database; production requires DATABASE_URL.
 # ─────────────────────────────────────────────────────────────────────────────
 DATABASES = {
     "default": env.db_url(
@@ -118,10 +98,7 @@ AUTH_PASSWORD_VALIDATORS = [
      "OPTIONS": {"min_length": 8}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-    # Blocks a password derived from the address or name the account already
-    # publishes. Those are the first two guesses anyone makes, and the other
-    # three validators accept them: "merzoug2024" is long enough, is not on
-    # the common-password list, and is not all digits.
+    # Reject passwords similar to the account identity.
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
      "OPTIONS": {"user_attributes": ("email", "name")}},
 ]
@@ -131,8 +108,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # ─────────────────────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        # Subclass of simplejwt's JWTAuthentication that additionally rejects
-        # tokens minted before the user's last credential change.
+        # Reject tokens issued before the latest credential change.
         "apps.accounts.authentication.VersionedJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
@@ -144,15 +120,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
-    # Rate limiting. `register` and `login` are unauthenticated and therefore
-    # the two endpoints an attacker can hammer for free — they get their own
-    # tighter scopes, applied per-view via ScopedRateThrottle.
-    #
-    # `design` covers the endpoints that do real work: optimisation, alignment
-    # and verification are each hundreds of milliseconds to a second or two of
-    # CPU. The default user rate of 2,000/hour would let one signed-in person
-    # ask for more compute than the worker has, which on a single-process
-    # deployment means the app stops answering anyone.
+    # Scoped limits protect authentication and compute-intensive endpoints.
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
@@ -164,9 +132,6 @@ REST_FRAMEWORK = {
         "register": "5/hour",
         "login": "10/min",
         "design": "300/hour",
-        # A model's answer can tie up a worker for tens of seconds — much
-        # longer than any engine call — so it gets its own, tighter scope
-        # rather than sharing "design"'s budget.
         "tutor": "60/hour",
     },
 }
@@ -175,24 +140,20 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
     "ROTATE_REFRESH_TOKENS": True,
-    # Rotation without blacklisting leaves the superseded refresh token valid,
-    # which defeats both logout and password-change revocation.
+    # Revoke superseded refresh tokens after rotation.
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
     "TOKEN_OBTAIN_SERIALIZER": "apps.accounts.serializers.VersionedTokenObtainPairSerializer",
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CORS — the React SPA will call the API from another origin in dev
+# Cross-origin web client
 # ─────────────────────────────────────────────────────────────────────────────
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CORS_ALLOW_CREDENTIALS = True
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Optional private tutor API. The current Learn UI is a deterministic bundled
-# library and does not call this endpoint. Keep the adapter opt-in so a local
-# development server cannot transmit a question merely because Ollama happens
-# to be running on the default port.
+# Optional private study assistant; disabled by default.
 # ─────────────────────────────────────────────────────────────────────────────
 OLLAMA_BASE_URL = env("OLLAMA_BASE_URL", default="http://localhost:11434")
 OLLAMA_MODEL = env("OLLAMA_MODEL", default="llama3.1")

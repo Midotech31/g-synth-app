@@ -29,8 +29,7 @@ describe("segmentColour", () => {
   });
 
   it("falls back to a real colour for a name it does not know", () => {
-    // An undefined fill paints black in SVG, which looks like a part of its
-    // own rather than like one nobody has classified.
+    // Always return an explicit SVG fill.
     expect(segmentColour("unnamed spacer")).toMatch(/^#[0-9a-f]{6}$/);
     expect(segmentColour("")).toMatch(/^#[0-9a-f]{6}$/);
   });

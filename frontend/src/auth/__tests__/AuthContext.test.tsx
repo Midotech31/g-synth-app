@@ -55,8 +55,7 @@ beforeEach(() => {
 
 describe("AuthProvider on boot", () => {
   it("settles as signed out without asking the server who a visitor is", async () => {
-    // Nothing stored means nobody to identify; a request here would answer
-    // 401 and greet a first-time visitor with an expired-session message.
+    // Avoid identity requests when no session is stored.
     serve(() => reply(500, { detail: "should not be called" }));
 
     render(

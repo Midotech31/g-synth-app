@@ -1,5 +1,212 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
+  "de_novo_glargine_workflow": {
+    "interpretation": "Current G-Synth demonstration from amino-acid input; the synonymous DNA sequences differ from the physically synthesized experimental constructs and are therefore validated computationally rather than experimentally.",
+    "A": {
+      "input_peptide": "GIVEQCCTSICSLYQLENYCG",
+      "requested_peptide_role": "auto",
+      "resolved_peptide_role": "mature_peptide",
+      "initiator_methionine_added": false,
+      "expression_host": {
+        "key": "ecoli",
+        "name": "Escherichia coli",
+        "source": "FDA HIVE-CUTs/CoCoPUTs September 2021 snapshot; RefSeq genomic species aggregate; NCBI taxon 562; 130,008,698 CDS; 39,718,304,295 codons"
+      },
+      "back_translated_coding_sequence_5_to_3": "GGCATTGTGGAACAGTGCTGCACCAGCATTTGCAGCCTGTATCAGCTGGAAAACTATTGCGGCTAA",
+      "coding_length_bp": 66,
+      "profile_relative_cai": 1.0,
+      "gc_percent": 50.0,
+      "low_frequency_codons": 0,
+      "translation_preserved": true,
+      "internal_nde_i_or_xho_i_absent": true,
+      "sequence_sha256": "1de59c657918c50b306457e0496169283ffd6efaffe73a1873e3e3f3fbc26507",
+      "experimental_sequence_sha256": "4fea11c5126be6d8fe547c92ea80451cd45079275f917fc7dd7760471befcca2",
+      "synonymous_sequence_differs_from_experimental": true,
+      "experimental_translation_matches_peptide": true,
+      "ssd": {
+        "forward_order_molecule_5_to_3": "TATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTGGCATTGTGGAACAGTGCTGCACCAGCATTTGCAGCCTGTATCAGCTGGAAAACTATTGCGGCTAAC",
+        "reverse_order_molecule_5_to_3": "TCGAGTTAGCCGCAATAGTTTTCCAGCTGATACAGGCTGCAAATGCTGGTGCAGCACTGTTCCACAATGCCAGAACCACGCGGCACCAGACCAGAAGAGTGGTGGTGGTGGTGGTGAGAAGAACCCA",
+        "forward_length_nt": 125,
+        "reverse_length_nt": 127,
+        "duplex_core_exact": true,
+        "left_overhang_5_to_3": "TA",
+        "right_overhang_5_to_3": "TCGA",
+        "translated_cassette": "MGSSHHHHHHSSGLVPRGSGIVEQCCTSICSLYQLENYCG*",
+        "segments": [
+          {
+            "name": "NdeI overhang",
+            "start": 0,
+            "end": 4,
+            "sequence": "TATG"
+          },
+          {
+            "name": "linker",
+            "start": 4,
+            "end": 13,
+            "sequence": "GGTTCTTCT"
+          },
+          {
+            "name": "6\u00d7His tag",
+            "start": 13,
+            "end": 31,
+            "sequence": "CACCACCACCACCACCAC"
+          },
+          {
+            "name": "linker",
+            "start": 31,
+            "end": 40,
+            "sequence": "TCTTCTGGT"
+          },
+          {
+            "name": "Thrombin site",
+            "start": 40,
+            "end": 58,
+            "sequence": "CTGGTGCCGCGTGGTTCT"
+          },
+          {
+            "name": "insert",
+            "start": 58,
+            "end": 124,
+            "sequence": "GGCATTGTGGAACAGTGCTGCACCAGCATTTGCAGCCTGTATCAGCTGGAAAACTATTGCGGCTAA"
+          },
+          {
+            "name": "XhoI overhang",
+            "start": 124,
+            "end": 125,
+            "sequence": "C"
+          }
+        ]
+      },
+      "restriction_cloning": {
+        "vector": "pET-21a(+)",
+        "is_clonable": true,
+        "recombinant_length_bp": 5490,
+        "junctions": [
+          {
+            "name": "vector \u2192 insert",
+            "enzyme": "NdeI",
+            "overhang": "TA",
+            "kind": "5'",
+            "position": 5365,
+            "context": "AGGAGATATACATATGGGTTCTTC",
+            "site_regenerated": true
+          },
+          {
+            "name": "insert \u2192 vector",
+            "enzyme": "XhoI",
+            "overhang": "TCGA",
+            "kind": "5'",
+            "position": 0,
+            "context": "ATTGCGGCTAACTCGAGCACCACC",
+            "site_regenerated": true
+          }
+        ],
+        "translated_product": "MGSSHHHHHHSSGLVPRGSGIVEQCCTSICSLYQLENYCG"
+      }
+    },
+    "B": {
+      "input_peptide": "FVNQHLCGSHLVEALYLVCGERGFFYTPKTRR",
+      "requested_peptide_role": "auto",
+      "resolved_peptide_role": "mature_peptide",
+      "initiator_methionine_added": false,
+      "expression_host": {
+        "key": "ecoli",
+        "name": "Escherichia coli",
+        "source": "FDA HIVE-CUTs/CoCoPUTs September 2021 snapshot; RefSeq genomic species aggregate; NCBI taxon 562; 130,008,698 CDS; 39,718,304,295 codons"
+      },
+      "back_translated_coding_sequence_5_to_3": "TTTGTGAACCAGCATCTGTGTGGCAGCCATTTAGTGGAAGCGCTGTATCTGGTGTGCGGCGAACGCGGCTTCTTTTATACCCCGAAAACCCGCCGCTAA",
+      "coding_length_bp": 99,
+      "profile_relative_cai": 0.944,
+      "gc_percent": 53.5,
+      "low_frequency_codons": 0,
+      "translation_preserved": true,
+      "internal_nde_i_or_xho_i_absent": true,
+      "sequence_sha256": "4671db9b4801988909ef941e770ee46887041d4c7442d886ac863284b194b717",
+      "experimental_sequence_sha256": "d0116e3e3601fa702c7815f2743877f967195da0f5ad95f69dda0839d78a6171",
+      "synonymous_sequence_differs_from_experimental": true,
+      "experimental_translation_matches_peptide": true,
+      "ssd": {
+        "forward_order_molecule_5_to_3": "TATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTTTTGTGAACCAGCATCTGTGTGGCAGCCATTTAGTGGAAGCGCTGTATCTGGTGTGCGGCGAACGCGGCTTCTTTTATACCCCGAAAACCCGCCGCTAAC",
+        "reverse_order_molecule_5_to_3": "TCGAGTTAGCGGCGGGTTTTCGGGGTATAAAAGAAGCCGCGTTCGCCGCACACCAGATACAGCGCTTCCACTAAATGGCTGCCACACAGATGCTGGTTCACAAAAGAACCACGCGGCACCAGACCAGAAGAGTGGTGGTGGTGGTGGTGAGAAGAACCCA",
+        "forward_length_nt": 158,
+        "reverse_length_nt": 160,
+        "duplex_core_exact": true,
+        "left_overhang_5_to_3": "TA",
+        "right_overhang_5_to_3": "TCGA",
+        "translated_cassette": "MGSSHHHHHHSSGLVPRGSFVNQHLCGSHLVEALYLVCGERGFFYTPKTRR*",
+        "segments": [
+          {
+            "name": "NdeI overhang",
+            "start": 0,
+            "end": 4,
+            "sequence": "TATG"
+          },
+          {
+            "name": "linker",
+            "start": 4,
+            "end": 13,
+            "sequence": "GGTTCTTCT"
+          },
+          {
+            "name": "6\u00d7His tag",
+            "start": 13,
+            "end": 31,
+            "sequence": "CACCACCACCACCACCAC"
+          },
+          {
+            "name": "linker",
+            "start": 31,
+            "end": 40,
+            "sequence": "TCTTCTGGT"
+          },
+          {
+            "name": "Thrombin site",
+            "start": 40,
+            "end": 58,
+            "sequence": "CTGGTGCCGCGTGGTTCT"
+          },
+          {
+            "name": "insert",
+            "start": 58,
+            "end": 157,
+            "sequence": "TTTGTGAACCAGCATCTGTGTGGCAGCCATTTAGTGGAAGCGCTGTATCTGGTGTGCGGCGAACGCGGCTTCTTTTATACCCCGAAAACCCGCCGCTAA"
+          },
+          {
+            "name": "XhoI overhang",
+            "start": 157,
+            "end": 158,
+            "sequence": "C"
+          }
+        ]
+      },
+      "restriction_cloning": {
+        "vector": "pET-21a(+)",
+        "is_clonable": true,
+        "recombinant_length_bp": 5523,
+        "junctions": [
+          {
+            "name": "vector \u2192 insert",
+            "enzyme": "NdeI",
+            "overhang": "TA",
+            "kind": "5'",
+            "position": 5365,
+            "context": "AGGAGATATACATATGGGTTCTTC",
+            "site_regenerated": true
+          },
+          {
+            "name": "insert \u2192 vector",
+            "enzyme": "XhoI",
+            "overhang": "TCGA",
+            "kind": "5'",
+            "position": 0,
+            "context": "CCCGCCGCTAACTCGAGCACCACC",
+            "site_regenerated": true
+          }
+        ],
+        "translated_product": "MGSSHHHHHHSSGLVPRGSFVNQHLCGSHLVEALYLVCGERGFFYTPKTRR"
+      }
+    }
+  },
   "peptide_cases": {
     "automatic_mature_glargine_a": {
       "input_protein": "GIVEQCCTSICSLYQLENYCG",

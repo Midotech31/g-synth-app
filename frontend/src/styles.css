@@ -1,11 +1,4 @@
-/*
- * G-Synth workspace styling.
- *
- * A deliberate single-theme design, like the desktop tools this replaces:
- * navy chrome around a warm paper canvas, so the sequence content is the
- * brightest thing on screen. Colour is reserved for meaning — feature
- * types, status, and the one accent that marks the primary action.
- */
+/* G-Synth design tokens and interface styles. */
 
 :root {
   --navy: #0b1f3b;
@@ -15,8 +8,7 @@
   --surface: #ffffff;
   --ink: #16202c;
   --ink-soft: #46586d;
-  /* Small helper text must remain readable on white.  #607185 is 5.00:1
-     against the surface, leaving margin above WCAG AA's 4.5:1 threshold. */
+  /* WCAG AA contrast on white for small text. */
   --muted: #607185;
   --ink-faint: #607185;
   --paper-deep: #efede7;
@@ -33,8 +25,7 @@
   --radius: 8px;
   --rail: 232px;
 
-  /* Noto Sans has clear I/l/1 forms, broad scientific symbols and dependable
-     French coverage. System UI faces remain as portable fallbacks. */
+  /* Scientific symbols and French-language coverage. */
   --sans: "Noto Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 }
@@ -79,10 +70,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
   color: var(--muted);
 }
 
-/* Said to a screen reader, drawn for nobody. Clipping rather than
-   `display: none` or `visibility: hidden`, because both of those take the
-   text out of the accessibility tree as well as off the screen — which is
-   the one thing this class exists not to do. */
+/* Visually hidden content retained in the accessibility tree. */
 .sr-only {
   position: absolute;
   width: 1px; height: 1px;
@@ -93,8 +81,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
   border: 0;
 }
 
-/* Every page puts nine navigation links before its content. Without this a
-   keyboard user tabs through all of them on every single page. */
+/* Keyboard shortcut to the main content. */
 .skip-link {
   position: absolute;
   left: 0.5rem;
@@ -1402,6 +1389,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 .clone-molecule-flow > div.product { border-style: dashed; background: var(--paper-deep); }
 .clone-molecule-flow > div.product.ready { border-style: solid; border-color: #9bc6ab; background: #eef7f1; }
+.clone-flow-operator { color: var(--muted); font-size: 1.25rem; font-weight: 700; }
 .clone-molecule-flow strong { overflow-wrap: anywhere; }
 .clone-molecule-flow small { color: var(--ink-soft); line-height: 1.4; }
 .clone-junction-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
@@ -1443,6 +1431,92 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 .clone-ligation-action > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
 .clone-ligation-action span { color: var(--ink-soft); font-size: 0.76rem; line-height: 1.45; }
+.ligation-outcome {
+  overflow: hidden;
+  border: 1px solid #8dbda0;
+  border-radius: 10px;
+  background: #f4faf6;
+  box-shadow: 0 8px 24px rgb(31 105 68 / 10%);
+}
+.ligation-outcome-verdict {
+  min-height: 88px;
+  padding: 0.95rem 1rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8rem;
+  border-bottom: 1px solid #bad7c4;
+  background: #e6f5eb;
+}
+.ligation-outcome-icon {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #237449;
+  color: #fff;
+}
+.ligation-outcome-verdict > div { min-width: 0; display: flex; flex-direction: column; gap: 0.12rem; }
+.ligation-outcome-verdict strong { color: #174c32; font-size: 1rem; overflow-wrap: anywhere; }
+.ligation-outcome-verdict small { color: #38634d; line-height: 1.4; }
+.ligation-product-flow {
+  padding: 0.85rem 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1.15fr);
+  align-items: center;
+  gap: 0.65rem;
+}
+.ligation-product-flow > div {
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+.ligation-product-flow > b { color: var(--muted); font-size: 1.2rem; }
+.ligation-product-flow span { color: var(--muted); font-size: 0.64rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
+.ligation-product-flow strong { overflow-wrap: anywhere; }
+.ligation-product-flow small { color: var(--ink-soft); }
+.ligation-product-flow > .ligation-product { border-color: #8dbda0; background: #e6f5eb; }
+.ligation-product-flow > .ligation-product strong { color: #174c32; }
+.ligation-junction-closeups {
+  padding: 0 1rem 1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+.ligation-junction-closeup {
+  min-width: 0;
+  padding: 0.72rem;
+  display: grid;
+  grid-template-columns: minmax(8.5rem, 0.35fr) minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: center;
+  border: 1px solid #bad7c4;
+  border-radius: 8px;
+  background: var(--paper);
+}
+.ligation-junction-closeup > div:first-child { display: flex; flex-direction: column; gap: 0.12rem; }
+.ligation-junction-closeup small { color: var(--ink-soft); }
+.ligation-junction-check { display: inline-flex; align-items: center; gap: 0.22rem; color: #1e6843; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }
+.ligation-joined-duplex {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 0.35rem;
+  row-gap: 0.16rem;
+  align-items: center;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+}
+.ligation-joined-duplex code { overflow-x: auto; color: var(--ink); white-space: nowrap; }
+.ligation-joined-duplex mark { padding: 0.08rem 0.12rem; border-radius: 2px; background: #d8eadf; color: #174c32; font-weight: 800; }
 
 /* A single evidence surface for vector, insert and recombinant product. The
    layout keeps the molecule and its inspector visible together so a map click
@@ -1676,6 +1750,13 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .clone-junction-grid { grid-template-columns: 1fr; }
   .clone-ligation-action { align-items: stretch; flex-direction: column; }
   .clone-ligation-action .btn { width: 100%; }
+  .ligation-outcome-verdict { grid-template-columns: auto minmax(0, 1fr); }
+  .ligation-outcome-verdict > .pill { grid-column: 2; justify-self: start; }
+  .ligation-product-flow { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+  .ligation-product-flow > .icon { grid-column: 1 / -1; justify-self: center; transform: rotate(90deg); }
+  .ligation-product-flow > .ligation-product { grid-column: 1 / -1; }
+  .ligation-junction-closeups { grid-template-columns: 1fr; }
+  .ligation-junction-closeup { grid-template-columns: 1fr; }
   .workbench-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .workbench-actions .btn { width: 100%; }
   .workbench-molecules { grid-template-columns: 1fr; }

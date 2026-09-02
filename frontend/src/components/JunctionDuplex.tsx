@@ -12,8 +12,8 @@ import type { JunctionView } from "../api/client";
 
 type Props = {
   view: JunctionView;
-  /** Show the pre-ligation ends as well as the joined result. */
   showEnds?: boolean;
+  ligated?: boolean;
 };
 
 function Strand({ text, span, className }: {
@@ -43,7 +43,7 @@ function Strand({ text, span, className }: {
   );
 }
 
-export default function JunctionDuplex({ view, showEnds = true }: Props) {
+export default function JunctionDuplex({ view, showEnds = true, ligated = false }: Props) {
   const span: [number, number] = [view.overhang_span[0], view.overhang_span[1]];
 
   return (
@@ -86,7 +86,7 @@ export default function JunctionDuplex({ view, showEnds = true }: Props) {
         </>
       )}
 
-      <div className="jx-caption">After ligation</div>
+      <div className="jx-caption">{ligated ? "Ligated junction" : "Expected junction after ligation"}</div>
       <div className="duplex-scroll jx-block">
         <div className="duplex-row">
           <span className="dx-end">5'</span>

@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduce the insulin-glargine A/B designs reported in the manuscript.
-
-The script treats G-Synth as the primary analysis implementation.  It records
-the exact inputs, regenerates both orderable oligos, checks their duplex ends,
-translates the expression cassette, simulates directional cloning into the
-bundled pET-21a(+) reference, and writes a machine-readable evidence file.
-"""
+"""Reproduce the insulin-glargine A/B experimental designs with G-Synth."""
 from __future__ import annotations
 
 import argparse
@@ -24,11 +18,11 @@ CHAINS = {
     "A": {
         "insert": "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA",
         "peptide": "GIVEQCCTSICSLYQLENYCG",
-        "manuscript_forward": (
+        "recorded_forward": (
             "TATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCT"
             "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAAC"
         ),
-        "manuscript_reverse": (
+        "recorded_reverse": (
             "TCGAGTTAGCCGCAGTAGTTTTCCAGCTGGTACAGGCTGCAGATGCTGGTGCAGCACTGTTCCACGATGCC"
             "AGAACCACGCGGCACCAGACCAGAAGAGTGGTGGTGGTGGTGGTGAGAAGAACCCA"
         ),
@@ -39,12 +33,12 @@ CHAINS = {
             "TTTTTTTACACCCCAAAAACCCGCCGCTAA"
         ),
         "peptide": "FVNQHLCGSHLVEALYLVCGERGFFYTPKTRR",
-        "manuscript_forward": (
+        "recorded_forward": (
             "TATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCT"
             "TTTGTGAACCAGCATCTGTGCGGCAGCCATCTGGTGGAAGCGCTGTACCTGGTGTGCGGCGAACGCGGC"
             "TTTTTTTACACCCCAAAAACCCGCCGCTAAC"
         ),
-        "manuscript_reverse": (
+        "recorded_reverse": (
             "TCGAGTTAGCGGCGGGTTTTTGGGGTGTAAAAAAAGCCGCGTTCGCCGCACACCAGGTACAGCGCTTCC"
             "ACCAGATGGCTGCCGCACAGATGCTGGTTCACAAAAGAACCACGCGGCACCAGACCAGAAGAGTGGTGG"
             "TGGTGGTGGTGAGAAGAACCCA"
@@ -59,7 +53,7 @@ def sha256(path: Path) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--manuscript", type=Path, required=True)
+    parser.add_argument("--source-record", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -76,9 +70,9 @@ def main() -> None:
             "cassette": "MGSSHHHHHHSSGLVPRGS",
             "vector": DEFAULT_VECTOR.name,
         },
-        "source_manuscript": {
-            "path": str(args.manuscript),
-            "sha256": sha256(args.manuscript),
+        "experimental_source_record": {
+            "path": str(args.source_record),
+            "sha256": sha256(args.source_record),
         },
         "chains": {},
     }
@@ -90,10 +84,10 @@ def main() -> None:
             is_coding=False,
             cleavage_site="Thrombin",
         )
-        if design.forward != source["manuscript_forward"]:
-            raise AssertionError(f"{name}: G-Synth forward oligo differs from manuscript Table 3")
-        if design.reverse != source["manuscript_reverse"]:
-            raise AssertionError(f"{name}: G-Synth reverse oligo differs from manuscript Table 3")
+        if design.forward != source["recorded_forward"]:
+            raise AssertionError(f"{name}: G-Synth forward oligo differs from the experimental record")
+        if design.reverse != source["recorded_reverse"]:
+            raise AssertionError(f"{name}: G-Synth reverse oligo differs from the experimental record")
 
         bottom_in_top_sense = reverse_complement(design.reverse)
         ndei = ALL_ENZYMES["NdeI"]
@@ -144,8 +138,8 @@ def main() -> None:
                 "coding_sequence": coding_dna,
                 "translated_product": protein,
                 "expected_product_match": protein == expected_protein,
-                "manuscript_table_3_forward_exact_match": True,
-                "manuscript_table_3_reverse_exact_match": True,
+                "experimental_record_forward_exact_match": True,
+                "experimental_record_reverse_exact_match": True,
                 "duplex_core_exact_match": True,
                 "segments": [asdict(segment) for segment in design.segments],
                 "warnings": design.warnings,

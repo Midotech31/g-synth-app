@@ -1,33 +1,4 @@
-"""PCR: primers that amplify a region, and primers that also add ends to it.
-
-Two jobs that look like one. **Conventional PCR** copies a stretch of
-template and gives back exactly what was there. **Cloning PCR** copies the
-same stretch but adds a tail to each primer, so the product carries a
-restriction site at either end that the template never had — which is how a
-gene that has no useful sites of its own becomes an insert.
-
-Three things here are easy to get wrong, and each one costs a failed
-reaction rather than an obviously wrong answer:
-
-**The annealing temperature comes from the annealing part of the primer, not
-from the whole primer.** In the first cycle the tail has nothing to pair
-with — only the 3' portion binds the template — so a Ta set from the full
-oligo's Tm is far too high and nothing amplifies. From the third cycle
-onwards the whole primer matches, which is why a two-stage programme works
-where a single Ta does not. Both figures are reported, and the annealing
-figure is the one Ta is derived from.
-
-**A restriction enzyme cuts poorly at the very end of a fragment.** A site
-placed flush with the terminus is often barely cut at all, so the tail needs
-a few clamp bases outside it. Cutting the product is the step that makes the
-insert, and a digest that quietly fails looks exactly like a ligation that
-quietly fails.
-
-**A site inside the amplified region destroys the insert.** The digest that
-opens the two ends also cuts the middle, and the fragment that goes into the
-ligation is a piece of the gene. That is a problem, not a warning: it blocks
-the whole strategy, and no amount of optimising the reaction rescues it.
-"""
+"""Conventional and restriction-cloning PCR primer design."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -49,39 +20,27 @@ from gsynth_engine.thermo import PCR, melting_temperature
 
 START_CODON_MODES = ("use_site", "keep_both")
 
-#: Primer length bounds for the annealing portion. Below 18 nt specificity
-#: falls away on a genome-sized template; above 30 nt costs synthesis without
-#: buying much Tm.
+#: Annealing-region length bounds.
 MIN_ANNEAL: int = 18
 MAX_ANNEAL: int = 30
 
-#: Tm the annealing portion is aimed at, and how far either side is accepted.
+#: Target melting temperature and accepted deviation.
 TARGET_TM: float = 60.0
 TM_TOLERANCE: float = 3.0
 
-#: How far apart the two primers' Tm may sit before the pair is flagged. Past
-#: this the lower one dictates Ta and the higher one starts mispriming.
+#: Maximum accepted Tm difference within a primer pair.
 MAX_TM_DIFFERENCE: float = 5.0
 
-#: Bases added outside the recognition site so the enzyme has something to
-#: hold. Six is at or above what published cleavage-near-the-end data asks
-#: for across the enzymes offered here; it is applied uniformly rather than
-#: per enzyme, because a clamp that is longer than necessary costs a few
-#: pence of synthesis while one that is too short costs the digest.
+#: Terminal clamp length used for restriction-site cleavage.
 DEFAULT_CLAMP: int = 6
 
-#: The clamp bases themselves. Every prefix through the API's 20-base limit
-#: was checked against every supported recognition sequence in both terminal
-#: orientations.  Unlike the old ``GCTAGC`` seed, it is not itself an NheI /
-#: BmtI site and does not create an overlapping copy at a site boundary.
+#: Validated clamp sequence without supported restriction sites.
 _CLAMP_BASES: str = "GGAGGTGAAGACAGTAACTG"
 
-#: Ta is set this far below the lower annealing Tm — the usual starting
-#: point, and the number a gradient is centred on.
+#: Annealing-temperature offset from the lower primer Tm.
 TA_OFFSET: float = 5.0
 
-#: Ta is never proposed above this: past it Taq's extension slows and most
-#: primers have stopped gaining specificity anyway.
+#: Maximum proposed annealing temperature.
 MAX_TA: float = 72.0
 
 
@@ -94,13 +53,7 @@ def _clamp_of(length: int) -> str:
 
 @dataclass(frozen=True)
 class PcrPrimer:
-    """One PCR primer: what to order, and what it does in the tube.
-
-    `sequence` is the whole oligo 5'→3' — the tail followed by the annealing
-    portion for a forward primer, and likewise for a reverse primer written
-    in its own direction. `anneals` is the part that binds template in cycle
-    one, which is the part `tm` refers to.
-    """
+    """PCR primer with separate 5′ tail and template-annealing region."""
 
     name: str
     sequence: str

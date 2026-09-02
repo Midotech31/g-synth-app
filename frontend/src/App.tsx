@@ -142,18 +142,13 @@ function Protected() {
   return (
     <WorkspaceStateProvider identity={String(user.id)}>
       <div className="shell">
-      {/* First thing in the tab order, so the nine rail links can be passed
-          over. `tabIndex` on the target because following a fragment moves
-          the caret but not focus in several browsers. */}
+      {/* Keyboard users can bypass repeated navigation. */}
       <a className="skip-link" href="#main">
         Skip to main content
       </a>
       <Rail />
       <main className="canvas" id="main" role="main" tabIndex={-1}>
-        {/* Inside the shell, so a page that fails to render leaves the rail
-            standing and the reader can move somewhere else. Keyed on the
-            path: without that, the boundary stays latched after a
-            navigation and the next page renders as the previous error. */}
+        {/* Reset page-level error state after navigation. */}
         <ErrorBoundary key={pathname}>
           <Suspense
             fallback={

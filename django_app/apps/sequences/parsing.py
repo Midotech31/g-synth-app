@@ -263,9 +263,6 @@ def parse_sequence_file(content: bytes | str, filename: str = "") -> ParsedRecor
         topology=_topology(record, source_format),
         gc_content=_gc_content(sequence),
         source_format=source_format,
-        # Asked of the record, not of the format name. The old test for
-        # "genbank" was a correct shortcut when FASTA was the only other
-        # option; a SnapGene file carries features too, and the condition
-        # dropped every one of them without a word.
+        # Preserve annotations from every supported annotated format.
         annotations=_annotations_from(record),
     )

@@ -91,7 +91,7 @@ def build() -> Path:
         doc,
         ["Dimension", "Audited state", "9.9 acceptance criterion", "Required artifact"],
         [
-            ["Software correctness", "1,469 tests pass; working tree not frozen", "Clean-clone tests pass; no critical/high dependency issue; release is immutable", "CI log, SBOM/audit, commit SHA, signed release record"],
+            ["Software correctness", "1,470 tests pass; working tree not frozen", "Clean-clone tests pass; no critical/high dependency issue; release is immutable", "CI log, SBOM/audit, commit SHA, signed release record"],
             ["Construct validation", "Retrospective glargine A/B reconstruction", "At least three preregistered construct classes pass all predefined molecular gates", "Design records, raw files, run log, deviation log"],
             ["Sequencing", "100% consensus coverage and identity; 56.1%/71.2% bidirectional overlap with 100% agreement", "Prospectively span both junctions and confirm every insert position bidirectionally", "Raw AB1/SCF, references, hashes, consensus, overlap and mismatch tables"],
             ["Comparator", "Qualitative comparison", "Blinded, rule-matched G-Synth/Geneious/Benchling/Biopython comparison", "Locked protocol, per-read outputs, adjudication and statistics"],

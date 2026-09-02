@@ -16,6 +16,7 @@ import InsertForm from "../components/InsertForm";
 import ConstructWorkbench from "../components/ConstructWorkbench";
 import CoreWorkflowTrail from "../components/CoreWorkflowTrail";
 import JunctionDuplex from "../components/JunctionDuplex";
+import LigationOutcome from "../components/LigationOutcome";
 import Icon from "../components/Icon";
 import LiveStatus from "../components/LiveStatus";
 import PreflightPanel from "../components/PreflightPanel";
@@ -707,7 +708,7 @@ export default function Clone() {
                   <div className="card-body clone-assembly-body">
                     <div className="clone-molecule-flow" aria-label="Cloning assembly flow">
                       <div><span className="label">Vector</span><strong>{result.vector_name}</strong><small>{result.backbone_length.toLocaleString()} bp after digestion</small></div>
-                      <Icon name="arrowRight" size={20} />
+                      <span className="clone-flow-operator" aria-hidden="true">+</span>
                       <div><span className="label">Insert</span><strong>{params.name || "construct"}</strong><small>{result.insert_length.toLocaleString()} bp duplex</small></div>
                       <Icon name="arrowRight" size={20} />
                       <div className={ligationCommitted ? "product ready" : "product"}><span className="label">Product</span><strong>{ligationCommitted ? `${result.length.toLocaleString()} bp plasmid` : "Waiting for ligation"}</strong><small>{ligationCommitted ? "joined in silico" : "review both junctions first"}</small></div>
@@ -719,7 +720,9 @@ export default function Clone() {
                       </div>
                     ) : (
                       <div className="clone-junction-detail">
-                        {result.junction_views.map((view) => <JunctionDuplex key={view.name} view={view} showEnds />)}
+                        {result.junction_views.map((view) => (
+                          <JunctionDuplex key={view.name} view={view} showEnds ligated={ligationCommitted} />
+                        ))}
                       </div>
                     )}
 
@@ -739,6 +742,18 @@ export default function Clone() {
                     </div>
                   </div>
                 </div>
+
+                {ligationCommitted && result.is_clonable && result.preflight?.can_export !== false && (
+                  <LigationOutcome
+                    vectorName={result.vector_name}
+                    backboneLength={result.backbone_length}
+                    insertName={params.name || "construct"}
+                    insertLength={result.insert_length}
+                    productName={result.name}
+                    productLength={result.length}
+                    junctions={result.junction_views}
+                  />
+                )}
 
                 <ConstructWorkbench
                   result={result}

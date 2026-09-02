@@ -204,8 +204,7 @@ export default function Viewer() {
   }
 
   const topology = project.data?.topology ?? "linear";
-  // Imports, assemblies and cloned plasmids use different payload names.
-  // Keep old saved projects readable, and derive the value as a last resort.
+  // Normalize GC values across supported project payloads.
   const gc = project.data?.gc_content
     ?? project.data?.construct_gc
     ?? project.data?.gc
@@ -213,9 +212,7 @@ export default function Viewer() {
       ? 100 * (project.sequence.match(/[GC]/gi)?.length ?? 0) / project.sequence.length
       : undefined);
 
-  // A saved design carries its whole payload. Showing only the map made the
-  // oligos, the junctions and the protein unrecoverable — the parts someone
-  // reopens a project *for*.
+  // Restore the complete saved design payload.
   const payload = (project.data ?? {}) as Record<string, unknown>;
   const preflight = payload.preflight as PreflightReport | undefined;
   const provenance = (project.provenance ?? payload.provenance) as Partial<Provenance> | undefined;
