@@ -2,11 +2,9 @@
 
 Two sets, for two different questions.
 
-`RESTRICTION_ENZYMES` is what this lab keeps in the freezer — the list a
-cloning pair is *picked* from, and the one whose golden designs are pinned.
-It is typed by hand, which is why the first test here checks it against
-REBASE: a transposed cut position is invisible, and would silently produce
-oligos with the wrong overhang for one enzyme while every other test passes.
+`RESTRICTION_ENZYMES` is the preferred cloning subset whose reference designs
+are pinned. Its curated coordinates are checked against REBASE because a
+transposed cut position would silently produce an incorrect overhang.
 
 `ALL_ENZYMES` answers a different question — "what else cuts here" — and
 breadth is the point. pET-21a has sixty single-cutters; a plasmid map drawn

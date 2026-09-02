@@ -47,7 +47,7 @@ def _workflow() -> None:
     layers = [
         (0.8, 2.35, 11.4, 0.64, "React + TypeScript workspace", "#E8F1F3", teal),
         (0.8, 1.52, 11.4, 0.64, "Django REST API, accounts and project provenance", "#EEF0F8", purple),
-        (0.8, 0.69, 11.4, 0.64, "Dependency-free Python scientific engine + 1,098 tests", "#EAF3EC", green),
+        (0.8, 0.69, 11.4, 0.64, "Dependency-free Python scientific engine + 1,113 tests", "#EAF3EC", green),
     ]
     for x, y, w, h, label, fill, edge in layers:
         ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.06,rounding_size=0.12",

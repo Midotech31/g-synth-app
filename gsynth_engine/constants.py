@@ -72,13 +72,14 @@ RESTRICTION_ENZYMES: Final[dict[str, dict[str, object]]] = {
 }
 
 
-#: Every enzyme G-Synth can reason about: the curated set above, plus the
-#: wide REBASE table. Use this to ask "what cuts here". `RESTRICTION_ENZYMES`
-#: remains the list a user *picks a cloning pair from* — a dropdown of a
-#: hundred names is worse than nineteen, and this lab uses nineteen.
+#: Every enzyme G-Synth can reason about. The curated definitions set the
+#: preferred names and verified cut coordinates while retaining all aliases.
 ALL_ENZYMES: Final[dict[str, dict[str, object]]] = {
     **{name: dict(spec) for name, spec in ENZYME_TABLE.items()},
-    **RESTRICTION_ENZYMES,          # the curated entries win on name collision
+    **{
+        name: {**ENZYME_TABLE.get(name, {}), **spec}
+        for name, spec in RESTRICTION_ENZYMES.items()
+    },
 }
 
 

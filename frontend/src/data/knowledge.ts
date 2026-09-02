@@ -101,8 +101,10 @@ export const KNOWLEDGE_TOPICS: KnowledgeTopic[] = [
     category: "Design",
     summary: "Synonymous codons can be changed for a host while the translated amino-acid sequence remains fixed.",
     essentials: [
-      "Back-translate each amino acid with synonymous codons from the selected host table and verify the translated product afterwards.",
-      "Bundled species profiles are reproducible defaults. A strain-, tissue- or cell-line-specific claim should use a documented reference-gene set from that expression context.",
+      "G-Synth bundles 15 bacterial, yeast, mammalian, insect and plant profiles. Each contains 64 raw codon counts, taxon, dataset, sample size, GC and a versioned checksum from the September 2021 FDA HIVE-CUTs/CoCoPUTs snapshot.",
+      "Raw counts are normalized within each synonymous amino-acid family. Back-translation uses the selected profile, then translation is verified against the input protein as a hard invariant.",
+      "The bundled result is labelled profile-relative CAI because a species-wide genome table is not the highly expressed reference set required by the strict CAI definition.",
+      "A strain-, tissue- or cell-line-specific claim should override the profile with a documented set of highly expressed, frame-complete reference CDSs from that expression context.",
       "Optimisation is multi-constraint: codon usage, GC content, repeats, homopolymers, unwanted restriction sites and difficult motifs can conflict.",
       "Preserving protein sequence is a hard gate. A favourable codon score is not allowed to hide an amino-acid change.",
       "Codon usage is only one determinant of expression; mRNA structure, transcription, toxicity, folding and culture conditions also matter.",
@@ -110,7 +112,12 @@ export const KNOWLEDGE_TOPICS: KnowledgeTopic[] = [
     caution: "A computationally optimised coding sequence does not guarantee soluble or functional protein expression.",
     route: "/optimise", routeLabel: "Open Optimise",
     keywords: ["codon", "cai", "optimise", "optimize", "expression", "host", "synonymous", "gc", "protein"],
-    references: [{ label: "Kazusa codon-usage database", url: "https://www.kazusa.or.jp/codon/" }],
+    references: [
+      { label: "FDA HIVE-CUTs / CoCoPUTs", url: "https://dnahive.fda.gov/dna.cgi?cmd=cuts_main" },
+      { label: "Athey et al. 2017 — HIVE-CUTs", url: "https://doi.org/10.1186/s12859-017-1793-7" },
+      { label: "Ranaghan et al. 2021 — algorithm comparison", url: "https://doi.org/10.1186/s12915-021-00968-8" },
+      { label: "Subramanian et al. 2022 — Codon Statistics Database", url: "https://doi.org/10.1093/molbev/msac157" },
+    ],
   },
   {
     id: "construct-annotation",

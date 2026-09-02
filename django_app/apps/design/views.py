@@ -40,6 +40,9 @@ from gsynth_engine.cloning import (
     open_reading_frames,
 )
 from gsynth_engine.codon import (
+    CODON_DATA_SHA256,
+    CODON_DATA_URL,
+    CODON_DATA_VERSION,
     DEFAULT_HOST,
     TABLES,
     Constraints,
@@ -642,6 +645,10 @@ def _optimisation_payload(result: OptimisationResult) -> dict:
         "problems": result.problems,
         "warnings": result.warnings,
         "is_clean": result.is_clean,
+        "input_protein": result.input_protein,
+        "protein_context": result.protein_context,
+        "initiator_methionine_added": result.initiator_methionine_added,
+        "recommended_design_is_coding": result.recommended_design_is_coding,
     }
 
 
@@ -653,11 +660,27 @@ class CodonHostCatalogueView(APIView):
     def get(self, request):
         return Response({
             "default": DEFAULT_HOST,
+            "dataset": {
+                "name": "FDA HIVE-CUTs / CoCoPUTs",
+                "release": CODON_DATA_VERSION,
+                "url": CODON_DATA_URL,
+                "sha256": CODON_DATA_SHA256,
+            },
             "hosts": [
                 {
                     "key": key,
                     "name": table.name,
                     "source": table.source,
+                    "category": table.category,
+                    "taxon_id": table.taxon_id,
+                    "dataset": table.dataset,
+                    "dataset_release": table.dataset_release,
+                    "data_scope": table.data_scope,
+                    "coding_sequences": table.coding_sequences,
+                    "codon_count": table.codon_count,
+                    "gc_percent": table.gc_percent,
+                    "source_url": table.source_url,
+                    "metric_label": "Profile-relative CAI",
                 }
                 for key, table in TABLES.items()
             ],
@@ -706,6 +729,7 @@ class OptimiseView(APIView):
                 table=table,
                 constraints=constraints,
                 is_protein=data["is_protein"],
+                protein_context=data["protein_context"],
                 keep_stop=data["keep_stop"],
             )
         except SequenceError as error:
@@ -714,6 +738,12 @@ class OptimiseView(APIView):
         payload = _optimisation_payload(result)
         payload["host"] = data["host"] if not data["reference_genes"] else "custom"
         payload["table_source"] = table.source
+        payload["metric_label"] = (
+            "CAI (custom reference set)"
+            if data["reference_genes"]
+            else "Profile-relative CAI"
+        )
+        payload["expression_yield_predicted"] = False
         payload["preflight"] = optimisation_preflight(result).to_dict()
         payload["provenance"] = _provenance(
             "codon_optimisation", data, result.sequence,
@@ -1220,10 +1250,12 @@ class EnzymeCatalogueView(APIView):
         enzymes = []
         for name in sorted(ALL_ENZYMES):
             sequence, kind = overhang(name)
+            aliases = list(ALL_ENZYMES[name].get("aliases", ()))
             enzymes.append({
                 "name": name,
+                "aliases": aliases,
                 "recognition": ALL_ENZYMES[name]["recognition"],
-                # The set this lab keeps in the freezer, offered first.
+                # Preferred cloning enzymes are offered first.
                 "common": name in RESTRICTION_ENZYMES,
                 "overhang": sequence,
                 "overhang_type": kind,
@@ -1234,6 +1266,8 @@ class EnzymeCatalogueView(APIView):
             })
         return Response({
             "enzymes": enzymes,
+            "canonical_geometries": len(enzymes),
+            "selectable_names": sum(1 + len(enzyme["aliases"]) for enzyme in enzymes),
             "common_pairs": list(COMMON_ENZYME_PAIRS),
             "cleavage_sites": [
                 {"name": name, "sequence": CLEAVAGE_SITES[name]} for name in CLEAVAGE_NAMES

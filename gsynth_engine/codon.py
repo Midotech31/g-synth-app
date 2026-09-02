@@ -1,10 +1,11 @@
 """Codon optimisation — rewriting a gene for the host that will express it.
 
 A bacteriocin gene taken from *Enterococcus* and put into *E. coli* is the
-same protein and a different translation problem: the codons the donor
-prefers are often the ones the host reads slowly, and a run of them stalls
-the ribosome. This module rewrites the coding sequence for the host while
-leaving the protein untouched.
+same protein and a different translation context: synonymous-codon usage
+differs across taxa, while translation also depends on tRNA supply, transcript
+structure, growth state and the protein itself. This module rewrites the
+coding sequence against a documented host profile while leaving the protein
+untouched; it does not claim to predict expression yield.
 
 **The protein is the invariant.** Every path through this module ends with
 the same amino-acid sequence it started with, and a test asserts it for
@@ -20,25 +21,32 @@ hard constraints by swapping synonymous codons, iterating until nothing
 changes. Anything that cannot be repaired is reported rather than left for
 the user to discover at the bench.
 
-**About the usage tables.** The default *E. coli* profile uses the Sharp & Li
-(1987) relative-adaptiveness index against which CAI was defined. Additional
-host profiles are normalized from species-wide coding-sequence frequencies in
-the Kazusa Codon Usage Database. Codon *choice* depends on the ranking within
-each amino-acid family, whereas an absolute CAI depends on the exact reference
-set. For quantitative reporting or a specific strain, tissue or cell line,
-build a table from the relevant expressed genes with `build_table` and report
-that reference set.
+**About the usage tables.** Bundled profiles are normalized from a committed
+FDA HIVE-CUTs/CoCoPUTs snapshot. RefSeq genomic species aggregates are used
+when present, with a disclosed GenBank fallback for organisms absent from that
+RefSeq snapshot. Codon *choice* depends on the ranking within each amino-acid
+family. A strict CAI, however, is defined against an explicit set of highly
+expressed genes; a species-wide score is therefore labelled profile-relative,
+not an expression-yield prediction. For a particular strain, tissue or cell
+line, build a table from the relevant expressed genes with `build_table` and
+report that reference set.
 
 References
     Sharp P.M. & Li W.-H. (1987) Nucleic Acids Res 15:1281–1295.
+    Athey J. et al. (2017) BMC Bioinformatics 18:391 — HIVE-CUTs.
+    Alexaki A. et al. (2019) J Mol Biol 431:2434–2441 — CoCoPUTs.
+    Ranaghan M.J. et al. (2021) BMC Biology 19:36 — algorithm inequality.
     Welch M. et al. (2009) PLoS ONE 4:e7002 — expression vs codon choice.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import random
 from collections import Counter
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from gsynth_engine.cloning import translate
 from gsynth_engine.constants import ALL_ENZYMES
@@ -77,6 +85,15 @@ class CodonTable:
     name: str
     source: str
     weights: dict[str, float]
+    category: str = "Custom"
+    taxon_id: int | None = None
+    dataset: str = "User reference set"
+    dataset_release: str = ""
+    data_scope: str = "user-supplied reference genes"
+    coding_sequences: int | None = None
+    codon_count: int | None = None
+    gc_percent: float | None = None
+    source_url: str = ""
 
     def weight(self, codon: str) -> float:
         """Relative adaptiveness, 0–1: this codon's usage against the most
@@ -100,170 +117,83 @@ class CodonTable:
         return sorted(SYNONYMS[amino_acid], key=self.weight, reverse=True)
 
     def rare(self, threshold: float = 0.1) -> frozenset[str]:
-        """Codons the host reads slowly enough to stall on a run of them."""
+        """Codons below a stated relative-frequency threshold.
+
+        Low genomic frequency is not itself a measurement of elongation rate.
+        """
         return frozenset(
             codon for codon, w in self.weights.items()
             if w < threshold and len(SYNONYMS[_CODON_TO_AA[codon]]) > 1
         )
 
 
-#: Sharp & Li (1987) relative adaptiveness for *E. coli*. See the module
-#: docstring on when to replace this with a table of your own.
-ECOLI = CodonTable(
-    name="Escherichia coli (high-expression reference)",
-    source="Sharp & Li (1987), relative adaptiveness index",
-    weights={
-        "TTT": 0.296, "TTC": 1.000, "TTA": 0.020, "TTG": 0.020,
-        "CTT": 0.042, "CTC": 0.037, "CTA": 0.007, "CTG": 1.000,
-        "ATT": 0.185, "ATC": 1.000, "ATA": 0.003, "ATG": 1.000,
-        "GTT": 1.000, "GTC": 0.066, "GTA": 0.495, "GTG": 0.221,
-        "TCT": 1.000, "TCC": 0.744, "TCA": 0.077, "TCG": 0.017,
-        "AGT": 0.085, "AGC": 0.410,
-        "CCT": 0.070, "CCC": 0.012, "CCA": 0.135, "CCG": 1.000,
-        "ACT": 0.965, "ACC": 1.000, "ACA": 0.076, "ACG": 0.099,
-        "GCT": 1.000, "GCC": 0.122, "GCA": 0.586, "GCG": 0.424,
-        "TAT": 0.239, "TAC": 1.000,
-        "CAT": 0.291, "CAC": 1.000,
-        "CAA": 0.124, "CAG": 1.000,
-        "AAT": 0.051, "AAC": 1.000,
-        "AAA": 1.000, "AAG": 0.253,
-        "GAT": 0.434, "GAC": 1.000,
-        "GAA": 1.000, "GAG": 0.259,
-        "TGT": 0.500, "TGC": 1.000, "TGG": 1.000,
-        "CGT": 1.000, "CGC": 0.356, "CGA": 0.004, "CGG": 0.004,
-        "AGA": 0.004, "AGG": 0.002,
-        "GGT": 1.000, "GGC": 0.724, "GGA": 0.010, "GGG": 0.019,
-        # Stops are never chosen by the optimiser; TAA is the E. coli default.
-        "TAA": 1.000, "TAG": 0.100, "TGA": 0.200,
-    },
-)
+_SNAPSHOT_PATH = Path(__file__).with_name("data") / "codon_usage_hive_2021.json"
+_SNAPSHOT_BYTES = _SNAPSHOT_PATH.read_bytes()
+CODON_DATA_SHA256 = hashlib.sha256(_SNAPSHOT_BYTES).hexdigest()
+_SNAPSHOT = json.loads(_SNAPSHOT_BYTES)
+CODON_DATA_VERSION = str(_SNAPSHOT["source"]["release"])
+CODON_DATA_URL = str(_SNAPSHOT["source"]["url"])
 
 
-_FREQUENCY_ORDER = (
-    "TTT", "TCT", "TAT", "TGT", "TTC", "TCC", "TAC", "TGC",
-    "TTA", "TCA", "TAA", "TGA", "TTG", "TCG", "TAG", "TGG",
-    "CTT", "CCT", "CAT", "CGT", "CTC", "CCC", "CAC", "CGC",
-    "CTA", "CCA", "CAA", "CGA", "CTG", "CCG", "CAG", "CGG",
-    "ATT", "ACT", "AAT", "AGT", "ATC", "ACC", "AAC", "AGC",
-    "ATA", "ACA", "AAA", "AGA", "ATG", "ACG", "AAG", "AGG",
-    "GTT", "GCT", "GAT", "GGT", "GTC", "GCC", "GAC", "GGC",
-    "GTA", "GCA", "GAA", "GGA", "GTG", "GCG", "GAG", "GGG",
-)
-
-
-def _table_from_frequencies(
-    name: str, source: str, frequencies_per_thousand: str,
-) -> CodonTable:
-    """Normalize species-wide frequencies within each synonymous family."""
-    values = tuple(float(value) for value in frequencies_per_thousand.split())
-    if len(values) != len(_FREQUENCY_ORDER):
-        raise ValueError(f"Expected 64 codon frequencies for {name}, got {len(values)}")
-    frequencies = dict(zip(_FREQUENCY_ORDER, values, strict=True))
+def _weights_from_counts(name: str, counts: dict[str, int]) -> dict[str, float]:
+    """Normalize raw codon counts within each synonymous family."""
+    expected = set(_CODON_TO_AA)
+    if set(counts) != expected:
+        missing = ", ".join(sorted(expected - set(counts))) or "none"
+        extra = ", ".join(sorted(set(counts) - expected)) or "none"
+        raise ValueError(f"Invalid codon table for {name}: missing={missing}; extra={extra}")
     weights: dict[str, float] = {}
     for codons in SYNONYMS.values():
-        maximum = max(frequencies[codon] for codon in codons)
+        maximum = max(counts[codon] for codon in codons)
+        if maximum <= 0:
+            raise ValueError(f"No observations for one synonymous family in {name}")
         for codon in codons:
-            weights[codon] = frequencies[codon] / maximum if maximum else 0.0
-    return CodonTable(name=name, source=source, weights=weights)
+            weights[codon] = counts[codon] / maximum
+    return weights
 
 
-S_CEREVISIAE = _table_from_frequencies(
-    "Saccharomyces cerevisiae",
-    "Kazusa Codon Usage Database, NCBI taxon 4932; 14,411 CDS (GenBank release 160)",
-    """
-    26.1 23.5 18.8 8.1  18.4 14.2 14.8 4.8  26.2 18.7 1.1 0.7  27.2 8.6 0.5 10.4
-    12.3 13.5 13.6 6.4  5.4 6.8 7.8 2.6  13.4 18.3 27.3 3.0  10.5 5.3 12.1 1.7
-    30.1 20.3 35.7 14.2  17.2 12.7 24.8 9.8  17.8 17.8 41.9 21.3  20.9 8.0 30.8 9.2
-    22.1 21.2 37.6 23.9  11.8 12.6 20.2 9.8  11.8 16.2 45.6 10.9  10.8 6.2 19.2 6.0
-    """,
-)
+def _load_bundled_tables() -> dict[str, CodonTable]:
+    release = CODON_DATA_VERSION
+    tables: dict[str, CodonTable] = {}
+    for key, record in _SNAPSHOT["hosts"].items():
+        counts = {codon: int(value) for codon, value in record["counts"].items()}
+        dataset = str(record["dataset"])
+        taxon_id = int(record["taxon_id"])
+        coding_sequences = int(record["coding_sequences"])
+        codon_count = int(record["codon_count"])
+        source = (
+            f"FDA HIVE-CUTs/CoCoPUTs {release} snapshot; {dataset} genomic "
+            f"species aggregate; NCBI taxon {taxon_id}; "
+            f"{coding_sequences:,} CDS; {codon_count:,} codons"
+        )
+        tables[key] = CodonTable(
+            name=str(record["name"]),
+            source=source,
+            weights=_weights_from_counts(str(record["name"]), counts),
+            category=str(record["category"]),
+            taxon_id=taxon_id,
+            dataset=dataset,
+            dataset_release=release,
+            data_scope=str(record["data_scope"]),
+            coding_sequences=coding_sequences,
+            codon_count=codon_count,
+            gc_percent=float(record["gc_percent"]),
+            source_url=CODON_DATA_URL,
+        )
+    return tables
 
-K_PHAFFII = _table_from_frequencies(
-    "Komagataella phaffii (Pichia pastoris)",
-    "Kazusa Codon Usage Database, NCBI taxon 4922; 137 CDS (GenBank release 160)",
-    """
-    24.1 24.4 16.0 7.7  20.6 16.5 18.1 4.4  15.6 15.2 0.8 0.3  31.5 7.4 0.5 10.3
-    15.9 15.8 11.8 6.9  7.6 6.8 9.1 2.2  10.7 18.9 25.4 4.2  14.9 3.9 16.3 1.9
-    31.1 22.4 25.1 12.5  19.4 14.5 26.7 7.6  11.1 13.8 29.9 20.1  18.7 6.0 33.8 6.6
-    26.9 28.9 35.7 25.5  14.9 16.6 25.9 8.1  9.9 15.1 37.4 19.1  12.3 3.9 29.0 5.8
-    """,
-)
-
-B_SUBTILIS = _table_from_frequencies(
-    "Bacillus subtilis",
-    "Kazusa Codon Usage Database, NCBI taxon 1423; 2,529 CDS (GenBank release 160)",
-    """
-    30.0 12.7 23.3 3.6  14.3 8.3 12.6 4.3  19.8 14.6 1.9 0.8  15.8 6.5 0.5 10.7
-    21.8 10.6 15.7 7.2  10.7 3.5 7.5 8.2  4.9 7.1 20.4 4.3  23.0 16.3 18.5 6.9
-    36.2 8.7 22.9 6.8  27.2 9.0 17.8 14.4  9.8 21.6 48.4 10.5  26.3 14.9 20.8 4.1
-    18.6 18.6 33.2 13.0  17.3 16.5 19.0 23.3  13.0 21.1 48.1 21.8  17.3 19.8 22.6 11.2
-    """,
-)
-
-H_SAPIENS = _table_from_frequencies(
-    "Homo sapiens",
-    "Kazusa Codon Usage Database, NCBI taxon 9606; 93,487 CDS (GenBank release 160)",
-    """
-    17.6 15.2 12.2 10.6  20.3 17.7 15.3 12.6  7.7 12.2 1.0 1.6  12.9 4.4 0.8 13.2
-    13.2 17.5 10.9 4.5  19.6 19.8 15.1 10.4  7.2 16.9 12.3 6.2  39.6 6.9 34.2 11.4
-    16.0 13.1 17.0 12.1  20.8 18.9 19.1 19.5  7.5 15.1 24.4 12.2  22.0 6.1 31.9 12.0
-    11.0 18.4 21.8 10.8  14.5 27.7 25.1 22.2  7.1 15.8 29.0 16.5  28.1 7.4 39.6 16.5
-    """,
-)
-
-C_GRISEUS = _table_from_frequencies(
-    "Cricetulus griseus (species-level CHO reference)",
-    "Kazusa Codon Usage Database, NCBI taxon 10029; 331 CDS (GenBank release 160)",
-    """
-    19.6 16.0 13.1 9.1  22.0 16.5 16.4 10.3  6.4 10.3 0.6 1.2  14.1 3.4 0.5 13.1
-    13.2 16.7 10.2 5.6  18.4 17.0 12.9 9.3  7.6 15.6 10.3 7.2  38.8 4.3 33.4 10.1
-    17.4 14.1 17.4 11.4  24.8 20.3 21.2 16.4  6.9 15.7 24.6 10.1  23.0 4.5 38.4 10.2
-    11.6 22.4 24.6 12.8  15.7 25.9 28.1 21.3  7.8 16.3 28.4 15.8  30.1 5.0 41.1 13.4
-    """,
-)
-
-S_FRUGIPERDA = _table_from_frequencies(
-    "Spodoptera frugiperda (Sf9/Sf21 species reference)",
-    "Kazusa Codon Usage Database, NCBI taxon 7108; 142 CDS (GenBank release 160)",
-    """
-    10.1 10.7 10.0 8.5  27.5 12.6 24.4 13.2  7.7 10.6 2.3 0.7  15.9 7.7 0.7 13.3
-    9.6 14.1 8.7 15.3  17.0 13.7 15.6 15.6  7.0 13.6 16.1 5.4  24.1 7.8 21.6 3.7
-    15.5 14.3 13.4 8.4  28.3 17.2 28.8 11.1  8.3 12.3 26.8 12.1  27.0 9.4 49.2 12.6
-    14.1 24.6 21.9 21.5  20.1 20.8 33.4 19.6  12.0 12.8 27.6 17.8  24.1 12.4 33.1 4.6
-    """,
-)
-
-N_BENTHAMIANA = _table_from_frequencies(
-    "Nicotiana benthamiana",
-    "Kazusa Codon Usage Database, NCBI taxon 4100; 100 CDS (GenBank release 160)",
-    """
-    23.7 22.3 15.8 9.2  17.6 10.4 12.8 7.2  12.8 17.2 0.7 0.9  24.3 5.6 0.7 12.4
-    24.9 18.9 12.9 7.7  12.5 6.4 8.2 4.2  9.2 16.8 18.1 5.8  11.9 6.5 17.0 5.3
-    26.7 17.4 29.1 14.7  13.9 10.1 16.9 10.7  12.1 15.2 29.0 15.8  23.9 5.4 38.0 13.0
-    26.1 33.2 38.5 24.3  10.6 12.6 16.4 11.4  9.9 23.5 35.2 22.5  15.6 6.5 30.9 11.1
-    """,
-)
 
 DEFAULT_HOST = "ecoli"
-TABLES: dict[str, CodonTable] = {
-    DEFAULT_HOST: ECOLI,
-    "s_cerevisiae": S_CEREVISIAE,
-    "k_phaffii": K_PHAFFII,
-    "b_subtilis": B_SUBTILIS,
-    "h_sapiens": H_SAPIENS,
-    "c_griseus": C_GRISEUS,
-    "s_frugiperda": S_FRUGIPERDA,
-    "n_benthamiana": N_BENTHAMIANA,
-}
+TABLES = _load_bundled_tables()
+ECOLI = TABLES[DEFAULT_HOST]
 
 
 def build_table(sequences: list[str], *, name: str, source: str = "") -> CodonTable:
     """Derive a usage table from reference genes.
 
-    This is the honest way to get a CAI: measure it against genes you chose,
-    usually the host's most highly expressed ones. A table built from twenty
-    ribosomal protein genes says something specific; a table shipped with a
-    program says only that somebody once measured something.
+    A strict CAI is measured against genes chosen a priori, usually a set of
+    highly expressed genes from the exact expression context. The caller must
+    document that selection; G-Synth records its size and source.
 
     Raises:
         SequenceError: if no complete codon could be read.
@@ -283,7 +213,14 @@ def build_table(sequences: list[str], *, name: str, source: str = "") -> CodonTa
         top = max((counts[c] for c in codons), default=0)
         for codon in codons:
             weights[codon] = (counts[codon] / top) if top else 0.0
-    return CodonTable(name=name, source=source or "user reference set", weights=weights)
+    return CodonTable(
+        name=name,
+        source=source or "user reference set",
+        weights=weights,
+        category="Custom",
+        coding_sequences=len(sequences),
+        codon_count=sum(counts.values()),
+    )
 
 
 def codon_adaptation_index(sequence: str, table: CodonTable = ECOLI) -> float:
@@ -368,9 +305,15 @@ class OptimisationResult:
     #: Breaches that stop the construct working: a forbidden restriction site
     #: makes it unclonable. Empty means the gene can be built and cut.
     problems: list[str] = field(default_factory=list)
-    #: Breaches that cost quality rather than viability — a rare codon left
+    #: Breaches that cost profile fit rather than viability — a rare codon left
     #: in to satisfy the GC window, a repeat a supplier may charge more for.
     warnings: list[str] = field(default_factory=list)
+    #: Protein exactly as supplied before any expression-start handling.
+    input_protein: str | None = None
+    #: Resolved biological role for a peptide input.
+    protein_context: str | None = None
+    initiator_methionine_added: bool = False
+    recommended_design_is_coding: bool = False
 
     @property
     def length(self) -> int:
@@ -380,8 +323,8 @@ class OptimisationResult:
     def is_clean(self) -> bool:
         """No *problems* — the gene can be built and cut as asked.
 
-        Warnings are not consulted. A rare codon left in to satisfy a GC
-        window costs a little translation speed and leaves this True; a
+        Warnings are not consulted. A low-frequency codon left in to satisfy a
+        GC window reduces profile fit and leaves this True; a
         restriction site that survived optimisation blocks the strategy and
         makes it False. Severity follows consequence.
         """
@@ -421,7 +364,7 @@ def _violations(
         rare = table.rare(constraints.rare_threshold)
         for i in range(0, len(sequence) - 2, 3):
             if sequence[i : i + 3] in rare:
-                found.append((i, 3, f"rare codon {sequence[i:i + 3]}"))
+                found.append((i, 3, f"low-frequency codon {sequence[i:i + 3]}"))
 
     found.extend(_repeats(sequence, constraints.max_repeat))
     return found
@@ -596,6 +539,7 @@ def optimise(
     table: CodonTable = ECOLI,
     constraints: Constraints | None = None,
     is_protein: bool = False,
+    protein_context: str = "auto",
     keep_stop: bool = True,
     seed: int = 0,
     max_rounds: int = 40,
@@ -604,6 +548,11 @@ def optimise(
 
     Args:
         sequence: a coding sequence, or a protein when `is_protein` is set.
+        protein_context: peptide-to-DNA start logic. ``auto`` treats an
+            N-terminal methionine as a complete ORF and a peptide without one
+            as a mature peptide. ``mature_peptide`` always preserves the
+            supplied peptide exactly. ``complete_orf`` adds one initiator
+            methionine only when it is absent.
         table: the host's codon usage. Build your own with `build_table` when
             the CAI matters.
         constraints: what the result must avoid. Pass the cloning enzymes in
@@ -627,16 +576,40 @@ def optimise(
     constraints = constraints or Constraints()
     rng = random.Random(seed)
 
+    input_protein: str | None = None
+    resolved_context: str | None = None
+    initiator_methionine_added = False
+    recommended_design_is_coding = False
+
     if is_protein:
-        protein = "".join(sequence.split()).upper()
-        invalid = sorted(set(protein) - set(SYNONYMS) - {"*"})
+        input_protein = "".join(sequence.split()).upper().rstrip("*")
+        invalid = sorted(set(input_protein) - set(SYNONYMS))
         if invalid:
             raise SequenceError(
                 "The protein contains characters that are not amino acids: "
                 + ", ".join(invalid)
             )
-        if not protein:
+        if not input_protein:
             raise SequenceError("The protein is empty.")
+
+        allowed_contexts = {"auto", "mature_peptide", "complete_orf"}
+        if protein_context not in allowed_contexts:
+            raise SequenceError(
+                "Protein context must be auto, mature_peptide or complete_orf."
+            )
+        resolved_context = protein_context
+        if resolved_context == "auto":
+            resolved_context = (
+                "complete_orf"
+                if input_protein.startswith("M")
+                else "mature_peptide"
+            )
+
+        protein = input_protein
+        if resolved_context == "complete_orf" and not protein.startswith("M"):
+            protein = "M" + protein
+            initiator_methionine_added = True
+        recommended_design_is_coding = resolved_context == "complete_orf"
         original = None
     else:
         original = validate_dna(sequence, field="sequence")
@@ -687,8 +660,8 @@ def optimise(
         optimised += table.best("*")
 
     # Severity is about consequence, not about which constraint was set. A
-    # site left in cannot be cloned around; a rare codon left in costs a
-    # little translation speed, and calling both "problems" would train the
+    # site left in cannot be cloned around; a low-frequency codon left in
+    # reduces profile fit, and calling both "problems" would train the
     # user to ignore the word.
     warnings: list[str] = []
     blocking = tuple(constraints.motifs())
@@ -736,6 +709,10 @@ def optimise(
         changed_codons=changed,
         problems=problems,
         warnings=warnings,
+        input_protein=input_protein,
+        protein_context=resolved_context,
+        initiator_methionine_added=initiator_methionine_added,
+        recommended_design_is_coding=recommended_design_is_coding,
     )
 
 

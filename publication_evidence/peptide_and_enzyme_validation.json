@@ -1,0 +1,156 @@
+{
+  "schema_version": "1.0",
+  "peptide_cases": {
+    "automatic_mature_glargine_a": {
+      "input_protein": "GIVEQCCTSICSLYQLENYCG",
+      "requested_context": "auto",
+      "resolved_context": "mature_peptide",
+      "encoded_protein": "GIVEQCCTSICSLYQLENYCG",
+      "initiator_methionine_added": false,
+      "recommended_design_is_coding": false,
+      "translation_matches_encoded_protein": true,
+      "dna_length_nt": 63,
+      "dna_sha256": "0470e1bcd91745ded0eb826d5d11225e67b03d2d915d3a9e52b644ec2a4aecae"
+    },
+    "automatic_existing_methionine": {
+      "input_protein": "MGIVEQ",
+      "requested_context": "auto",
+      "resolved_context": "complete_orf",
+      "encoded_protein": "MGIVEQ",
+      "initiator_methionine_added": false,
+      "recommended_design_is_coding": true,
+      "translation_matches_encoded_protein": true,
+      "dna_length_nt": 18,
+      "dna_sha256": "d6f537a0e542b1a74a687daa05b84064a8834c7339236de99c44b713db23a8bc"
+    },
+    "explicit_complete_orf_without_methionine": {
+      "input_protein": "GIVEQ",
+      "requested_context": "complete_orf",
+      "resolved_context": "complete_orf",
+      "encoded_protein": "MGIVEQ",
+      "initiator_methionine_added": true,
+      "recommended_design_is_coding": true,
+      "translation_matches_encoded_protein": true,
+      "dna_length_nt": 18,
+      "dna_sha256": "d6f537a0e542b1a74a687daa05b84064a8834c7339236de99c44b713db23a8bc"
+    },
+    "explicit_mature_peptide_starting_with_methionine": {
+      "input_protein": "MGIVEQ",
+      "requested_context": "mature_peptide",
+      "resolved_context": "mature_peptide",
+      "encoded_protein": "MGIVEQ",
+      "initiator_methionine_added": false,
+      "recommended_design_is_coding": false,
+      "translation_matches_encoded_protein": true,
+      "dna_length_nt": 18,
+      "dna_sha256": "d6f537a0e542b1a74a687daa05b84064a8834c7339236de99c44b713db23a8bc"
+    }
+  },
+  "host_back_translation": {
+    "host_count": 15,
+    "all_preserve_mature_glargine_a": true,
+    "all_avoid_artificial_atg": true,
+    "hosts": {
+      "ecoli": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "0470e1bcd91745ded0eb826d5d11225e67b03d2d915d3a9e52b644ec2a4aecae"
+      },
+      "b_subtilis": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "149836096e5969423cb39f86fe27681095cf576466b691acbf1d4b3bbe3efa49"
+      },
+      "p_putida": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "4649d5bd6be4d37b1e6012d2b1771802fbcbf6343bf33dddfec007b793a497ac"
+      },
+      "l_lactis": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "ff2d397f0a979709f6b8d7351d1bfcfdacdcb298a7dca69291d96ded7c058547"
+      },
+      "c_glutamicum": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "cfbc8fb2daf46d68295a03c10a5e3e7f4ff8e1edf915338a4596482b93e00f2f"
+      },
+      "s_coelicolor": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "4ca6094196d2fbe6e9bac49a391ea6f4bab4c6f03b70e3cd35c1fad7a49e6980"
+      },
+      "s_cerevisiae": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "fd3efc3955dbab01e1e8afd67f6c57ad094b9525ba4270e401aefa3ff1cd761e"
+      },
+      "k_phaffii": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "fd3efc3955dbab01e1e8afd67f6c57ad094b9525ba4270e401aefa3ff1cd761e"
+      },
+      "k_lactis": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "fd3efc3955dbab01e1e8afd67f6c57ad094b9525ba4270e401aefa3ff1cd761e"
+      },
+      "y_lipolytica": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "8d48d298a12ff91ae72ecdbd66273f1eaf9845a0e639ff43ec1f3c9d91107da8"
+      },
+      "h_sapiens": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "d74f95053add69eb9cd05a8d35ccd7d681884b6910bbd151801f287d0ccba323"
+      },
+      "c_griseus": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "0519f372b87df79ed673d3d1abb6bdb4b304b95d9d52a042ba25c5aa4aa476c7"
+      },
+      "s_frugiperda": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "30b8d2c08eb60a670c43b9c309720d7945f56008c71df0c4667191f092faae5b"
+      },
+      "d_melanogaster": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "4649d5bd6be4d37b1e6012d2b1771802fbcbf6343bf33dddfec007b793a497ac"
+      },
+      "n_benthamiana": {
+        "translated_protein": "GIVEQCCTSICSLYQLENYCG",
+        "protein_preserved": true,
+        "starts_with_atg": false,
+        "dna_sha256": "86019aff7f984ec5b7341ef1433b894dfbe9dfa643eb42c180bdc30467f68af0"
+      }
+    }
+  },
+  "restriction_catalogue": {
+    "canonical_cut_geometries": 109,
+    "selectable_names": 289,
+    "alias_names_are_unique": true,
+    "hindiii": {
+      "recognition": "AAGCTT",
+      "overhang": "AGCT",
+      "polarity": "5'"
+    }
+  }
+}

@@ -57,7 +57,11 @@ class TestEnzymeCatalogue:
         assert by_name["HindIII"]["recognition"] == "AAGCTT"
         assert by_name["HindIII"]["overhang"] == "AGCT"
         assert by_name["HindIII"]["overhang_type"] == "5'"
+        assert "AsuNHI" in by_name["NheI"]["aliases"]
+        assert "AvrII" in by_name["BlnI"]["aliases"]
         assert set(by_name) == set(ALL_ENZYMES)
+        assert data["canonical_geometries"] == 109
+        assert data["selectable_names"] == 289
 
     def test_offers_cleavage_sites_and_common_pairs(self, api_client):
         data = api_client.get(reverse("design-enzymes")).data
@@ -709,7 +713,8 @@ class TestOptimiseEndpoint:
         response = auth_client.post(reverse(self.url_name), {"sequence": self.DONOR})
         data = response.data
         assert data["cai_after"] > data["cai_before"]
-        assert data["rare_codons_after"] < data["rare_codons_before"]
+        assert data["rare_codons_after"] <= data["rare_codons_before"]
+        assert data["changed_codons"] > 0
         assert 40 <= data["gc_after"] <= 60
 
     def test_host_catalogue_is_public_and_identifies_sources(self, api_client):
@@ -717,8 +722,23 @@ class TestOptimiseEndpoint:
         assert response.status_code == 200
         assert response.data["default"] == "ecoli"
         hosts = {host["key"]: host for host in response.data["hosts"]}
-        assert {"ecoli", "s_cerevisiae", "k_phaffii", "b_subtilis"} <= set(hosts)
-        assert "Kazusa Codon Usage Database" in hosts["s_cerevisiae"]["source"]
+        assert len(hosts) == 15
+        assert {
+            "ecoli", "b_subtilis", "p_putida", "l_lactis",
+            "c_glutamicum", "s_coelicolor", "s_cerevisiae", "k_phaffii",
+            "k_lactis", "y_lipolytica", "h_sapiens", "c_griseus",
+            "s_frugiperda", "d_melanogaster", "n_benthamiana",
+        } == set(hosts)
+        assert response.data["dataset"]["name"] == "FDA HIVE-CUTs / CoCoPUTs"
+        assert response.data["dataset"]["release"] == "September 2021"
+        assert len(response.data["dataset"]["sha256"]) == 64
+        yeast = hosts["s_cerevisiae"]
+        assert yeast["dataset"] == "RefSeq"
+        assert yeast["taxon_id"] == 4932
+        assert yeast["coding_sequences"] == 5983
+        assert yeast["codon_count"] == 2929341
+        assert yeast["metric_label"] == "Profile-relative CAI"
+        assert "HIVE-CUTs/CoCoPUTs" in yeast["source"]
 
     def test_selected_host_controls_the_usage_table(self, auth_client):
         response = auth_client.post(reverse(self.url_name), {
@@ -734,6 +754,23 @@ class TestOptimiseEndpoint:
         assert response.data["host"] == "s_cerevisiae"
         assert response.data["table"] == "Saccharomyces cerevisiae"
         assert response.data["protein"] == "MLRLKFY"
+        assert response.data["metric_label"] == "Profile-relative CAI"
+        assert response.data["expression_yield_predicted"] is False
+
+    def test_custom_reference_genes_are_identified_as_context_specific(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": "MLRLKFY",
+            "is_protein": True,
+            "keep_stop": False,
+            "reference_genes": ["ATGCTGCGTCTGAAA", "ATGCTGCGTCTGAAG"],
+            "gc_min": 10,
+            "gc_max": 90,
+            "avoid_rare": False,
+        }, format="json")
+        assert response.status_code == 200, response.data
+        assert response.data["host"] == "custom"
+        assert response.data["metric_label"] == "CAI (custom reference set)"
+        assert response.data["expression_yield_predicted"] is False
 
     def test_unknown_host_is_refused(self, auth_client):
         response = auth_client.post(reverse(self.url_name), {
@@ -762,6 +799,38 @@ class TestOptimiseEndpoint:
         assert response.data["protein"] == self.DONOR_PROTEIN
         assert response.data["cai_before"] is None
         assert response.data["length"] == 3 * len(self.DONOR_PROTEIN) + 3
+        assert response.data["protein_context"] == "complete_orf"
+        assert response.data["initiator_methionine_added"] is False
+        assert response.data["recommended_design_is_coding"] is True
+
+    def test_a_mature_peptide_is_preserved_without_an_artificial_methionine(
+        self, auth_client,
+    ):
+        peptide = "GIVEQCCTSICSLYQLENYCG"
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": peptide,
+            "is_protein": True,
+            "protein_context": "auto",
+            "keep_stop": False,
+        }, format="json")
+        assert response.status_code == 200, response.data
+        assert response.data["input_protein"] == peptide
+        assert response.data["protein"] == peptide
+        assert response.data["protein_context"] == "mature_peptide"
+        assert response.data["initiator_methionine_added"] is False
+        assert response.data["recommended_design_is_coding"] is False
+
+    def test_a_complete_orf_can_receive_one_initiator_methionine(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": "GIVEQ",
+            "is_protein": True,
+            "protein_context": "complete_orf",
+            "keep_stop": False,
+        }, format="json")
+        assert response.status_code == 200, response.data
+        assert response.data["protein"] == "MGIVEQ"
+        assert response.data["initiator_methionine_added"] is True
+        assert response.data["recommended_design_is_coding"] is True
 
     def test_the_stop_codon_can_be_left_off(self, auth_client):
         """For an insert going into a C-terminal vector tag."""

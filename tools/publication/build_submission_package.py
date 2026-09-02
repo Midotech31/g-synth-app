@@ -92,7 +92,7 @@ def build_acs_cover_letter() -> Path:
     add_bullets(
         doc,
         [
-            "1,449 automated tests passed: 1,098 scientific-engine, 262 API and 89 interface tests.",
+            "1,469 automated tests passed: 1,113 scientific-engine, 265 API and 91 interface tests.",
             "G-Synth exactly regenerated all four archived insulin glargine A/B synthesis oligonucleotides.",
             "The staged Design→Hybridization→Cloning workflow exposed the NdeI/XhoI cohesive ends, verified both vector–insert junctions and withheld product analyses until explicit in-silico ligation.",
             "Simulated NdeI/XhoI cloning produced coherent 5,490-bp and 5,523-bp pET-21a(+) constructs with preserved reading frames.",
@@ -140,7 +140,7 @@ def build_oup_cover_letter() -> Path:
     add_bullets(
         doc,
         [
-            "1,449 automated tests passed across the dependency-free scientific engine, Django API and React interface.",
+            "1,469 automated tests passed across the dependency-free scientific engine, Django API and React interface.",
             "All four archived insulin glargine A/B synthesis molecules were regenerated exactly from the preserved coding inputs.",
             "NdeI/XhoI hybridization and directional ligation produced coherent 5,490-bp and 5,523-bp recombinant pET-21a(+) constructs.",
             "The four author-designated chromatograms assembled to 100%-covered, 100%-identical A/B consensus sequences, with 100% agreement wherever forward and reverse reads overlapped.",
@@ -183,7 +183,7 @@ def build_readiness_report() -> Path:
         [
             ["G-Synth scientific project", "9.1 / 10", "Strong molecular invariants, staged hybridization and ligation, open engine and deep automated testing"],
             ["Final manuscript", "8.8 / 10", "Defensible novelty position, evidence-rich case study, candid limitations and workflow screenshots"],
-            ["Reproducibility", "9.4 / 10", "Executable analyses, checksums, machine-readable evidence and 1,449 passing tests"],
+            ["Reproducibility", "9.4 / 10", "Executable analyses, checksums, machine-readable evidence and 1,469 passing tests"],
             ["Experimental validation maturity", "7.4 / 10", "Real bench-derived case study with complete consensus identity; full bidirectional and junction coverage remains prospective"],
             ["ACS Synthetic Biology fit", "8.6 / 10", "Direct match to DNA assembly, nucleic-acid engineering and computational design scope"],
             ["Submission readiness today", "7.9 / 10", "Complete file package prepared; release DOI, author approvals and prospective sequencing remain open"],
@@ -349,6 +349,8 @@ def copy_submission_materials() -> None:
     evidence_files = [
         ROOT / "publication_evidence/glargine_ab_design_and_cloning.json",
         ROOT / "publication_evidence/sequencing_validation/glargine_approved_trace_validation.json",
+        ROOT / "publication_evidence/codon_host_profile_validation.json",
+        ROOT / "publication_evidence/peptide_and_enzyme_validation.json",
     ]
     for source in evidence_files:
         copy_file(source, PACKAGE / "05_machine_readable_data" / source.name)
@@ -371,6 +373,9 @@ def copy_submission_materials() -> None:
     for source in [
         ROOT / "tools/publication/design_glargine_case_study.py",
         ROOT / "tools/publication/validate_insulin_correct_traces.py",
+        ROOT / "tools/publication/validate_codon_host_profiles.py",
+        ROOT / "tools/publication/validate_peptide_and_enzyme_logic.py",
+        ROOT / "tools/update_hive_codon_tables.py",
         ROOT / "tools/publication/primary_acs_draft_record.json",
     ]:
         copy_file(source, PACKAGE / "06_reproducibility" / source.name)
@@ -385,7 +390,7 @@ def copy_submission_materials() -> None:
         "target_journal": "Journal-neutral master; ACS Synthetic Biology and Synthetic Biology (OUP) variants included",
         "target_article_type": "Full software research article",
         "source_version": "1.0.0",
-        "test_counts": {"engine": 1098, "api": 262, "interface": 89, "total": 1449},
+        "test_counts": {"engine": 1113, "api": 265, "interface": 91, "total": 1469},
         "case_study": {
             "A_recombinant_bp": design["chains"]["A"]["cloning"]["recombinant_length_bp"],
             "B_recombinant_bp": design["chains"]["B"]["cloning"]["recombinant_length_bp"],
@@ -501,6 +506,8 @@ python tools/publication/validate_insulin_correct_traces.py \
   --root "$DATA_ROOT" \
   --trace-dir "$DATA_ROOT/validated_traces" \
   --output-dir publication_evidence/sequencing_validation
+python tools/publication/validate_codon_host_profiles.py
+python tools/publication/validate_peptide_and_enzyme_logic.py
 python -m pytest gsynth_engine/tests -q
 (cd django_app && python -m pytest tests -q)
 (cd frontend && npm test)

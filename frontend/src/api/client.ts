@@ -407,6 +407,7 @@ export type OptimiseParams = {
   sequence: string;
   host?: string;
   is_protein?: boolean;
+  protein_context?: "auto" | "mature_peptide" | "complete_orf";
   keep_stop?: boolean;
   avoid_enzymes?: string[];
   avoid_motifs?: string[];
@@ -423,9 +424,15 @@ export type OptimiseResult = {
   sequence: string;
   host: string;
   protein: string;
+  input_protein: string | null;
+  protein_context: "mature_peptide" | "complete_orf" | null;
+  initiator_methionine_added: boolean;
+  recommended_design_is_coding: boolean;
   length: number;
   table: string;
   table_source: string;
+  metric_label: string;
+  expression_yield_predicted: false;
   /** Null when the input was a protein: there was no gene to measure. */
   cai_before: number | null;
   cai_after: number;
@@ -447,6 +454,27 @@ export type CodonHost = {
   key: string;
   name: string;
   source: string;
+  category: string;
+  taxon_id: number;
+  dataset: "RefSeq" | "GenBank";
+  dataset_release: string;
+  data_scope: string;
+  coding_sequences: number;
+  codon_count: number;
+  gc_percent: number;
+  source_url: string;
+  metric_label: string;
+};
+
+export type CodonHostCatalogue = {
+  hosts: CodonHost[];
+  default: string;
+  dataset: {
+    name: string;
+    release: string;
+    url: string;
+    sha256: string;
+  };
 };
 
 export type LigationReaction = {
@@ -754,18 +782,19 @@ export type CloneParams = DesignParams & {
 
 export type Enzyme = {
   name: string;
+  aliases?: string[];
   recognition: string;
   overhang: string;
   overhang_type: string;
   supplies_start_codon: boolean;
-  /** In this lab's freezer. The pickers offer these first; the rest are
-   *  still selectable, because an enzyme in your vector's polylinker
-   *  should not need a code change to be usable. */
+  /** Preferred in cloning selectors; all supported geometries remain available. */
   common: boolean;
 };
 
 export type Catalogue = {
   enzymes: Enzyme[];
+  canonical_geometries?: number;
+  selectable_names?: number;
   common_pairs: string[];
   cleavage_sites: { name: string; sequence: string }[];
 };
@@ -1017,7 +1046,7 @@ export const api = {
   catalogue: () => request<Catalogue>("/api/design/enzymes/", { auth: false }),
 
   codonHosts: () =>
-    request<{ hosts: CodonHost[]; default: string }>(
+    request<CodonHostCatalogue>(
       "/api/design/codon-hosts/", { auth: false },
     ),
 

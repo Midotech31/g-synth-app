@@ -52,11 +52,15 @@ export default function Design() {
     "design.hybridDetail", "simple",
   );
 
-  // The optimiser hands its gene over rather than making the user copy it.
   useEffect(() => {
-    const handed = (location.state as { sequence?: string } | null)?.sequence;
-    if (handed) {
-      setParams((current) => ({ ...current, sequence: handed }));
+    const handed = location.state as { sequence?: string; isCoding?: boolean } | null;
+    const sequence = handed?.sequence;
+    if (sequence) {
+      setParams((current) => ({
+        ...current,
+        sequence,
+        ...(typeof handed.isCoding === "boolean" ? { is_coding: handed.isCoding } : {}),
+      }));
       setResult(null);
     }
   }, [location.state]);

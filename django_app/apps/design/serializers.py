@@ -18,8 +18,8 @@ from gsynth_engine.esd import MAX_OVERHANG, MIN_OVERHANG
 from gsynth_engine.pcr import DEFAULT_CLAMP
 from gsynth_engine.vectors import CATALOGUE, DEFAULT_VECTOR
 
-#: Every enzyme with verified cut geometry. The interface groups the
-#: nineteen this lab keeps ahead of the rest; the API accepts all.
+#: Every enzyme with verified cut geometry. The interface groups preferred
+#: cloning enzymes first; the API accepts the full catalogue.
 ENZYME_NAMES = sorted(ALL_ENZYMES)
 CLEAVAGE_NAMES = sorted(CLEAVAGE_SITES)
 VECTOR_KEYS = [spec.key for spec in CATALOGUE]
@@ -255,6 +255,11 @@ class OptimiseRequestSerializer(serializers.Serializer):
     )
     host = serializers.ChoiceField(choices=tuple(TABLES), default=DEFAULT_HOST)
     is_protein = serializers.BooleanField(default=False)
+    protein_context = serializers.ChoiceField(
+        choices=("auto", "mature_peptide", "complete_orf"),
+        default="auto",
+        help_text="How an N-terminal methionine is handled during peptide-to-DNA conversion.",
+    )
     keep_stop = serializers.BooleanField(
         default=True,
         help_text="Turn off for an insert destined for a C-terminal vector "

@@ -31,9 +31,6 @@ export default function InsertForm({
 
   const enzymes = catalogue?.enzymes ?? [];
   const byName = new Map(enzymes.map((e) => [e.name, e]));
-  // A hundred names in one flat list is worse than nineteen. The set this
-  // lab keeps in the freezer goes first; the rest stay selectable, because
-  // an enzyme in your vector's polylinker should not need a code change.
   const common = enzymes.filter((e) => e.common !== false);
   const rest = enzymes.filter((e) => e.common === false);
   const left = byName.get(params.left_enzyme);
@@ -75,18 +72,18 @@ export default function InsertForm({
             value={params.left_enzyme}
             onChange={(e) => onChange("left_enzyme", e.target.value)}
           >
-            <optgroup label="In the freezer">
+            <optgroup label="Common cloning enzymes">
               {common.map((e) => (
                 <option key={e.name} value={e.name}>
-                  {e.name} · {e.recognition}
+                  {[e.name, ...(e.aliases ?? [])].join(" / ")} · {e.recognition}
                 </option>
               ))}
             </optgroup>
             {rest.length > 0 && (
-              <optgroup label={`Others (${rest.length})`}>
+              <optgroup label={`Additional verified enzymes (${rest.length})`}>
                 {rest.map((e) => (
                   <option key={e.name} value={e.name}>
-                    {e.name} · {e.recognition}
+                    {[e.name, ...(e.aliases ?? [])].join(" / ")} · {e.recognition}
                   </option>
                 ))}
               </optgroup>
@@ -106,18 +103,18 @@ export default function InsertForm({
             value={params.right_enzyme}
             onChange={(e) => onChange("right_enzyme", e.target.value)}
           >
-            <optgroup label="In the freezer">
+            <optgroup label="Common cloning enzymes">
               {common.map((e) => (
                 <option key={e.name} value={e.name}>
-                  {e.name} · {e.recognition}
+                  {[e.name, ...(e.aliases ?? [])].join(" / ")} · {e.recognition}
                 </option>
               ))}
             </optgroup>
             {rest.length > 0 && (
-              <optgroup label={`Others (${rest.length})`}>
+              <optgroup label={`Additional verified enzymes (${rest.length})`}>
                 {rest.map((e) => (
                   <option key={e.name} value={e.name}>
-                    {e.name} · {e.recognition}
+                    {[e.name, ...(e.aliases ?? [])].join(" / ")} · {e.recognition}
                   </option>
                 ))}
               </optgroup>
@@ -170,7 +167,7 @@ export default function InsertForm({
             checked={params.is_coding}
             onChange={(e) => onChange("is_coding", e.target.checked)}
           />
-          Insert already has its own ATG
+          Standalone ORF (starts with ATG)
         </label>
         {expert && params.is_coding && (
           <label>

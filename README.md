@@ -1,8 +1,7 @@
 # G-Synth
 
-Software that automates one laboratory's gene synthesis and cloning workflow:
-turning a gene into oligos you can order, a plasmid you can build, and the
-checks that say it is the construct you designed.
+Software for traceable nucleic-acid design, synthesis ordering, cloning and
+post-sequencing validation.
 
 It is not a general sequence editor. Every part of it exists because a step of
 that workflow was being done by hand, and the checks it performs are the ones
@@ -18,12 +17,23 @@ that, when skipped, cost a fortnight.
                          Compare: alignment or physical hybridisation
 ```
 
-**Optimise** rewrites a gene for the organism that will express it. The protein
-never changes. Select *E. coli*, *S. cerevisiae*, *K. phaffii*, *B. subtilis*,
-human, CHO-species, Sf9/Sf21-species or *N. benthamiana* codon usage, or supply
-an experiment-specific reference-gene set through the API. The enzymes you will
-clone with are also inputs, because a gene that carries an internal NdeI site
-cannot be cloned NdeI/XhoI however favourable its host codons are.
+**Optimise** rewrites coding DNA or back-translates a peptide for its expression
+host. Automatic start handling preserves a peptide without N-terminal Met as a
+mature product, recognises an existing initiator Met, and lets the user override
+the biological role when necessary. A complete ORF receives exactly one ATG;
+the encoded protein is verified after every rewrite. Fifteen versioned profiles cover six bacterial systems
+(*E. coli*, *B. subtilis*, *P. putida*, *L. lactis*, *C. glutamicum* and
+*S. coelicolor*), four yeasts (*S. cerevisiae*, *K. phaffii*, *K. lactis* and
+*Y. lipolytica*), mammalian human/CHO proxies, insect Sf9/Sf21 and S2 proxies,
+and *N. benthamiana*. They are calculated from a committed September 2021
+FDA HIVE-CUTs/CoCoPUTs snapshot, using RefSeq when available and a disclosed
+GenBank fallback otherwise. The UI shows taxon, dataset, CDS count, codon count,
+GC and scope for the selected profile. An experiment-specific highly expressed
+reference-gene set can override these species-wide profiles for a strain, cell
+line or tissue. The reported profile-relative score is not presented as an
+expression-yield prediction. The enzymes you will clone with are also inputs,
+because a gene that carries an internal NdeI site cannot be cloned NdeI/XhoI
+however favourable its host codons are.
 
 **Design** implements two original workflows. **Small Sequence Design (SSD)**
 emits one forward/reverse synthesis pair for a compact construct.
@@ -69,6 +79,11 @@ including expression loci that cross the circular origin. Every feature can
 be created, named, edited or deleted; exact matches to a curated library of
 common promoters, operators, tags, linkers and cleavage motifs are proposed
 for review rather than silently asserted. Saved edits survive into GenBank.
+
+The cloning selectors cover 109 non-redundant cut geometries representing 289
+commercial enzyme names. Isoschizomers remain searchable aliases, so the map
+does not duplicate identical sites; HindIII is included with its verified
+5′-AGCT cohesive end.
 
 **Primer design and PCR simulation** are supporting tools. They distinguish a primer's hybridising 3′ region
 from its deliberately unpaired 5′ cloning tail, show how that tail enters the
@@ -152,9 +167,9 @@ assert plan.verify() == []          # empty means the oligos re-ligate to the de
 ### Tests
 
 ```bash
-python -m pytest gsynth_engine/tests -q     # 1,098 — the biology
-cd django_app && python -m pytest -q        # 262 — the HTTP layer
-cd frontend && npm test                     # 89 — the interface
+python -m pytest gsynth_engine/tests -q     # 1,113 — the biology
+cd django_app && python -m pytest -q        # 265 — the HTTP layer
+cd frontend && npm test                     # 91 — the interface
 ```
 
 All three run in CI on every push. The engine's suite is the definition of
@@ -168,6 +183,8 @@ Scientific scope and validation materials:
 - [`docs/BIOLOGICAL_ASSUMPTIONS.md`](docs/BIOLOGICAL_ASSUMPTIONS.md) — what is checked, and what still requires bench evidence.
 - [`docs/WORKED_CLONING_EXAMPLES.md`](docs/WORKED_CLONING_EXAMPLES.md) — cohesive, mixed-polarity, blunt, and blocking cases.
 - [`docs/SCIENTIFIC_REFERENCES.md`](docs/SCIENTIFIC_REFERENCES.md) — sources behind the assumptions.
+- [`publication_evidence/codon_host_profile_validation.json`](publication_evidence/codon_host_profile_validation.json) — machine-readable host-table provenance, completeness, numerical distinctness and protein-invariance checks.
+- [`publication_evidence/peptide_and_enzyme_validation.json`](publication_evidence/peptide_and_enzyme_validation.json) — peptide-start decisions, host-wise translation invariance, enzyme-name coverage and HindIII geometry.
 - [`docs/USABILITY_STUDY.md`](docs/USABILITY_STUDY.md) — the human-validation protocol and release criteria.
 - [`docs/WET_LAB_VALIDATION.md`](docs/WET_LAB_VALIDATION.md) — physical construct-to-sequencing evidence and acceptance criteria.
 - [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md) — current accessibility and responsive-design guarantees and validation limits.

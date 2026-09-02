@@ -14,6 +14,8 @@ import pytest
 
 from gsynth_engine.cloning import find_sites, translate
 from gsynth_engine.codon import (
+    CODON_DATA_SHA256,
+    CODON_DATA_VERSION,
     ECOLI,
     SYNONYMS,
     TABLES,
@@ -77,14 +79,51 @@ class TestProteinIsPreserved:
         assert with_stop.length == 3 * len(DONOR_PROTEIN) + 3
         assert translate(with_stop.sequence).endswith("*")
 
+    def test_auto_preserves_a_non_methionine_mature_peptide(self):
+        peptide = "GIVEQCCTSICSLYQLENYCG"
+        result = optimise(peptide, is_protein=True, keep_stop=False)
+        assert result.input_protein == peptide
+        assert result.protein == peptide
+        assert result.protein_context == "mature_peptide"
+        assert result.initiator_methionine_added is False
+        assert result.recommended_design_is_coding is False
+        assert translate(result.sequence) == peptide
+
+    def test_auto_detects_an_existing_initiator_methionine(self):
+        result = optimise("MGIVEQ", is_protein=True, keep_stop=False)
+        assert result.protein == "MGIVEQ"
+        assert result.protein_context == "complete_orf"
+        assert result.initiator_methionine_added is False
+        assert result.recommended_design_is_coding is True
+        assert result.sequence.startswith("ATG")
+
+    def test_complete_orf_adds_exactly_one_initiator_methionine(self):
+        result = optimise(
+            "GIVEQ", is_protein=True, protein_context="complete_orf", keep_stop=False,
+        )
+        assert result.input_protein == "GIVEQ"
+        assert result.protein == "MGIVEQ"
+        assert result.initiator_methionine_added is True
+        assert result.recommended_design_is_coding is True
+        assert translate(result.sequence) == "MGIVEQ"
+
+    def test_mature_override_preserves_a_peptide_that_starts_with_methionine(self):
+        result = optimise(
+            "MGIVEQ", is_protein=True, protein_context="mature_peptide", keep_stop=False,
+        )
+        assert result.protein == "MGIVEQ"
+        assert result.protein_context == "mature_peptide"
+        assert result.recommended_design_is_coding is False
+
 
 # ── What optimisation is for ────────────────────────────────────────────────
 
 
 class TestAdaptation:
     def test_rare_codons_are_removed(self):
-        result = optimise(DONOR_GENE)
-        assert result.rare_codons_before > 20
+        low_frequency_gene = "ATG" + "AGG" * 12 + "CTA" * 12
+        result = optimise(low_frequency_gene)
+        assert result.rare_codons_before == 24
         assert result.rare_codons_after == 0
 
     def test_the_adaptation_index_rises(self):
@@ -183,9 +222,8 @@ class TestConstraints:
         assert isinstance(result.warnings, list)
 
     def test_a_remaining_enzyme_site_is_not_duplicated_as_a_warning(self):
-        protein = "MTNLQAVTRVMEPACRCYGQDGCRYSIVDYM"
         result = optimise(
-            protein,
+            "SM",
             is_protein=True,
             constraints=Constraints(avoid_enzymes=("CviAII",)),
             max_rounds=0,
@@ -226,11 +264,19 @@ class TestCodonTable:
 
     def test_every_bundled_host_is_complete_and_normalized(self):
         assert set(TABLES) == {
-            "ecoli", "s_cerevisiae", "k_phaffii", "b_subtilis",
-            "h_sapiens", "c_griseus", "s_frugiperda", "n_benthamiana",
+            "ecoli", "b_subtilis", "p_putida", "l_lactis",
+            "c_glutamicum", "s_coelicolor", "s_cerevisiae", "k_phaffii",
+            "k_lactis", "y_lipolytica", "h_sapiens", "c_griseus",
+            "s_frugiperda", "d_melanogaster", "n_benthamiana",
         }
         for key, table in TABLES.items():
             assert len(table.weights) == 64, key
+            assert table.taxon_id is not None, key
+            assert table.dataset in {"RefSeq", "GenBank"}, key
+            assert table.dataset_release == "September 2021", key
+            assert table.coding_sequences and table.coding_sequences > 0, key
+            assert table.codon_count and table.codon_count > 0, key
+            assert table.gc_percent and 0 < table.gc_percent < 100, key
             for amino_acid, codons in SYNONYMS.items():
                 assert max(table.weight(codon) for codon in codons) == pytest.approx(1.0), (
                     key, amino_acid
@@ -244,13 +290,29 @@ class TestCodonTable:
         assert translate(bacterial) == protein
         assert translate(yeast) == protein
 
+    def test_host_profiles_are_numerically_distinct_not_labels(self):
+        codons = sorted(ECOLI.weights)
+        signatures = {
+            tuple(round(table.weights[codon], 12) for codon in codons)
+            for table in TABLES.values()
+        }
+        assert len(signatures) == len(TABLES)
+
     @pytest.mark.parametrize(("host", "amino_acid", "preferred"), [
-        ("s_cerevisiae", "L", "TTG"),
-        ("k_phaffii", "K", "AAG"),
+        ("ecoli", "R", "CGC"),
         ("b_subtilis", "K", "AAA"),
+        ("p_putida", "K", "AAG"),
+        ("l_lactis", "A", "GCT"),
+        ("c_glutamicum", "K", "AAG"),
+        ("s_coelicolor", "A", "GCC"),
+        ("s_cerevisiae", "L", "TTG"),
+        ("k_phaffii", "L", "TTG"),
+        ("k_lactis", "F", "TTC"),
+        ("y_lipolytica", "A", "GCC"),
         ("h_sapiens", "F", "TTC"),
         ("c_griseus", "I", "ATC"),
         ("s_frugiperda", "Y", "TAC"),
+        ("d_melanogaster", "I", "ATC"),
         ("n_benthamiana", "A", "GCT"),
     ])
     def test_species_profiles_preserve_published_rankings(
@@ -259,17 +321,22 @@ class TestCodonTable:
         assert TABLES[host].best(amino_acid) == preferred
 
     def test_the_known_e_coli_preferences(self):
-        """Leucine reads CTG, arginine CGT, isoleucine ATC — the textbook
-        facts a wrong table would get wrong."""
+        """Pinned preferences are independently visible in the source rows."""
         assert ECOLI.best("L") == "CTG"
-        assert ECOLI.best("R") == "CGT"
-        assert ECOLI.best("I") == "ATC"
+        assert ECOLI.best("R") == "CGC"
+        assert ECOLI.best("I") == "ATT"
         assert ECOLI.best("*") == "TAA"
 
     def test_the_notorious_rare_codons_are_rare(self):
-        """AGG/AGA arginine and ATA isoleucine are why Rosetta strains exist."""
+        """The 0.1 threshold is applied to the committed species profile."""
         rare = ECOLI.rare()
-        assert {"AGG", "AGA", "CGA", "ATA", "CTA", "CCC"} <= rare
+        assert rare == {"AGG", "CTA"}
+
+    def test_the_source_snapshot_is_pinned(self):
+        assert CODON_DATA_VERSION == "September 2021"
+        assert CODON_DATA_SHA256 == (
+            "4c6d35b4c42dd449b9e441e6eef9cb17777211036f0cbc8e7c5f27616b9a8ab0"
+        )
 
     def test_single_codon_residues_are_never_rare(self):
         rare = ECOLI.rare()
@@ -293,7 +360,7 @@ class TestAdaptationIndex:
         assert codon_adaptation_index(best) == pytest.approx(1.0)
 
     def test_rare_codons_score_low(self):
-        assert codon_adaptation_index("CTAATACCCAGG") < 0.05
+        assert codon_adaptation_index("CTAAGGCTAAGG") < 0.1
 
     def test_single_codon_residues_are_excluded(self):
         """Met and Trp offer no choice, so counting them inflates every gene."""
@@ -324,6 +391,10 @@ class TestInput:
     def test_an_empty_protein_is_refused(self):
         with pytest.raises(SequenceError):
             optimise("", is_protein=True)
+
+    def test_an_unknown_protein_context_is_refused(self):
+        with pytest.raises(SequenceError, match="Protein context"):
+            optimise("MGIVEQ", is_protein=True, protein_context="unknown")
 
     def test_a_trailing_stop_is_not_translated_twice(self):
         with_stop = optimise(DONOR_GENE + "TAA", keep_stop=True)
