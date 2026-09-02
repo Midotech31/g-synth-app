@@ -28,6 +28,40 @@ import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
 type Tab = "reads" | "primers" | "ligation";
 
+export type ProjectCapabilities = {
+  insertStart?: number;
+  insertEnd?: number;
+  backboneLength?: number;
+  hasRegion: boolean;
+  hasLigationContext: boolean;
+  circular: boolean;
+};
+
+/** Derive workflow capabilities from explicit metadata, never sequence length. */
+export function projectCapabilities(project: Project | null): ProjectCapabilities {
+  const insertStart = project?.data.insert_start;
+  const insertEnd = project?.data.insert_end;
+  const backboneLength = project?.data.backbone_length;
+  const hasRegion = Number.isInteger(insertStart)
+    && Number.isInteger(insertEnd)
+    && insertStart! >= 0
+    && insertEnd! > insertStart!
+    && insertEnd! <= (project?.sequence.length ?? 0);
+  const hasLigationContext = hasRegion
+    && typeof backboneLength === "number"
+    && Number.isFinite(backboneLength)
+    && backboneLength > 0;
+
+  return {
+    insertStart,
+    insertEnd,
+    backboneLength,
+    hasRegion,
+    hasLigationContext,
+    circular: project?.data.topology === "circular",
+  };
+}
+
 export default function Verify() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject, clearProject] = useWorkspaceState<Project | null>("verify.project", null);
@@ -61,12 +95,15 @@ export default function Verify() {
     }
   }, []);
 
-  /** The insert's span inside the construct, when the payload knows it. */
-  const data = (project?.data ?? {}) as Record<string, number | undefined>;
-  const insertStart = data.insert_start;
-  const insertEnd = data.insert_end;
-  const hasRegion = insertStart !== undefined && insertEnd !== undefined;
-  const circular = (project?.data as { topology?: string })?.topology === "circular";
+  /** The insert span enables primers; ligation additionally needs a backbone. */
+  const {
+    insertStart,
+    insertEnd,
+    backboneLength,
+    hasRegion,
+    hasLigationContext,
+    circular,
+  } = projectCapabilities(project);
 
   /** One FASTA-ish blob in, named reads out. Bare sequence is one read. */
   function parseReads(text: string): Record<string, string> {
@@ -88,7 +125,7 @@ export default function Verify() {
     if (!project) return;
     const parsed = parseReads(reads);
     if (!traceFiles.length && !Object.keys(parsed).length) {
-      setError("Add an .ab1 trace, or paste the bases.");
+      setError("Add an ABIF or SCF trace, or paste the bases.");
       return;
     }
     setBusy(true);
@@ -167,13 +204,13 @@ export default function Verify() {
   }
 
   async function runLigation() {
-    if (!project || !hasRegion) return;
+    if (!project || !hasLigationContext) return;
     const insertLength = insertEnd! - insertStart!;
     setBusy(true);
     setError("");
     try {
       const result = await api.ligation({
-        vector_length: (data.backbone_length as number) || project.sequence.length,
+        vector_length: backboneLength!,
         insert_length: insertLength,
         vector_ng: vectorNg,
         ratios: [1, 3, 5],
@@ -235,10 +272,10 @@ export default function Verify() {
 
       <div className="topbar">
         <div className="grow">
-          <h1>Check the clone</h1>
+          <h1>Validate a construct</h1>
           <p className="sub">
-            Ligation amounts, sequencing primers, and what the reads say when
-            they come back — all against one saved construct.
+            Keep ligation calculations, sequencing primers and returned reads
+            anchored to the same saved reference.
           </p>
         </div>
         <button className="btn btn-outline" onClick={clearWorkspace} disabled={busy}>
@@ -296,18 +333,47 @@ export default function Verify() {
                       sequence.
                     </p>
                   )}
+                  {hasRegion && !hasLigationContext && (
+                    <p className="note vector-note">
+                      Reads and sequencing primers are available for this
+                      assembly. Ligation amounts require a saved cloned
+                      plasmid, because the vector backbone length is part of
+                      the molar calculation.
+                    </p>
+                  )}
                 </div>
               )}
 
               {tab === "reads" && project && (
-                <div className="field">
-                  <label htmlFor="traces">Trace files (.ab1)</label>
+                <div className="field verify-evidence-field">
+                  <span className="field-label">Sanger trace evidence</span>
+                  <label className="trace-upload" htmlFor="traces">
+                    <span className="trace-upload-icon" aria-hidden="true">
+                      <Icon name="microscope" size={22} />
+                    </span>
+                    <span className="trace-upload-copy">
+                      <strong>
+                        {traceFiles.length
+                          ? `${traceFiles.length} trace${traceFiles.length === 1 ? "" : "s"} selected`
+                          : "Choose AB1 or SCF files"}
+                      </strong>
+                      <small>
+                        {traceFiles.length
+                          ? traceFiles.map((file) => file.name).join(" · ")
+                          : "Forward and reverse traces can be uploaded together"}
+                      </small>
+                    </span>
+                    <span className="btn btn-outline trace-upload-action" aria-hidden="true">
+                      Browse
+                    </span>
+                  </label>
                   <input
                     id="traces"
+                    className="sr-only"
                     type="file"
-                    accept=".ab1,application/octet-stream"
+                    accept=".ab1,.scf,application/octet-stream"
                     multiple
-                    // "Add an .ab1 trace, or paste the bases" is a complaint
+                    // "Add an ABIF or SCF trace, or paste the bases" is a complaint
                     // about these two fields; it is attached to them so it is
                     // read when either is reached, not only when it appears.
                     aria-describedby={error ? "traces-hint verify-error" : "traces-hint"}
@@ -316,49 +382,57 @@ export default function Verify() {
                       setReport(null);
                     }}
                   />
-                  <span className="label" id="traces-hint">
+                  <span className="field-hint" id="traces-hint">
                     {traceFiles.length
-                      ? `${traceFiles.length} trace${traceFiles.length === 1 ? "" : "s"} ready`
-                      : "What the facility sent — the peaks say which differences are real"}
+                      ? "Trace quality, base calls and chromatogram peaks will be evaluated together."
+                      : "Preferred: trace files retain the quality evidence needed to distinguish a mutation from a weak peak."}
                   </span>
                 </div>
               )}
 
               {tab === "reads" && project && (
-                <div className="field">
+                <div className="field verify-text-reads">
+                  <div className="verify-or" aria-hidden="true"><span>or</span></div>
                   <label htmlFor="reads">
-                    {traceFiles.length ? "Or paste the bases instead" : "Sequencing reads"}
+                    {traceFiles.length ? "Use text reads instead" : "Paste text reads"}
                   </label>
                   <textarea
                     id="reads"
                     value={reads}
                     onChange={(e) => setReads(e.target.value)}
-                    rows={10}
+                    rows={7}
                     className="mono"
                     style={{ fontSize: "0.74rem" }}
                     placeholder={">T7-F\nGATCC...\n>T7-R\nCTAGG..."}
                     aria-describedby={error ? "reads-hint verify-error" : "reads-hint"}
                   />
-                  <span className="label" id="reads-hint">
-                    FASTA, or just the bases for a single read
+                  <span className="field-hint" id="reads-hint">
+                    FASTA or plain bases. Text reads do not contain chromatogram quality evidence.
                   </span>
-                  <label htmlFor="trim">Ignore low-quality bases at each end</label>
-                  <input
-                    id="trim"
-                    type="number"
-                    min={0}
-                    max={200}
-                    value={trim}
-                    onChange={(e) => setTrim(Number(e.target.value))}
-                    aria-describedby="trim-hint"
-                  />
-                  <span className="label" id="trim-hint">
-                    {trim} bases from the start and {trim} from the end · use 0 for a cleaned sequence
-                  </span>
+                  {!traceFiles.length && (
+                    <details className="advanced-control">
+                      <summary>Text-read trimming</summary>
+                      <div className="field advanced-control-body">
+                        <label htmlFor="trim">Ignore bases at each read end</label>
+                        <input
+                          id="trim"
+                          type="number"
+                          min={0}
+                          max={200}
+                          value={trim}
+                          onChange={(e) => setTrim(Number(e.target.value))}
+                          aria-describedby="trim-hint"
+                        />
+                        <span className="field-hint" id="trim-hint">
+                          {trim} bases at the start and {trim} at the end. Use 0 for pre-cleaned reads.
+                        </span>
+                      </div>
+                    </details>
+                  )}
                 </div>
               )}
 
-              {tab === "ligation" && project && (
+              {tab === "ligation" && project && hasLigationContext && (
                 <div className="field">
                   <label htmlFor="vng">Vector in the reaction (ng)</label>
                   <input id="vng" type="number" min={1} max={1000} value={vectorNg}
@@ -368,7 +442,9 @@ export default function Verify() {
 
               <button
                 className="btn btn-primary"
-                disabled={busy || !project || (tab !== "reads" && !hasRegion)}
+                disabled={busy || !project
+                  || (tab === "primers" && !hasRegion)
+                  || (tab === "ligation" && !hasLigationContext)}
                 onClick={() => {
                   if (tab === "reads") void runVerify();
                   else if (tab === "primers") void runPrimers();
@@ -437,6 +513,27 @@ export default function Verify() {
                   </div>
 
                   <PreflightPanel report={report.preflight} />
+
+                  {report.raw_consensus && report.consensus && (
+                    <div className="card">
+                      <div className="card-head"><h2>Forward/reverse consensus</h2></div>
+                      <div className="card-body">
+                        <div className="vector-facts" aria-label="Consensus sequencing metrics">
+                          <span><b>{report.raw_consensus.coverage}%</b> raw consensus coverage</span>
+                          <span><b>{report.raw_consensus.identity}%</b> raw consensus identity</span>
+                          <span><b>{report.raw_consensus.bidirectional_overlap}%</b> covered by both strands</span>
+                          <span><b>{report.raw_consensus.bidirectional_agreement}%</b> F/R overlap agreement</span>
+                          <span><b>{report.consensus.coverage}%</b> Q{report.quality_cutoff ?? 13} consensus coverage</span>
+                        </div>
+                        <p className="note" style={{ marginTop: "0.7rem" }}>
+                          Forward and reverse calls are oriented and merged before coverage is calculated.
+                          Raw 100% coverage means every reference position has a consensus call; only the
+                          bidirectional percentage is supported by both strands. The quality-gated value
+                          determines whether the clone can be accepted as fully verified.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {report.differences.length > 0 && (
                     <div className="card">
@@ -545,8 +642,9 @@ export default function Verify() {
                     <Icon name="microscope" size={38} className="glyph" />
                     <strong>No reads compared yet</strong>
                     <span>
-                      Pick a construct and paste what the sequencing facility
-                      sent back. Either orientation is fine.
+                      {project
+                        ? "Add trace files or paste text reads, then compare them with this reference. Either orientation is fine."
+                        : "Choose the construct that these sequencing reads are meant to validate."}
                     </span>
                   </div>
                 </div>

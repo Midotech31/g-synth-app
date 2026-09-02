@@ -11,10 +11,12 @@ arrive as the same letter. So this module keeps the quality values and the
 four channels, and `verify.py` uses them to say which differences are worth a
 second look and which are noise.
 
-ABIF is a documented format — a header, a directory of tagged entries, and
-their data — so it is read here rather than pulled in with a library. The
-engine has no runtime dependencies and this is not the place to acquire one.
-The spec is Applied Biosystems' "ABIF File Format" (2006, rev. 2009).
+ABIF and SCF are documented formats, so both are read here rather than pulled
+in with a library.  Some sequencing software exports SCF data without changing
+the original ``.ab1`` filename, which is why format detection uses the file's
+magic bytes instead of its extension.  The engine has no runtime dependencies
+and this is not the place to acquire one.  The specifications are Applied
+Biosystems' "ABIF File Format" (2006, rev. 2009) and Staden's SCF v2/v3 format.
 """
 from __future__ import annotations
 
@@ -25,6 +27,7 @@ from gsynth_engine.sequence import SequenceError, reverse_complement
 
 #: Everything past this is a directory of tags; the header is fixed.
 _MAGIC = b"ABIF"
+_SCF_MAGIC = b".scf"
 # name, number, type, element size, count, byte count, offset, handle.
 # The offset field is kept as raw bytes: when the data is four bytes or
 # fewer it is stored *in* that field rather than pointed to by it.
@@ -46,6 +49,10 @@ _TYPES: dict[int, tuple[str, int]] = {
 #: A trace longer than this is not a Sanger read; it is a mistake or an
 #: attack. A 1.2 kb read is about 15 000 samples.
 MAX_SAMPLES = 200_000
+
+# A Sanger trace normally contains fewer than 2,000 calls.  This deliberately
+# generous ceiling also bounds allocations before any section is unpacked.
+MAX_BASES = 100_000
 
 #: Mott trimming's default: bases worse than Q13 are more likely wrong than
 #: a coin toss over a 20-base window. Phred's own default, and Sequencher's.
@@ -348,6 +355,181 @@ def read_ab1(data: bytes, *, name: str = "") -> Chromatogram:
         peaks=peaks,
         traces=traces,
         name=name,
+    )
+
+
+def _section(data: bytes, offset: int, size: int, description: str) -> bytes:
+    """Return a bounded SCF section, rejecting wraparound and truncation."""
+    if offset < 128 or size < 0 or offset > len(data) or size > len(data) - offset:
+        raise SequenceError(
+            f"This SCF trace is truncated or damaged: its {description} section "
+            "points outside the file. Re-export the analysed trace from the "
+            "sequencing software."
+        )
+    return data[offset : offset + size]
+
+
+def _delta_delta_decode(values: list[int], modulus: int) -> list[int]:
+    """Undo SCF v3's two successive modulo-delta encodings."""
+    decoded = list(values)
+    for _ in range(2):
+        running = 0
+        for index, value in enumerate(decoded):
+            running = (running + value) % modulus
+            decoded[index] = running
+    return decoded
+
+
+def read_scf(data: bytes, *, name: str = "") -> Chromatogram:
+    """Parse a Staden SCF v2 or v3 chromatogram.
+
+    SCF stores the same scientific evidence as ABIF: four electropherogram
+    channels, called bases, peak locations, and per-base probabilities.  SCF
+    v3 groups channels and base fields into blocks and delta-delta encodes the
+    samples; v2 stores interleaved sample and base records.
+    """
+    if len(data) < 128:
+        raise SequenceError(
+            "That file is too small to be a Sanger trace. An ABIF or SCF file "
+            "from a sequencing facility is normally several kilobytes."
+        )
+    if data[:4] != _SCF_MAGIC:
+        raise SequenceError(
+            "That is not an SCF trace file — it does not start with the .scf "
+            "marker. Upload the analysed ABIF or SCF chromatogram, not a PDF "
+            "or sequence-only export."
+        )
+
+    try:
+        (
+            _magic, samples, samples_offset, bases, _left_clip, _right_clip,
+            bases_offset, comments_size, comments_offset, version_raw,
+            sample_size, _code_set, private_size, private_offset, *_spare,
+        ) = struct.unpack(">4s8I4s4I18I", data[:128])
+    except struct.error as exc:  # pragma: no cover - length checked above
+        raise SequenceError("This SCF trace file's header is damaged.") from exc
+
+    try:
+        version_text = version_raw.decode("ascii")
+        major = int(version_text.split(".", 1)[0])
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise SequenceError("This SCF trace has an invalid format version.") from exc
+    if major not in (2, 3):
+        raise SequenceError(
+            f"SCF version {version_text!r} is not supported. Re-export the "
+            "trace as SCF v3 or ABIF."
+        )
+    if samples == 0 or samples > MAX_SAMPLES:
+        raise SequenceError(
+            f"This trace declares {samples:,} samples, outside the supported "
+            f"range of 1–{MAX_SAMPLES:,}. Check that it is one Sanger read."
+        )
+    if bases == 0 or bases > MAX_BASES:
+        raise SequenceError(
+            f"This trace declares {bases:,} base calls, outside the supported "
+            f"range of 1–{MAX_BASES:,}. Check that it is one Sanger read."
+        )
+    if sample_size not in (1, 2):
+        raise SequenceError(
+            f"This SCF trace uses {sample_size}-byte samples; the format allows "
+            "only one- or two-byte samples."
+        )
+
+    sample_bytes = samples * 4 * sample_size
+    raw_samples = _section(data, samples_offset, sample_bytes, "sample")
+    code = "B" if sample_size == 1 else "H"
+    width = sample_size
+    traces: dict[str, list[int]] = {base: [] for base in "ACGT"}
+
+    if major == 3:
+        for channel_index, base in enumerate("ACGT"):
+            start = channel_index * samples * width
+            raw = raw_samples[start : start + samples * width]
+            encoded = list(struct.unpack(f">{samples}{code}", raw))
+            traces[base] = _delta_delta_decode(encoded, 1 << (8 * width))
+    else:
+        values = struct.unpack(f">{samples * 4}{code}", raw_samples)
+        for channel_index, base in enumerate("ACGT"):
+            traces[base] = [
+                int(values[sample_index * 4 + channel_index])
+                for sample_index in range(samples)
+            ]
+
+    base_bytes = bases * 12
+    raw_bases = _section(data, bases_offset, base_bytes, "base-call")
+
+    # Validate optional sections too.  They are not needed for verification,
+    # but a bogus size must not let a damaged file masquerade as a valid one.
+    if comments_size:
+        _section(data, comments_offset, comments_size, "comments")
+    if private_size:
+        _section(data, private_offset, private_size, "private data")
+    peaks: list[int] = []
+    probabilities: dict[str, list[int]] = {base: [] for base in "ACGT"}
+
+    if major == 3:
+        peaks = list(struct.unpack(f">{bases}I", raw_bases[: bases * 4]))
+        cursor = bases * 4
+        for base in "ACGT":
+            probabilities[base] = list(raw_bases[cursor : cursor + bases])
+            cursor += bases
+        calls = raw_bases[cursor : cursor + bases]
+    else:
+        calls_buffer = bytearray()
+        for index in range(bases):
+            at = index * 12
+            peak, pa, pc, pg, pt, call, _sub, _ins, _del = struct.unpack(
+                ">I4B1s3B", raw_bases[at : at + 12]
+            )
+            peaks.append(peak)
+            for base, probability in zip("ACGT", (pa, pc, pg, pt), strict=True):
+                probabilities[base].append(probability)
+            calls_buffer += call
+        calls = bytes(calls_buffer)
+
+    sequence = calls.decode("ascii", "replace").upper().replace("-", "N")
+    sequence = "".join(base if base in "ACGTN" else "N" for base in sequence)
+    quality = [
+        probabilities[call][index]
+        if call in probabilities
+        else max(probabilities[base][index] for base in "ACGT")
+        for index, call in enumerate(sequence)
+    ]
+
+    if len(peaks) != len(sequence) or any(
+        peak >= samples or (index and peak < peaks[index - 1])
+        for index, peak in enumerate(peaks)
+    ):
+        raise SequenceError(
+            "This SCF trace has invalid or out-of-order peak locations. "
+            "Re-export the analysed trace from the sequencing software."
+        )
+
+    return Chromatogram(
+        sequence=sequence,
+        quality=quality,
+        peaks=[int(peak) for peak in peaks],
+        traces=traces,
+        name=name,
+    )
+
+
+def read_trace(data: bytes, *, name: str = "") -> Chromatogram:
+    """Read a Sanger chromatogram by its contents, not its filename."""
+    magic = data[:4]
+    if magic == _MAGIC:
+        return read_ab1(data, name=name)
+    if magic == _SCF_MAGIC:
+        return read_scf(data, name=name)
+    if len(data) < 128:
+        raise SequenceError(
+            "That file is too small to be a Sanger trace. Upload the analysed "
+            "ABIF (.ab1) or SCF chromatogram from the sequencing facility."
+        )
+    raise SequenceError(
+        "That is not a supported Sanger trace: it has neither the ABIF nor "
+        "the SCF marker. Upload the analysed .ab1 or .scf file, not a PDF, "
+        "archive, or sequence-only export."
     )
 
 

@@ -10,7 +10,7 @@ import io
 
 import pytest
 
-from gsynth_engine.merzoug import design_merzoug_assembly
+from gsynth_engine.esd import design_extended_sequence
 from gsynth_engine.protocol import bench_protocol, order_sheet, order_sheet_csv
 
 INSERT = (
@@ -22,7 +22,7 @@ INSERT = (
 
 @pytest.fixture
 def plan():
-    return design_merzoug_assembly(INSERT, target_oligo_length=90)
+    return design_extended_sequence(INSERT, target_oligo_length=90)
 
 
 class TestOrderSheet:
@@ -59,7 +59,7 @@ class TestOrderSheet:
 class TestBenchProtocol:
     def test_states_the_method_and_its_constraints(self, plan):
         text = bench_protocol(plan)
-        assert "MERZOUG ASSEMBLY" in text
+        assert "EXTENDED SEQUENCE DESIGN" in text
         assert "No PCR" in text, "the defining constraint must be stated"
 
     def test_mentions_every_fragment_and_junction(self, plan):
@@ -116,12 +116,12 @@ class TestBenchProtocol:
         assert "Na" in text
 
     def test_single_fragment_skips_the_ligation_chain(self):
-        plan = design_merzoug_assembly("GGCATCGTGGAACAGTGCTGCACCAGCTAA")
+        plan = design_extended_sequence("GGCATCGTGGAACAGTGCTGCACCAGCTAA")
         text = bench_protocol(plan)
         assert "Single fragment" in text
 
     def test_surfaces_design_warnings(self):
         """A warning that only exists in the object helps nobody at the bench."""
-        plan = design_merzoug_assembly(INSERT, enzyme_pair="NdeI / XhoI")
+        plan = design_extended_sequence(INSERT, enzyme_pair="NdeI / XhoI")
         plan.warnings.append("Test warning about the design")
         assert "Test warning about the design" in bench_protocol(plan)

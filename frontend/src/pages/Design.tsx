@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import {
   ApiError,
@@ -7,7 +7,9 @@ import {
   type AssemblyResult,
   type Catalogue,
   type DesignParams,
+  type TerminalEnd,
 } from "../api/client";
+import CoreWorkflowTrail from "../components/CoreWorkflowTrail";
 import DuplexView from "../components/DuplexView";
 import InsertForm from "../components/InsertForm";
 import { segmentColour } from "../components/segmentColour";
@@ -45,6 +47,10 @@ export default function Design() {
     "design.experience", "guided",
   );
   const location = useLocation();
+  const navigate = useNavigate();
+  const [hybridDetail, setHybridDetail, clearHybridDetail] = useWorkspaceState<"simple" | "detailed">(
+    "design.hybridDetail", "simple",
+  );
 
   // The optimiser hands its gene over rather than making the user copy it.
   useEffect(() => {
@@ -123,6 +129,22 @@ export default function Design() {
     setError("");
     setExportOpen(false);
     setCopied(false);
+    clearHybridDetail();
+  }
+
+  function inspectHybridization() {
+    if (!result) return;
+    navigate("/hybridize", {
+      state: {
+        tool: "hybridization",
+        first: result.construct_forward,
+        second: result.construct_reverse,
+        name: params.name || "designed construct",
+        leftEnzyme: params.left_enzyme,
+        rightEnzyme: params.right_enzyme,
+        autoRun: true,
+      },
+    });
   }
 
   async function copyConstruct() {
@@ -139,7 +161,7 @@ export default function Design() {
     : result === null
       ? ""
       : verified
-        ? `Design verified: ${result.fragment_count} fragments, ${result.oligo_count} oligos to order.`
+        ? `Assembly reconstruction verified: ${result.fragment_count} fragments, ${result.oligo_count} oligos to order.`
         : "Design failed verification. Do not order these oligos.";
 
   return (
@@ -149,19 +171,7 @@ export default function Design() {
       <div className="topbar design-topbar">
         <div className="grow design-heading">
           <h1>Design a construct</h1>
-          <div className="design-steps" aria-label="Design progress">
-            <div className="design-step active"><span>1</span>Insert</div>
-            <i aria-hidden="true" />
-            <div className={`design-step ${result ? "complete" : ""}`}><span>2</span>Strategy</div>
-            <i aria-hidden="true" />
-            <div className={`design-step ${result ? "complete" : ""}`}><span>3</span>Preflight</div>
-            <i aria-hidden="true" />
-            <div className={`design-step ${canExport ? "complete" : ""}`}><span>4</span>Order</div>
-            <i aria-hidden="true" />
-            <div className="design-step"><span>5</span>Clone</div>
-            <i aria-hidden="true" />
-            <div className="design-step"><span>6</span>Verify</div>
-          </div>
+          <CoreWorkflowTrail active="design" />
         </div>
         <button
           className="btn btn-primary design-save"
@@ -261,7 +271,7 @@ export default function Design() {
                   </div>
                   {verified ? (
                     <div className="design-verdict-copy">
-                      <strong>Verified</strong>
+                      <strong>Assembly verified</strong>
                       <span>Annealing these oligo pairs and ligating them in order reproduces the construct exactly, on both strands.</span>
                     </div>
                   ) : (
@@ -272,7 +282,7 @@ export default function Design() {
                   )}
                   {verified && (
                     <div className="design-verdict-date">
-                      <span>Verified on</span>
+                      <span>Assembly checked on</span>
                       <strong>{new Intl.DateTimeFormat("en-GB", {
                         day: "2-digit", month: "short", year: "numeric",
                       }).format(new Date())}</strong>
@@ -379,15 +389,88 @@ export default function Design() {
 
                 <div className="card">
                   <div className="card-head">
-                    <h2 style={{ flex: 1 }}>Hybridisation</h2>
-                    <span className="label">
-                      {result.duplex.mismatches.length === 0
-                        ? "no mismatches"
-                        : `${result.duplex.mismatches.length} mismatches`}
-                    </span>
+                    <div style={{ flex: 1 }}>
+                      <h2>Hybridization</h2>
+                      <span className="label">Required before cloning simulation</span>
+                    </div>
+                    <div className="seg-toggle" role="group" aria-label="Hybridization detail level">
+                      {(["simple", "detailed"] as const).map((level) => (
+                        <button
+                          key={level}
+                          type="button"
+                          className={hybridDetail === level ? "on" : ""}
+                          aria-pressed={hybridDetail === level}
+                          onClick={() => setHybridDetail(level)}
+                        >
+                          {level[0].toUpperCase() + level.slice(1)}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="card-body">
-                    <DuplexView duplex={result.duplex} />
+                    <div className="design-hybrid-enzyme-row">
+                      <div className="field">
+                        <label htmlFor="hybrid-left-enzyme">Left cloning enzyme</label>
+                        <select
+                          id="hybrid-left-enzyme"
+                          value={params.left_enzyme}
+                          onChange={(event) => set("left_enzyme", event.target.value)}
+                        >
+                          {catalogue?.enzymes.map((enzyme) => (
+                            <option key={enzyme.name} value={enzyme.name}>
+                              {enzyme.name} · {enzyme.overhang || "blunt"} {enzyme.overhang_type}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label htmlFor="hybrid-right-enzyme">Right cloning enzyme</label>
+                        <select
+                          id="hybrid-right-enzyme"
+                          value={params.right_enzyme}
+                          onChange={(event) => set("right_enzyme", event.target.value)}
+                        >
+                          {catalogue?.enzymes.map((enzyme) => (
+                            <option key={enzyme.name} value={enzyme.name}>
+                              {enzyme.name} · {enzyme.overhang || "blunt"} {enzyme.overhang_type}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <p className="field-hint">
+                        Inherited from this design. Changing either enzyme invalidates the
+                        current molecules and returns you to Update design; G-Synth never
+                        relabels an existing sticky end as a different enzyme.
+                      </p>
+                    </div>
+
+                    {hybridDetail === "simple" ? (
+                      <div className="design-hybrid-simple">
+                        <DesignEnd end={result.terminal_ends[0]} />
+                        <div className="design-hybrid-core">
+                          <span className="label">Antiparallel duplex</span>
+                          <strong>{result.construct_length} paired columns</strong>
+                          <div className="design-hybrid-core-bar" aria-hidden="true" />
+                          <small>
+                            {result.duplex.mismatches.length === 0
+                              ? "Both reconstructed strands are complementary across the intended duplex."
+                              : `${result.duplex.mismatches.length} mismatch positions require review.`}
+                          </small>
+                        </div>
+                        <DesignEnd end={result.terminal_ends[1]} />
+                      </div>
+                    ) : (
+                      <DuplexView duplex={result.duplex} />
+                    )}
+
+                    <div className="design-hybrid-actions">
+                      <span className="design-hybrid-next-copy">
+                        Hybridization is the required verification gate before cloning.
+                      </span>
+                      <button className="btn btn-primary" onClick={inspectHybridization} disabled={!canExport}>
+                        Verify hybridization <Icon name="arrowRight" size={17} />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -451,3 +534,22 @@ export default function Design() {
   );
 }
 
+function DesignEnd({ end }: { end: TerminalEnd | undefined }) {
+  if (!end || !end.overhang) {
+    return (
+      <div className="hybrid-end-card blunt">
+        <span className="hybrid-end-label">{end?.side ?? "terminal"} end</span>
+        <strong>Blunt</strong>
+        <small>{end?.enzyme ?? "No protruding strand"}</small>
+      </div>
+    );
+  }
+  return (
+    <div className="hybrid-end-card sticky">
+      <span className="hybrid-end-label">{end.side} cohesive end</span>
+      <div className="hybrid-end-title"><strong>{end.kind} overhang</strong><span>{end.overhang.length} nt</span></div>
+      <code>5′-{end.overhang}-3′</code>
+      <small>Generated by {end.enzyme}</small>
+    </div>
+  );
+}

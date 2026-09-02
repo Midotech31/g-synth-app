@@ -48,8 +48,8 @@ add a guard, add the case that trips it.
 
 ### Properties that must never regress
 
-- Re-ligating a Merzoug design in silico reproduces the construct base for
-  base, **on both strands**. `AssemblyPlan.verify()` runs before any plan is
+- Re-ligating a ESD plan in silico reproduces the construct base for
+  base, **on both strands**. `ESDResult.verify()` runs before any plan is
   returned; nothing downloads until it is empty.
 - The assembled fragments present **the sticky ends the chosen enzymes leave**,
   sequence and polarity, at both outer ends — measured off the molecule, not
@@ -99,7 +99,7 @@ Two endpoints were once hangable by any signed-in user. When touching
 - Codon repair compares candidates on a **window**, not the whole gene.
 - Banded alignment must **iterate only the band** and size its buffers by the
   band.
-- In `merzoug.py`, a candidate overhang is checked against a **precomputed
+- In `esd.py`, a candidate overhang is checked against a **precomputed
   exclusion set**, not against every overhang already placed.
 
 Measure before and after. 3 kb optimisation ≈ 0.4 s; a 1 kb read ≈ 0.01 s;

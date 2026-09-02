@@ -434,7 +434,7 @@ class TestReadingFrame:
 
 
 class TestInternalSites:
-    def test_an_internal_site_is_a_note_because_merzoug_never_digests(self, vector):
+    def test_an_internal_site_is_a_note_because_esd_never_digests(self, vector):
         """The build is unaffected; the diagnostic digest is not."""
         design = design_small_sequence(
             "GGCATCGGATCCGAACAGTGCTGCACCAGC", enzyme_pair="BamHI / EcoRI"

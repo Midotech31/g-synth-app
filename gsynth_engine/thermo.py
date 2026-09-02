@@ -1,10 +1,8 @@
 """Melting temperatures by the nearest-neighbour model.
 
-SnapGene, Geneious and Primer3 all compute Tm from stacking thermodynamics
-rather than from base composition, because a sequence's Tm depends on the
-order of its bases, not just how many G and C it contains. `AAGGCC` and
-`AGAGCC` have identical GC content and different melting behaviour; a
-composition formula cannot tell them apart.
+A sequence's Tm depends on base order rather than GC composition alone.
+`AAGGCC` and `AGAGCC` have identical GC content but different stacking
+thermodynamics, so a composition formula cannot distinguish them.
 
 Implemented here:
 

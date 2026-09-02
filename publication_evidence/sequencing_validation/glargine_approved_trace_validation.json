@@ -1,0 +1,240 @@
+{
+  "analysis": {
+    "software": "G-Synth",
+    "version": "1.0.0",
+    "biopython_version": "1.87",
+    "primary_consensus_call_cutoff": 0,
+    "trace_set_policy": "Only the four author-designated files named A Forward Seq.ab1, A Reverse Seq.ab1, B Forward Seq.ab1 and B Reverse Seq.ab1 were admitted to this validation.",
+    "interpretation": "Forward and reverse reads are oriented and assembled before consensus coverage is calculated. Consensus coverage, identity, bidirectional overlap and overlap agreement are the primary retrospective endpoints. No post hoc threshold-specific coverage is reported as an article result."
+  },
+  "chains": {
+    "A": {
+      "reference": {
+        "path": "/home/merzoug/Downloads/Article Insuline Algerine/Synthetic Insulin Glargine A-Chain.fasta",
+        "sha256": "7550460f3cd380686a525ec1421078fe0b7fd629b7403502a02430fab412e170",
+        "length_bp": 123,
+        "sequence": "ATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTGGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA"
+      },
+      "trace_files": {
+        "forward": {
+          "approved_filename": "A Forward Seq.ab1",
+          "path": "publication_evidence/validated_traces/A Forward Seq.ab1",
+          "sha256": "59cd64373f6a62b67c1985f733529684af6fbfdb7d5796b9991ed3c0ecd13a8e",
+          "magic": ".scf",
+          "filename_extension": ".ab1",
+          "summary": {
+            "name": "forward",
+            "length": 110,
+            "mean_quality": 18.2,
+            "trim_start": 27,
+            "trim_stop": 54,
+            "trimmed_length": 27,
+            "high_quality_bases": 16,
+            "sample_count": 1504
+          }
+        },
+        "reverse": {
+          "approved_filename": "A Reverse Seq.ab1",
+          "path": "publication_evidence/validated_traces/A Reverse Seq.ab1",
+          "sha256": "1d6e9ddb1bc52bacf754c20e2a1920f569ce5106db707600cec0e1ae389b22b0",
+          "magic": ".scf",
+          "filename_extension": ".ab1",
+          "summary": {
+            "name": "reverse",
+            "length": 115,
+            "mean_quality": 7.2,
+            "trim_start": 29,
+            "trim_stop": 45,
+            "trimmed_length": 16,
+            "high_quality_bases": 4,
+            "sample_count": 1496
+          }
+        }
+      },
+      "gsynth_raw_base_calls_q0": {
+        "design_length": 123,
+        "coverage_percent": 100.0,
+        "fully_covered": true,
+        "is_verified": true,
+        "gaps_zero_based_half_open": [],
+        "differences": [],
+        "reads": [
+          {
+            "name": "forward",
+            "reference_start_zero_based": 27,
+            "reference_end_zero_based_half_open": 123,
+            "reverse_complemented": false,
+            "identity_percent": 100.0,
+            "matched_bases": 96,
+            "trimmed_from_read_start": 0,
+            "trimmed_from_read_end": 0,
+            "difference_count": 0,
+            "mean_quality": 18.2
+          },
+          {
+            "name": "reverse",
+            "reference_start_zero_based": 0,
+            "reference_end_zero_based_half_open": 96,
+            "reverse_complemented": true,
+            "identity_percent": 100.0,
+            "matched_bases": 96,
+            "trimmed_from_read_start": 0,
+            "trimmed_from_read_end": 0,
+            "difference_count": 0,
+            "mean_quality": 7.2
+          }
+        ],
+        "warnings": []
+      },
+      "gsynth_forward_reverse_consensus_raw_q0": {
+        "reference_length": 123,
+        "sequence": "ATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTGGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA",
+        "coverage_percent": 100.0,
+        "identity_percent": 100.0,
+        "fully_covered": true,
+        "bidirectional_overlap_percent": 56.1,
+        "bidirectional_overlap_agreement_percent": 100.0,
+        "gaps_zero_based_half_open": [],
+        "differences": [],
+        "warnings": []
+      },
+      "biopython_1_87_local_alignment": {
+        "reads": {
+          "forward": {
+            "reverse_complemented": false,
+            "reference_start_zero_based": 27,
+            "reference_end_zero_based_half_open": 123,
+            "identities": 96,
+            "mismatches": 0,
+            "gaps": 0,
+            "identity_percent": 100.0
+          },
+          "reverse": {
+            "reverse_complemented": true,
+            "reference_start_zero_based": 0,
+            "reference_end_zero_based_half_open": 96,
+            "identities": 96,
+            "mismatches": 0,
+            "gaps": 0,
+            "identity_percent": 100.0
+          }
+        },
+        "combined_reference_coverage_percent": 100.0
+      }
+    },
+    "B": {
+      "reference": {
+        "path": "/home/merzoug/Downloads/Article Insuline Algerine/Synthetic Insulin Glargine B-Chain.fasta",
+        "sha256": "b6ab07b78bed8a6810f026f6950a323cf8185a7d4c6029830fc98cb62ee1cc84",
+        "length_bp": 156,
+        "sequence": "ATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTTTTGTGAACCAGCATCTGTGCGGCAGCCATCTGGTGGAAGCGCTGTACCTGGTGTGCGGCGAACGCGGCTTTTTTTACACCCCAAAAACCCGCCGCTAA"
+      },
+      "trace_files": {
+        "forward": {
+          "approved_filename": "B Forward Seq.ab1",
+          "path": "publication_evidence/validated_traces/B Forward Seq.ab1",
+          "sha256": "07d766d868afa1252de1cac18a1db5041a3230799828c570cd8e8581e7c0ea3f",
+          "magic": ".scf",
+          "filename_extension": ".ab1",
+          "summary": {
+            "name": "forward",
+            "length": 140,
+            "mean_quality": 12.4,
+            "trim_start": 24,
+            "trim_stop": 44,
+            "trimmed_length": 20,
+            "high_quality_bases": 12,
+            "sample_count": 1734
+          }
+        },
+        "reverse": {
+          "approved_filename": "B Reverse Seq.ab1",
+          "path": "publication_evidence/validated_traces/B Reverse Seq.ab1",
+          "sha256": "771711749bdae4a7317d2c378f59e1b11ad000266ef2c877037e7eb7835df76e",
+          "magic": ".scf",
+          "filename_extension": ".ab1",
+          "summary": {
+            "name": "reverse",
+            "length": 150,
+            "mean_quality": 10.9,
+            "trim_start": 41,
+            "trim_stop": 70,
+            "trimmed_length": 29,
+            "high_quality_bases": 21,
+            "sample_count": 1698
+          }
+        }
+      },
+      "gsynth_raw_base_calls_q0": {
+        "design_length": 156,
+        "coverage_percent": 100.0,
+        "fully_covered": true,
+        "is_verified": true,
+        "gaps_zero_based_half_open": [],
+        "differences": [],
+        "reads": [
+          {
+            "name": "forward",
+            "reference_start_zero_based": 29,
+            "reference_end_zero_based_half_open": 156,
+            "reverse_complemented": false,
+            "identity_percent": 100.0,
+            "matched_bases": 127,
+            "trimmed_from_read_start": 0,
+            "trimmed_from_read_end": 0,
+            "difference_count": 0,
+            "mean_quality": 12.4
+          },
+          {
+            "name": "reverse",
+            "reference_start_zero_based": 0,
+            "reference_end_zero_based_half_open": 140,
+            "reverse_complemented": true,
+            "identity_percent": 100.0,
+            "matched_bases": 140,
+            "trimmed_from_read_start": 0,
+            "trimmed_from_read_end": 0,
+            "difference_count": 0,
+            "mean_quality": 10.9
+          }
+        ],
+        "warnings": []
+      },
+      "gsynth_forward_reverse_consensus_raw_q0": {
+        "reference_length": 156,
+        "sequence": "ATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTTTTGTGAACCAGCATCTGTGCGGCAGCCATCTGGTGGAAGCGCTGTACCTGGTGTGCGGCGAACGCGGCTTTTTTTACACCCCAAAAACCCGCCGCTAA",
+        "coverage_percent": 100.0,
+        "identity_percent": 100.0,
+        "fully_covered": true,
+        "bidirectional_overlap_percent": 71.2,
+        "bidirectional_overlap_agreement_percent": 100.0,
+        "gaps_zero_based_half_open": [],
+        "differences": [],
+        "warnings": []
+      },
+      "biopython_1_87_local_alignment": {
+        "reads": {
+          "forward": {
+            "reverse_complemented": false,
+            "reference_start_zero_based": 29,
+            "reference_end_zero_based_half_open": 156,
+            "identities": 127,
+            "mismatches": 0,
+            "gaps": 0,
+            "identity_percent": 100.0
+          },
+          "reverse": {
+            "reverse_complemented": true,
+            "reference_start_zero_based": 0,
+            "reference_end_zero_based_half_open": 140,
+            "identities": 140,
+            "mismatches": 0,
+            "gaps": 0,
+            "identity_percent": 100.0
+          }
+        },
+        "combined_reference_coverage_percent": 100.0
+      }
+    }
+  }
+}

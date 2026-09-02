@@ -28,7 +28,10 @@ function consensus(reference: string, tracks: TraceTrack[], start: number, end: 
       const base = track.sequence[index] ?? "N";
       votes.set(base, (votes.get(base) ?? 0) + Math.max(1, track.qualities[index] ?? 1));
     }
-    const called = [...votes].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "·";
+    const ranked = [...votes].sort((a, b) => b[1] - a[1]);
+    const called = ranked.length > 1 && ranked[0][1] === ranked[1][1]
+      ? "N"
+      : ranked[0]?.[0] ?? "·";
     result.push({
       base: called,
       covered: votes.size > 0,

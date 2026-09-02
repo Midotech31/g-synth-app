@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { Logo } from "../components/Logo";
+import AuthShell from "../components/AuthShell";
+import PasswordInput from "../components/PasswordInput";
 
 export default function Login() {
   const { signIn } = useAuth();
@@ -28,16 +29,13 @@ export default function Login() {
   }
 
   return (
-    <div className="auth">
-      <div className="panel">
-        <div className="lockup">
-          <Logo size={56} />
-          <h1>Sign in to your workspace</h1>
-        </div>
-
-        <div className="card">
-          <div className="card-body">
-            <form onSubmit={onSubmit}>
+    <AuthShell
+      eyebrow="Secure workspace"
+      title="Welcome back"
+      description="Continue your design, build and validation work from one scientific record."
+      footer={<>No account yet? <Link to="/signup">Create one</Link></>}
+    >
+      <form onSubmit={onSubmit}>
               <div className="field">
                 <label htmlFor="email">Email</label>
                 <input
@@ -52,13 +50,12 @@ export default function Login() {
               </div>
               <div className="field">
                 <label htmlFor="password">Password</label>
-                <input
+                <PasswordInput
                   id="password"
-                  type="password"
+                  label="Password"
                   autoComplete="current-password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
+                  onChange={setPassword}
                 />
               </div>
 
@@ -70,14 +67,7 @@ export default function Login() {
                 {busy && <span className="spinner" />}
                 {busy ? "Signing in…" : "Sign in"}
               </button>
-            </form>
-          </div>
-        </div>
-
-        <p className="alt">
-          No account yet? <Link to="/signup">Create one</Link>
-        </p>
-      </div>
-    </div>
+      </form>
+    </AuthShell>
   );
 }

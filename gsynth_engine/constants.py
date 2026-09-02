@@ -18,6 +18,10 @@ RIGHT_LINKER: Final[str] = "TCTTCTGGT"              # flexible Ser-Ser-Gly
 CLEAVAGE_SITES: Final[dict[str, str]] = {
     "Thrombin":     "CTGGTGCCGCGTGGTTCT",           # LVPR/GS
     "TEV":          "GAAAACCTGTATTTTCAGGGC",        # ENLYFQ/G
+    # Factor Xa recognises the translated IEGR peptide, not one mandatory
+    # nucleotide sequence. Keep the E. coli-compatible GAA/GGT/CGT codons;
+    # this spelling avoids the rare synonymous AGG arginine codon.
+    # This exact release convention is pinned in test_ssd_golden.py.
     "Factor Xa":    "ATCGAAGGTCGT",                 # IEGR/
     "PreScission":  "CTGGAAGTGCTGTTCCAGGGCCCA",     # LEVLFQ/GP
     "Enterokinase": "GATGACGATGACAAG",              # DDDDK/
@@ -38,7 +42,7 @@ CLEAVAGE_SITES: Final[dict[str, str]] = {
 # What each oligo must carry is *derived* from these (see `left_remainders`
 # and `right_remainders`) rather than stored, because it differs depending on
 # whether the enzyme sits at the left or the right end of the insert. Storing
-# a single pair per enzyme — as G-Synth 2.x did — silently produced
+# a single pair per enzyme silently produces
 # mismatched duplexes for every enzyme except the validated NdeI/XhoI pair.
 #
 # NdeI is the important special case: its site CATATG *contains* the ATG

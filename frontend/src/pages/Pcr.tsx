@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { ApiError, api, type Catalogue, type PcrResult } from "../api/client";
 import Icon from "../components/Icon";
+import GelSimulation from "../components/GelSimulation";
+import PrimerAnnealingView from "../components/PrimerAnnealingView";
 import PreflightPanel from "../components/PreflightPanel";
 import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
@@ -170,6 +172,7 @@ export default function Pcr() {
           bottom: result.digest.bottom,
           leftEnzyme: result.left_enzyme,
           rightEnzyme: result.right_enzyme,
+          origin: "pcr",
         },
       },
     });
@@ -332,7 +335,7 @@ export default function Pcr() {
                     </select>
                     <span id="start-codon-note" className="note">
                       {leftEnzyme}&rsquo;s recognition site supplies ATG. Using it alone
-                      matches the legacy G-Synth logic and avoids a Met-Met start.
+                      preserves the validated reading frame and avoids a Met-Met start.
                     </span>
                   </div>
                 )}
@@ -404,6 +407,16 @@ export default function Pcr() {
 
               <div className="card">
                 <div className="card-head">
+                  <h2 style={{ flex: 1 }}>Primer–template hybridization</h2>
+                  <span className="label">cycle 1 geometry</span>
+                </div>
+                <div className="card-body">
+                  <PrimerAnnealingView forward={result.forward} reverse={result.reverse} />
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="card-head">
                   <h2 style={{ flex: 1 }}>Product</h2>
                   <span className="note nums">{result.product_length} bp</span>
                 </div>
@@ -417,6 +430,18 @@ export default function Pcr() {
                   )}
                 </div>
               </div>
+
+              {result.gel && (
+                <div className="card">
+                  <div className="card-head">
+                    <h2 style={{ flex: 1 }}>{result.gel.title}</h2>
+                    <span className="label">agarose gel simulation</span>
+                  </div>
+                  <div className="card-body">
+                    <GelSimulation simulation={result.gel} />
+                  </div>
+                </div>
+              )}
 
               {result.digest && (
                 <div className="card">

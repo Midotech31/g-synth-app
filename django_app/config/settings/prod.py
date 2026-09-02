@@ -32,6 +32,11 @@ CORS_ALLOWED_ORIGINS = [
 # silently destroy all accounts and projects.
 DATABASES = {"default": env.db_url("DATABASE_URL")}  # noqa: F405
 
+# Learn is opt-in in production. A deployment must deliberately provision a
+# private Ollama-compatible service and accept its privacy/cost implications;
+# otherwise unpublished sequence material must never leave the application.
+TUTOR_ENABLED = env.bool("TUTOR_ENABLED", default=False)  # noqa: F405
+
 # Belt and braces: the development key is committed to the repository, so
 # anyone could forge JWTs with it. Refuse to serve traffic if it leaks into
 # a production environment.

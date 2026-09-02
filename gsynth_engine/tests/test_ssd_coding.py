@@ -11,7 +11,7 @@ the protein. It was reachable from the interface with no test behind it.
 import pytest
 
 from gsynth_engine.constants import overhang
-from gsynth_engine.merzoug import design_merzoug_assembly
+from gsynth_engine.esd import design_extended_sequence
 from gsynth_engine.sequence import SequenceError, reverse_complement
 from gsynth_engine.ssd import design_small_sequence
 
@@ -118,13 +118,13 @@ class TestTheInvariantsStillHold:
     @pytest.mark.parametrize("pair", ["NdeI / XhoI", "BamHI / EcoRI", "KpnI / SacI"])
     def test_the_terminal_ends_are_what_the_enzymes_leave(self, pair):
         left, right = (e.strip() for e in pair.split("/"))
-        plan = design_merzoug_assembly(GENE, enzyme_pair=pair, is_coding=True,
+        plan = design_extended_sequence(GENE, enzyme_pair=pair, is_coding=True,
                                        target_oligo_length=90)
         assert plan.terminal_ends == (overhang(left), overhang(right))
 
     @pytest.mark.parametrize("pair", ["NdeI / XhoI", "BamHI / EcoRI"])
     def test_the_fragments_still_re_ligate_into_the_construct(self, pair):
-        plan = design_merzoug_assembly(GENE, enzyme_pair=pair, is_coding=True,
+        plan = design_extended_sequence(GENE, enzyme_pair=pair, is_coding=True,
                                        target_oligo_length=60)
         assert plan.verify() == []
         assert "".join(f.forward for f in plan.fragments) == plan.construct_forward

@@ -5,7 +5,7 @@ not work. This project has already shipped one: a compatibility check in the
 cloning module that passed for every input because it compared a label with
 itself.
 
-`AssemblyPlan.verify()` is the gate the whole application rests on — nothing
+`ESDResult.verify()` is the gate the whole application rests on — nothing
 downloads until it returns empty. Every existing test asserts it returns
 empty. None had ever made it speak.
 """
@@ -13,7 +13,7 @@ from dataclasses import replace
 
 import pytest
 
-from gsynth_engine.merzoug import design_merzoug_assembly
+from gsynth_engine.esd import design_extended_sequence
 from gsynth_engine.sequence import reverse_complement
 from gsynth_engine.verify import Difference, verify_read
 
@@ -23,7 +23,7 @@ INSERT = ("GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCAACGGCGGC
 
 @pytest.fixture
 def plan():
-    return design_merzoug_assembly(INSERT, target_oligo_length=60)
+    return design_extended_sequence(INSERT, target_oligo_length=60)
 
 
 class TestVerifyCatchesWhatItPromises:
@@ -125,7 +125,7 @@ class TestTheOrderSheetAdvisesTheRightScale:
     def test_longer_oligos_are_sent_for_purification(self, target, expect_page):
         from gsynth_engine.protocol import order_sheet
 
-        plan = design_merzoug_assembly(INSERT, target_oligo_length=target)
+        plan = design_extended_sequence(INSERT, target_oligo_length=target)
         rows = order_sheet(plan)
         purifications = {row.purification for row in rows}
         assert ("PAGE" in purifications) is expect_page, purifications

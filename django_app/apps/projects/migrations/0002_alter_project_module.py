@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
                 choices=[
                     ("general", "General"),
                     ("ssd", "Small Sequence Design"),
-                    ("merzoug_assembly", "Merzoug Assembly"),
+                    ("extended_sequence_design", "Extended Sequence Design"),
                     ("cloning", "Cloning"),
                     ("codon_optimization", "Codon Optimisation"),
                     ("plasmid_visualizer", "Imported Sequence"),

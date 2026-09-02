@@ -20,15 +20,14 @@ hard constraints by swapping synonymous codons, iterating until nothing
 changes. Anything that cannot be repaired is reported rather than left for
 the user to discover at the bench.
 
-**About the usage table.** The shipped table is the Sharp & Li (1987)
-relative-adaptiveness index for *E. coli*, the same index CAI was defined
-against. It drives two different things, and they are not equally
-sensitive: codon *choice* depends only on the ranking within each
-amino-acid family, which is not controversial, while the CAI *number*
-depends on the exact weights. If a CAI is going into a manuscript, build a
-table from your own reference genes with `build_table` and quote that —
-that is what the metric was designed for, and it removes any dependence on
-a table you did not measure.
+**About the usage tables.** The default *E. coli* profile uses the Sharp & Li
+(1987) relative-adaptiveness index against which CAI was defined. Additional
+host profiles are normalized from species-wide coding-sequence frequencies in
+the Kazusa Codon Usage Database. Codon *choice* depends on the ranking within
+each amino-acid family, whereas an absolute CAI depends on the exact reference
+set. For quantitative reporting or a specific strain, tissue or cell line,
+build a table from the relevant expressed genes with `build_table` and report
+that reference set.
 
 References
     Sharp P.M. & Li W.-H. (1987) Nucleic Acids Res 15:1281–1295.
@@ -111,7 +110,7 @@ class CodonTable:
 #: Sharp & Li (1987) relative adaptiveness for *E. coli*. See the module
 #: docstring on when to replace this with a table of your own.
 ECOLI = CodonTable(
-    name="E. coli",
+    name="Escherichia coli (high-expression reference)",
     source="Sharp & Li (1987), relative adaptiveness index",
     weights={
         "TTT": 0.296, "TTC": 1.000, "TTA": 0.020, "TTG": 0.020,
@@ -139,7 +138,123 @@ ECOLI = CodonTable(
     },
 )
 
-TABLES: dict[str, CodonTable] = {"E. coli": ECOLI}
+
+_FREQUENCY_ORDER = (
+    "TTT", "TCT", "TAT", "TGT", "TTC", "TCC", "TAC", "TGC",
+    "TTA", "TCA", "TAA", "TGA", "TTG", "TCG", "TAG", "TGG",
+    "CTT", "CCT", "CAT", "CGT", "CTC", "CCC", "CAC", "CGC",
+    "CTA", "CCA", "CAA", "CGA", "CTG", "CCG", "CAG", "CGG",
+    "ATT", "ACT", "AAT", "AGT", "ATC", "ACC", "AAC", "AGC",
+    "ATA", "ACA", "AAA", "AGA", "ATG", "ACG", "AAG", "AGG",
+    "GTT", "GCT", "GAT", "GGT", "GTC", "GCC", "GAC", "GGC",
+    "GTA", "GCA", "GAA", "GGA", "GTG", "GCG", "GAG", "GGG",
+)
+
+
+def _table_from_frequencies(
+    name: str, source: str, frequencies_per_thousand: str,
+) -> CodonTable:
+    """Normalize species-wide frequencies within each synonymous family."""
+    values = tuple(float(value) for value in frequencies_per_thousand.split())
+    if len(values) != len(_FREQUENCY_ORDER):
+        raise ValueError(f"Expected 64 codon frequencies for {name}, got {len(values)}")
+    frequencies = dict(zip(_FREQUENCY_ORDER, values, strict=True))
+    weights: dict[str, float] = {}
+    for codons in SYNONYMS.values():
+        maximum = max(frequencies[codon] for codon in codons)
+        for codon in codons:
+            weights[codon] = frequencies[codon] / maximum if maximum else 0.0
+    return CodonTable(name=name, source=source, weights=weights)
+
+
+S_CEREVISIAE = _table_from_frequencies(
+    "Saccharomyces cerevisiae",
+    "Kazusa Codon Usage Database, NCBI taxon 4932; 14,411 CDS (GenBank release 160)",
+    """
+    26.1 23.5 18.8 8.1  18.4 14.2 14.8 4.8  26.2 18.7 1.1 0.7  27.2 8.6 0.5 10.4
+    12.3 13.5 13.6 6.4  5.4 6.8 7.8 2.6  13.4 18.3 27.3 3.0  10.5 5.3 12.1 1.7
+    30.1 20.3 35.7 14.2  17.2 12.7 24.8 9.8  17.8 17.8 41.9 21.3  20.9 8.0 30.8 9.2
+    22.1 21.2 37.6 23.9  11.8 12.6 20.2 9.8  11.8 16.2 45.6 10.9  10.8 6.2 19.2 6.0
+    """,
+)
+
+K_PHAFFII = _table_from_frequencies(
+    "Komagataella phaffii (Pichia pastoris)",
+    "Kazusa Codon Usage Database, NCBI taxon 4922; 137 CDS (GenBank release 160)",
+    """
+    24.1 24.4 16.0 7.7  20.6 16.5 18.1 4.4  15.6 15.2 0.8 0.3  31.5 7.4 0.5 10.3
+    15.9 15.8 11.8 6.9  7.6 6.8 9.1 2.2  10.7 18.9 25.4 4.2  14.9 3.9 16.3 1.9
+    31.1 22.4 25.1 12.5  19.4 14.5 26.7 7.6  11.1 13.8 29.9 20.1  18.7 6.0 33.8 6.6
+    26.9 28.9 35.7 25.5  14.9 16.6 25.9 8.1  9.9 15.1 37.4 19.1  12.3 3.9 29.0 5.8
+    """,
+)
+
+B_SUBTILIS = _table_from_frequencies(
+    "Bacillus subtilis",
+    "Kazusa Codon Usage Database, NCBI taxon 1423; 2,529 CDS (GenBank release 160)",
+    """
+    30.0 12.7 23.3 3.6  14.3 8.3 12.6 4.3  19.8 14.6 1.9 0.8  15.8 6.5 0.5 10.7
+    21.8 10.6 15.7 7.2  10.7 3.5 7.5 8.2  4.9 7.1 20.4 4.3  23.0 16.3 18.5 6.9
+    36.2 8.7 22.9 6.8  27.2 9.0 17.8 14.4  9.8 21.6 48.4 10.5  26.3 14.9 20.8 4.1
+    18.6 18.6 33.2 13.0  17.3 16.5 19.0 23.3  13.0 21.1 48.1 21.8  17.3 19.8 22.6 11.2
+    """,
+)
+
+H_SAPIENS = _table_from_frequencies(
+    "Homo sapiens",
+    "Kazusa Codon Usage Database, NCBI taxon 9606; 93,487 CDS (GenBank release 160)",
+    """
+    17.6 15.2 12.2 10.6  20.3 17.7 15.3 12.6  7.7 12.2 1.0 1.6  12.9 4.4 0.8 13.2
+    13.2 17.5 10.9 4.5  19.6 19.8 15.1 10.4  7.2 16.9 12.3 6.2  39.6 6.9 34.2 11.4
+    16.0 13.1 17.0 12.1  20.8 18.9 19.1 19.5  7.5 15.1 24.4 12.2  22.0 6.1 31.9 12.0
+    11.0 18.4 21.8 10.8  14.5 27.7 25.1 22.2  7.1 15.8 29.0 16.5  28.1 7.4 39.6 16.5
+    """,
+)
+
+C_GRISEUS = _table_from_frequencies(
+    "Cricetulus griseus (species-level CHO reference)",
+    "Kazusa Codon Usage Database, NCBI taxon 10029; 331 CDS (GenBank release 160)",
+    """
+    19.6 16.0 13.1 9.1  22.0 16.5 16.4 10.3  6.4 10.3 0.6 1.2  14.1 3.4 0.5 13.1
+    13.2 16.7 10.2 5.6  18.4 17.0 12.9 9.3  7.6 15.6 10.3 7.2  38.8 4.3 33.4 10.1
+    17.4 14.1 17.4 11.4  24.8 20.3 21.2 16.4  6.9 15.7 24.6 10.1  23.0 4.5 38.4 10.2
+    11.6 22.4 24.6 12.8  15.7 25.9 28.1 21.3  7.8 16.3 28.4 15.8  30.1 5.0 41.1 13.4
+    """,
+)
+
+S_FRUGIPERDA = _table_from_frequencies(
+    "Spodoptera frugiperda (Sf9/Sf21 species reference)",
+    "Kazusa Codon Usage Database, NCBI taxon 7108; 142 CDS (GenBank release 160)",
+    """
+    10.1 10.7 10.0 8.5  27.5 12.6 24.4 13.2  7.7 10.6 2.3 0.7  15.9 7.7 0.7 13.3
+    9.6 14.1 8.7 15.3  17.0 13.7 15.6 15.6  7.0 13.6 16.1 5.4  24.1 7.8 21.6 3.7
+    15.5 14.3 13.4 8.4  28.3 17.2 28.8 11.1  8.3 12.3 26.8 12.1  27.0 9.4 49.2 12.6
+    14.1 24.6 21.9 21.5  20.1 20.8 33.4 19.6  12.0 12.8 27.6 17.8  24.1 12.4 33.1 4.6
+    """,
+)
+
+N_BENTHAMIANA = _table_from_frequencies(
+    "Nicotiana benthamiana",
+    "Kazusa Codon Usage Database, NCBI taxon 4100; 100 CDS (GenBank release 160)",
+    """
+    23.7 22.3 15.8 9.2  17.6 10.4 12.8 7.2  12.8 17.2 0.7 0.9  24.3 5.6 0.7 12.4
+    24.9 18.9 12.9 7.7  12.5 6.4 8.2 4.2  9.2 16.8 18.1 5.8  11.9 6.5 17.0 5.3
+    26.7 17.4 29.1 14.7  13.9 10.1 16.9 10.7  12.1 15.2 29.0 15.8  23.9 5.4 38.0 13.0
+    26.1 33.2 38.5 24.3  10.6 12.6 16.4 11.4  9.9 23.5 35.2 22.5  15.6 6.5 30.9 11.1
+    """,
+)
+
+DEFAULT_HOST = "ecoli"
+TABLES: dict[str, CodonTable] = {
+    DEFAULT_HOST: ECOLI,
+    "s_cerevisiae": S_CEREVISIAE,
+    "k_phaffii": K_PHAFFII,
+    "b_subtilis": B_SUBTILIS,
+    "h_sapiens": H_SAPIENS,
+    "c_griseus": C_GRISEUS,
+    "s_frugiperda": S_FRUGIPERDA,
+    "n_benthamiana": N_BENTHAMIANA,
+}
 
 
 def build_table(sequences: list[str], *, name: str, source: str = "") -> CodonTable:

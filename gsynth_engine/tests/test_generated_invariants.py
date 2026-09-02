@@ -12,7 +12,7 @@ import pytest
 
 from gsynth_engine.cloning import clone, find_sites, linearise
 from gsynth_engine.constants import RESTRICTION_ENZYMES
-from gsynth_engine.merzoug import design_merzoug_assembly
+from gsynth_engine.esd import design_extended_sequence
 from gsynth_engine.preflight import assembly_preflight, cloning_preflight, verification_state
 from gsynth_engine.sequence import reverse_complement
 from gsynth_engine.ssd import design_small_sequence
@@ -54,7 +54,7 @@ def unique_site_vector(left: str, right: str, seed: int) -> str:
 def test_generated_assemblies_reconstruct_both_strands(seed: int):
     length = random.Random(seed).randint(45, 520)
     insert = site_free_dna(length, seed + 1000)
-    plan = design_merzoug_assembly(
+    plan = design_extended_sequence(
         insert,
         enzyme_pair="NdeI / XhoI",
         target_oligo_length=random.Random(seed + 1).choice([55, 70, 90]),

@@ -17,7 +17,7 @@ class TestProjectCrud:
 
     def test_create_and_retrieve(self, auth_client, user):
         r = auth_client.post("/api/projects/", {
-            "name": "Insulin v1", "module": "merzoug_assembly",
+            "name": "Insulin v1", "module": "extended_sequence_design",
             "sequence": "ATGAAACGT",
             "notes": "first test",
             "data": {"guides": []},
@@ -62,6 +62,130 @@ class TestProjectCrud:
         r = auth_client.delete(f"/api/projects/{p.id}/")
         assert r.status_code == 204
         assert not Project.objects.filter(id=p.id).exists()
+
+
+@pytest.mark.django_db
+class TestEditableAnnotations:
+    def test_replaces_annotations_without_overwriting_other_project_data(self, auth_client, user):
+        project = Project.objects.create(
+            user=user,
+            name="new insert",
+            sequence="ATGAAACCCGGGTAA",
+            data={"topology": "linear", "preflight": {"verdict": "ready"}},
+        )
+        annotation = {
+            "name": "My insulin insert",
+            "type": "CDS",
+            "start": 0,
+            "end": 15,
+            "direction": 1,
+            "color": "#0E6E77",
+            "translation_start": 0,
+            "translation_end": 15,
+        }
+
+        response = auth_client.patch(
+            f"/api/projects/{project.id}/annotations/",
+            {"annotations": [annotation]},
+            format="json",
+        )
+
+        assert response.status_code == 200, response.data
+        assert response.data["data"]["annotations"] == [annotation]
+        assert response.data["data"]["preflight"] == {"verdict": "ready"}
+
+    def test_rejects_invalid_linear_and_wrapped_coordinates(self, auth_client, user):
+        project = Project.objects.create(
+            user=user,
+            name="linear",
+            sequence="A" * 20,
+            data={"topology": "linear"},
+        )
+        invalid = {
+            "name": "past end", "type": "misc_feature", "start": 18, "end": 25,
+            "direction": 1, "color": "#0E6E77",
+        }
+
+        response = auth_client.patch(
+            f"/api/projects/{project.id}/annotations/",
+            {"annotations": [invalid]},
+            format="json",
+        )
+
+        assert response.status_code == 400
+        assert "linear feature" in str(response.data).lower()
+
+    def test_accepts_a_feature_crossing_the_circular_origin(self, auth_client, user):
+        project = Project.objects.create(
+            user=user,
+            name="plasmid",
+            sequence="A" * 20,
+            data={"topology": "circular"},
+        )
+        wrapped = {
+            "name": "origin insert", "type": "CDS", "start": 17, "end": 24,
+            "direction": -1, "color": "#3F7A52",
+        }
+
+        response = auth_client.patch(
+            f"/api/projects/{project.id}/annotations/",
+            {"annotations": [wrapped]},
+            format="json",
+        )
+
+        assert response.status_code == 200, response.data
+        assert response.data["data"]["annotations"][0]["end"] == 24
+
+    def test_annotation_updates_are_scoped_to_the_owner(self, auth_client, other_user):
+        project = Project.objects.create(
+            user=other_user, name="private", sequence="ACGT", data={"topology": "linear"}
+        )
+        response = auth_client.patch(
+            f"/api/projects/{project.id}/annotations/", {"annotations": []}, format="json",
+        )
+        assert response.status_code == 404
+
+    def test_detects_common_features_without_saving_them(self, auth_client, user):
+        project = Project.objects.create(
+            user=user,
+            name="unannotated insert",
+            sequence="AAATAATACGACTCACTATAGGGCC",
+            data={"topology": "linear", "annotations": []},
+        )
+
+        response = auth_client.get(f"/api/projects/{project.id}/detect-common-features/")
+
+        assert response.status_code == 200, response.data
+        promoter = next(
+            item for item in response.data["matches"]
+            if item["annotation"]["name"] == "T7 promoter"
+        )
+        assert promoter["annotation"]["start"] == 3
+        assert promoter["annotation"]["direction"] == 1
+        project.refresh_from_db()
+        assert project.data["annotations"] == []
+
+    def test_does_not_propose_a_known_feature_already_annotated(self, auth_client, user):
+        motif = "TAATACGACTCACTATAGGG"
+        project = Project.objects.create(
+            user=user,
+            name="annotated",
+            sequence=motif,
+            data={
+                "topology": "linear",
+                "annotations": [{
+                    "name": "T7 promoter", "type": "promoter", "start": 0,
+                    "end": len(motif), "direction": 1, "color": "#C97634",
+                }],
+            },
+        )
+
+        response = auth_client.get(f"/api/projects/{project.id}/detect-common-features/")
+
+        assert not [
+            item for item in response.data["matches"]
+            if item["annotation"]["name"] == "T7 promoter"
+        ]
 
 
 @pytest.mark.django_db
@@ -119,6 +243,33 @@ class TestProjectExport:
             for f in record.features if f.type != "source"
         ]
         assert labels == ["6xHis"]
+
+    def test_a_manually_named_insert_survives_into_genbank(self, auth_client, user):
+        project = Project.objects.create(
+            user=user,
+            name="editable",
+            sequence="ATGAAACCCGGGTAA",
+            data={"topology": "linear", "annotations": []},
+        )
+        annotation = {
+            "name": "Insulin glargine insert",
+            "type": "CDS",
+            "start": 0,
+            "end": 15,
+            "direction": 1,
+            "color": "#3F7A52",
+            "translation_start": 0,
+            "translation_end": 15,
+        }
+        updated = auth_client.patch(
+            f"/api/projects/{project.id}/annotations/",
+            {"annotations": [annotation]},
+            format="json",
+        )
+        assert updated.status_code == 200
+
+        response = auth_client.get(reverse("project-export", args=[project.id]))
+        assert '/label="Insulin glargine insert"' in response.content.decode()
 
     def test_it_can_export_as_fasta(self, auth_client, user):
         project = Project.objects.create(

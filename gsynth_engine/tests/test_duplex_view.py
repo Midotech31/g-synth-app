@@ -15,7 +15,7 @@ from gsynth_engine.duplex import (
     fragment_duplex,
     junction_view,
 )
-from gsynth_engine.merzoug import design_merzoug_assembly
+from gsynth_engine.esd import design_extended_sequence
 from gsynth_engine.sequence import SequenceError, complement, reverse_complement
 
 INSERT = "ATG" + "GCTAGCAAAGGTTTCCGTGAAGATCTGGCAAAATTCCTGCAGGCTAACGGT" * 3
@@ -23,7 +23,7 @@ INSERT = "ATG" + "GCTAGCAAAGGTTTCCGTGAAGATCTGGCAAAATTCCTGCAGGCTAACGGT" * 3
 
 @pytest.fixture(scope="module")
 def plan():
-    return design_merzoug_assembly(INSERT, target_oligo_length=70)
+    return design_extended_sequence(INSERT, target_oligo_length=70)
 
 
 @pytest.fixture(scope="module")
@@ -57,7 +57,7 @@ class TestPairing:
         for left, right in zip(names, names[1:], strict=False):
             if left == right:
                 continue
-            design = design_merzoug_assembly(
+            design = design_extended_sequence(
                 INSERT, enzyme_pair=f"{left} / {right}", target_oligo_length=70
             )
             assert construct_duplex(design).mismatches() == [], f"{left} / {right}"
@@ -86,7 +86,7 @@ class TestOverhangs:
         Drawn as if it were a 5' overhang, the construct would look fine and
         be wrong, so the polarity is asserted explicitly.
         """
-        design = design_merzoug_assembly(
+        design = design_extended_sequence(
             INSERT, enzyme_pair="ApaI / XhoI", target_oligo_length=70
         )
         three_prime = construct_duplex(design)
@@ -105,7 +105,7 @@ class TestOverhangs:
 
     def test_blunt_ends_leave_no_stagger(self):
         """EcoRV cuts blunt: both strands start and end in the same column."""
-        design = design_merzoug_assembly(
+        design = design_extended_sequence(
             INSERT, enzyme_pair="EcoRV / EcoRV", target_oligo_length=70
         )
         blunt = construct_duplex(design)
@@ -288,7 +288,7 @@ class TestJunctionView:
             vectors.sequence_of("pET-21a")["sequence"]
             if pair == "NdeI / XhoI" else build_vector(left, right)
         )
-        design = design_merzoug_assembly(
+        design = design_extended_sequence(
             clean_filler(insert_length, 3), enzyme_pair=pair,
             target_oligo_length=200,
         )

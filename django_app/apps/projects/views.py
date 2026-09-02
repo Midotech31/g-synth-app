@@ -3,9 +3,15 @@ from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from apps.projects.models import Project
-from apps.projects.serializers import ProjectListSerializer, ProjectSerializer
+from apps.projects.serializers import (
+    ProjectAnnotationsSerializer,
+    ProjectListSerializer,
+    ProjectSerializer,
+)
+from gsynth_engine.annotations import detect_common_features
 from gsynth_engine.genbank import to_fasta, to_genbank
 from gsynth_engine.provenance import build_provenance
 
@@ -38,6 +44,41 @@ class ProjectViewSet(viewsets.ModelViewSet):
             output_sequence=str(data.get("sequence", "")),
         )
         serializer.save(user=self.request.user, provenance=provenance)
+
+    @action(detail=True, methods=["patch"])
+    def annotations(self, request, pk=None):
+        """Replace only a project's feature list after coordinate validation.
+
+        Keeping this separate from the general JSON ``data`` PATCH prevents a
+        stale viewer tab from overwriting design results, preflight evidence or
+        provenance-adjacent metadata while someone is merely renaming a feature.
+        """
+        project = self.get_object()
+        serializer = ProjectAnnotationsSerializer(
+            data=request.data,
+            context={"request": request, "project": project},
+        )
+        serializer.is_valid(raise_exception=True)
+        data = dict(project.data or {})
+        data["annotations"] = serializer.validated_data["annotations"]
+        project.data = data
+        project.save(update_fields=["data", "updated_at"])
+        return Response(ProjectSerializer(project, context={"request": request}).data)
+
+    @action(detail=True, methods=["get"], url_path="detect-common-features")
+    def detect_common(self, request, pk=None):
+        """Propose exact curated motif matches without changing the project."""
+        project = self.get_object()
+        data = project.data or {}
+        matches = detect_common_features(
+            project.sequence,
+            circular=str(data.get("topology", "")).lower() == "circular",
+            existing=data.get("annotations") or [],
+        )
+        return Response({
+            "matches": matches,
+            "method": "Exact DNA motif matching on both strands; review required.",
+        })
 
     @action(detail=True, methods=["get"])
     def export(self, request, pk=None):

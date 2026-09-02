@@ -1,4 +1,4 @@
-"""Tests for reading Sanger trace files.
+"""Tests for reading ABIF and SCF Sanger trace files.
 
 The point of reading the trace rather than the letters is that a difference
 from the design means two completely different things depending on the peak
@@ -18,6 +18,8 @@ import pytest
 from gsynth_engine.chromatogram import (
     DEFAULT_TRIM_QUALITY,
     read_ab1,
+    read_scf,
+    read_trace,
     summarise,
 )
 from gsynth_engine.sequence import SequenceError
@@ -86,6 +88,87 @@ def build_ab1(sequence: str, quality: list[int] | None = None, *,
     return bytes(blob)
 
 
+def _delta_delta_encode(values: list[int], modulus: int) -> list[int]:
+    """Apply the inverse of SCF v3's two cumulative-sum passes."""
+    encoded = list(values)
+    for _ in range(2):
+        encoded = [
+            (value - (encoded[index - 1] if index else 0)) % modulus
+            for index, value in enumerate(encoded)
+        ]
+    return encoded
+
+
+def build_scf(sequence: str, quality: list[int] | None = None, *,
+              version: int = 3, sample_size: int = 2,
+              peaks: list[int] | None = None, spacing: int = 12,
+              traces: dict[str, list[int]] | None = None) -> bytes:
+    """A valid SCF v2/v3 file, written to the Staden specification."""
+    quality = quality if quality is not None else [40] * len(sequence)
+    peaks = peaks if peaks is not None else [spacing * (i + 1) for i in range(len(sequence))]
+    samples = (len(sequence) + 2) * spacing
+    maximum = (1 << (8 * sample_size)) - 1
+
+    if traces is None:
+        traces = {base: [0] * samples for base in "ACGT"}
+        for index, base in enumerate(sequence):
+            at = peaks[index]
+            if base in traces:
+                for distance in range(-3, 4):
+                    if 0 <= at + distance < samples:
+                        traces[base][at + distance] = min(
+                            maximum, max(0, 800 - 220 * abs(distance))
+                        )
+
+    sample_code = "B" if sample_size == 1 else "H"
+    if version == 3:
+        sample_payload = b"".join(
+            struct.pack(
+                f">{samples}{sample_code}",
+                *_delta_delta_encode(traces[base], maximum + 1),
+            )
+            for base in "ACGT"
+        )
+    else:
+        interleaved = [
+            traces[base][sample]
+            for sample in range(samples)
+            for base in "ACGT"
+        ]
+        sample_payload = struct.pack(f">{samples * 4}{sample_code}", *interleaved)
+
+    probabilities = {
+        base: [quality[index] if call == base else 0 for index, call in enumerate(sequence)]
+        for base in "ACGT"
+    }
+    if version == 3:
+        base_payload = struct.pack(f">{len(peaks)}I", *peaks)
+        base_payload += b"".join(bytes(probabilities[base]) for base in "ACGT")
+        base_payload += sequence.encode("ascii")
+        base_payload += bytes(len(sequence) * 3)
+    else:
+        records = []
+        for index, (peak, call) in enumerate(zip(peaks, sequence, strict=True)):
+            records.append(struct.pack(
+                ">I4B1s3B", peak,
+                *(probabilities[base][index] for base in "ACGT"),
+                call.encode("ascii"), 0, 0, 0,
+            ))
+        base_payload = b"".join(records)
+
+    samples_offset = 128
+    bases_offset = samples_offset + len(sample_payload)
+    comments = b"NAME=test\n"
+    comments_offset = bases_offset + len(base_payload)
+    header = struct.pack(
+        ">4s8I4s4I18I", b".scf", samples, samples_offset,
+        len(sequence), 0, len(sequence), bases_offset,
+        len(comments), comments_offset, f"{version}.00".encode("ascii"),
+        sample_size, 0, 0, comments_offset + len(comments), *([0] * 18),
+    )
+    return header + sample_payload + base_payload + comments
+
+
 class TestReadingATrace:
     def test_base_calls_survive_the_round_trip(self):
         trace = read_ab1(build_ab1(READ))
@@ -147,6 +230,71 @@ class TestReadingATrace:
         trace = read_ab1(build_ab1(READ, spacing=14))
         assert len(trace.peaks) == len(READ)
         assert trace.peaks == sorted(trace.peaks), "peaks must run left to right"
+
+
+class TestReadingSCF:
+    """Both public SCF layouts preserve the evidence used for verification."""
+
+    def test_v3_two_byte_samples_round_trip(self):
+        quality = [18 + index % 35 for index in range(len(READ))]
+        trace = read_scf(build_scf(READ, quality), name="read.scf")
+
+        assert trace.name == "read.scf"
+        assert trace.sequence == READ
+        assert trace.quality == quality
+        assert trace.peaks == sorted(trace.peaks)
+        assert set(trace.traces) == set("ACGT")
+        for index, base in enumerate(READ):
+            at = trace.peaks[index]
+            assert max("ACGT", key=lambda channel: trace.traces[channel][at]) == base
+
+    def test_v3_one_byte_samples_decode_across_modulo_wrap(self):
+        sequence = "ACGTACGT"
+        samples = (len(sequence) + 2) * 12
+        traces = {
+            base: [((index * (31 + channel * 7)) + channel * 211) % 256
+                   for index in range(samples)]
+            for channel, base in enumerate("ACGT")
+        }
+        trace = read_scf(build_scf(
+            sequence, sample_size=1, traces=traces,
+        ))
+        assert trace.traces == traces
+
+    def test_v2_interleaved_records_are_read(self):
+        quality = [27 + index % 10 for index in range(len(READ))]
+        trace = read_scf(build_scf(READ, quality, version=2))
+        assert trace.sequence == READ
+        assert trace.quality == quality
+        assert trace.sample_count == (len(READ) + 2) * 12
+
+    def test_dispatch_uses_magic_not_a_misleading_extension(self):
+        trace = read_trace(build_scf(READ), name="facility-export.ab1")
+        assert trace.sequence == READ
+        assert trace.name == "facility-export.ab1"
+
+    def test_dispatch_keeps_abif_support(self):
+        assert read_trace(build_ab1(READ)).sequence == READ
+
+    def test_truncated_sample_section_is_rejected(self):
+        with pytest.raises(SequenceError, match="sample section"):
+            read_scf(build_scf(READ)[:200])
+
+    def test_invalid_sample_size_is_rejected_before_unpacking(self):
+        blob = bytearray(build_scf(READ))
+        blob[40:44] = struct.pack(">I", 4)
+        with pytest.raises(SequenceError, match="only one- or two-byte"):
+            read_scf(bytes(blob))
+
+    def test_out_of_range_peak_is_rejected(self):
+        peaks = [12 * (index + 1) for index in range(len(READ))]
+        peaks[-1] = 1_000_000
+        with pytest.raises(SequenceError, match="peak locations"):
+            read_scf(build_scf(READ, peaks=peaks))
+
+    def test_unknown_file_is_rejected_as_a_supported_trace(self):
+        with pytest.raises(SequenceError, match="not a supported Sanger trace"):
+            read_trace(b"%PDF-1.4" + b"\x00" * 400)
 
 
 class TestQualityTrimming:
@@ -342,6 +490,31 @@ class TestVerifyingAgainstTheTrace:
         assert len(result.differences) == 1
         assert result.differences[0].read_index == bad_at
         assert result.differences[0].quality == 6
+
+    def test_a_short_quality_trimmed_reverse_read_stays_exact(self):
+        """Leading reference context is free in a semi-global alignment.
+
+        Penalising it makes a short exact read in a repetitive construct align
+        earlier and manufacture substitutions that are absent from the trace.
+        """
+        from gsynth_engine.sequence import reverse_complement
+        from gsynth_engine.verify import verify_read
+
+        design = (
+            "ATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTTTTGTGAACCAG"
+            "CATCTGTGCGGCAGCCATCTGGTGGAAGCGCTGTACCTGGTGTGCGGCGAACGCGGCTTTTTTTACACC"
+            "CCAAAAACCCGCCGCTAA"
+        )
+        read = reverse_complement(design[:113])
+        quality = [0] * 31 + [40] * 26 + [0] * 56
+        trace = read_ab1(build_ab1(read, quality))
+
+        result = verify_read(design, read, trace=trace)
+        assert result.reverse_complemented is True
+        assert result.start == 56
+        assert result.end == 82
+        assert result.identity == 100.0
+        assert result.differences == []
 
     def test_a_trace_trims_by_quality_not_by_a_fixed_count(self):
         """A clean read keeps its ends; the fixed 30 would discard 60 good

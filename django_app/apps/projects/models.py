@@ -1,8 +1,4 @@
-"""User-scoped project storage.
-
-Mirrors the schema of the Streamlit `projects` table so migrating existing
-users' data is a straight copy (same field names, same semantics).
-"""
+"""User-scoped storage for designs, sequences and validation records."""
 from django.conf import settings
 from django.db import models
 
@@ -21,7 +17,7 @@ class Project(models.Model):
     MODULES = (
         ("general",              "General"),
         ("ssd",                  "Small Sequence Design"),
-        ("merzoug_assembly",     "Merzoug Assembly"),
+        ("extended_sequence_design",     "Extended Sequence Design"),
         ("cloning",              "Cloning"),
         ("codon_optimization",   "Codon Optimisation"),
         ("plasmid_visualizer",   "Imported Sequence"),

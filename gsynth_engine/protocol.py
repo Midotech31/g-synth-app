@@ -7,7 +7,7 @@ steps to run once they arrive.
 Nothing here invents numbers. Volumes and temperatures are the standard
 conditions for annealing synthetic oligos and ligating them with T4 DNA
 ligase; anything design-specific (oligo count, overhangs, fragment order)
-comes from the :class:`AssemblyPlan`.
+comes from the :class:`ESDResult`.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import io
 from dataclasses import dataclass
 
 from gsynth_engine.duplex import construct_duplex
-from gsynth_engine.merzoug import AssemblyPlan
+from gsynth_engine.esd import ESDResult
 from gsynth_engine.sequence import gc_content
 from gsynth_engine.thermo import ANNEALING, melting_temperature
 
@@ -63,7 +63,7 @@ def _recommend_scale(length: int) -> tuple[str, str]:
     return "50 nmol", "PAGE"
 
 
-def order_sheet(plan: AssemblyPlan, *, construct_name: str = "construct") -> list[OligoOrder]:
+def order_sheet(plan: ESDResult, *, construct_name: str = "construct") -> list[OligoOrder]:
     """Every oligo to order, in the order fragments will be assembled."""
     prefix = construct_name.strip().replace(" ", "_") or "construct"
     orders: list[OligoOrder] = []
@@ -87,7 +87,7 @@ def order_sheet(plan: AssemblyPlan, *, construct_name: str = "construct") -> lis
     return orders
 
 
-def order_sheet_csv(plan: AssemblyPlan, *, construct_name: str = "construct") -> str:
+def order_sheet_csv(plan: ESDResult, *, construct_name: str = "construct") -> str:
     """The order sheet as CSV — most suppliers accept an upload in this shape."""
     orders = order_sheet(plan, construct_name=construct_name)
     buffer = io.StringIO()
@@ -99,14 +99,14 @@ def order_sheet_csv(plan: AssemblyPlan, *, construct_name: str = "construct") ->
 
 
 def bench_protocol(
-    plan: AssemblyPlan,
+    plan: ESDResult,
     *,
     construct_name: str = "construct",
     vector: str = "pET-21a(+)",
 ) -> str:
     """A protocol a student can follow without reading the source code.
 
-    Covers resuspension, annealing, the pairwise ligation Merzoug assembly
+    Covers resuspension, annealing, the pairwise ligation Extended Sequence Design
     calls for, and cloning into the cut vector.
     """
     ssd = plan.ssd
@@ -117,7 +117,7 @@ def bench_protocol(
     lines: list[str] = []
     add = lines.append
 
-    add(f"MERZOUG ASSEMBLY — {construct_name}")
+    add(f"EXTENDED SEQUENCE DESIGN — {construct_name}")
     add("=" * 72)
     add("")
     add(f"Construct        {plan.construct_length} bp "

@@ -149,6 +149,20 @@ class TestTheResponseMatchesTheEngine:
         assert r.data["annealing_temperature"] == expected.annealing_temperature
         assert r.data["digest"] is None
 
+    def test_pcr_response_includes_a_labelled_predicted_gel_and_marker_sizes(self, auth_client):
+        r = auth_client.post(reverse("design-pcr"), {"template": GENE}, format="json")
+
+        assert r.status_code == 200
+        assert r.data["gel"]["prediction_only"] is True
+        pcr_lane = next(lane for lane in r.data["gel"]["lanes"] if lane["name"] == "PCR")
+        ntc_lane = next(lane for lane in r.data["gel"]["lanes"] if lane["name"] == "NTC")
+        assert pcr_lane["bands"] == [{
+            "size_bp": r.data["product_length"],
+            "label": f"{r.data['product_length']:,} bp amplicon",
+        }]
+        assert ntc_lane["bands"] == []
+        assert any(ladder["bands"] for ladder in r.data["gel"]["ladders"])
+
     def test_both_tm_figures_survive_serialisation(self, auth_client):
         """Collapsing the two into one is what makes a tailed primer look as
         though it should anneal ten degrees hotter than it does."""

@@ -1,7 +1,7 @@
 """Every enzyme must produce a duplex that actually anneals.
 
-G-Synth 2.x stored one pair of "what's left after the cut" values per enzyme,
-but what the forward and reverse oligos must carry depends on whether the
+A single stored pair of "what's left after the cut" values per enzyme is
+insufficient because what the forward and reverse oligos must carry depends on whether the
 enzyme sits at the left or the right end of the insert. The stored values
 happened to be right for NdeI-as-left and XhoI-as-right — the validated
 default pair — and wrong for everything else, which produced duplexes with a

@@ -12,7 +12,8 @@ import pytest
 from django.urls import reverse
 
 from apps.projects.models import Project
-from gsynth_engine.merzoug import design_merzoug_assembly
+from gsynth_engine.constants import ALL_ENZYMES
+from gsynth_engine.esd import design_extended_sequence
 from gsynth_engine.ssd import design_small_sequence
 
 # The specification's Example 1 — the API must reproduce it end to end.
@@ -53,6 +54,10 @@ class TestEnzymeCatalogue:
         assert by_name["XhoI"]["overhang"] == "TCGA"
         assert by_name["KpnI"]["overhang_type"] == "3'"
         assert by_name["SmaI"]["overhang_type"] == "blunt"
+        assert by_name["HindIII"]["recognition"] == "AAGCTT"
+        assert by_name["HindIII"]["overhang"] == "AGCT"
+        assert by_name["HindIII"]["overhang_type"] == "5'"
+        assert set(by_name) == set(ALL_ENZYMES)
 
     def test_offers_cleavage_sites_and_common_pairs(self, api_client):
         data = api_client.get(reverse("design-enzymes")).data
@@ -196,7 +201,7 @@ class TestAssemblyEndpoint:
         assert [e["overhang"] for e in response.data["terminal_ends"]] == ["GTAC", "AGCT"]
 
     def test_the_ends_match_what_the_engine_measured(self, auth_client):
-        expected = design_merzoug_assembly(LONG_INSERT, target_oligo_length=90)
+        expected = design_extended_sequence(LONG_INSERT, target_oligo_length=90)
         response = auth_client.post(reverse(self.url_name), {
             "sequence": LONG_INSERT, "target_oligo_length": 90,
         })
@@ -252,7 +257,7 @@ class TestAssemblyEndpoint:
         assert all(row["Name"].startswith("pGS-EntA_") for row in oligos)
 
     def test_matches_the_engine_exactly(self, auth_client):
-        expected = design_merzoug_assembly(LONG_INSERT, target_oligo_length=90)
+        expected = design_extended_sequence(LONG_INSERT, target_oligo_length=90)
         response = auth_client.post(reverse(self.url_name), {
             "sequence": LONG_INSERT, "target_oligo_length": 90,
         })
@@ -262,13 +267,19 @@ class TestAssemblyEndpoint:
         ]
 
     def test_saves_as_a_project_when_asked(self, auth_client, user):
+        expected = design_extended_sequence(LONG_INSERT)
+        insert = next(segment for segment in expected.ssd.segments if segment.name == "insert")
         response = auth_client.post(reverse(self.url_name), {
             "sequence": LONG_INSERT, "name": "EntA assembly", "save_as_project": True,
         })
         project = Project.objects.get(id=response.data["project_id"])
         assert project.user == user
-        assert project.module == "merzoug_assembly"
+        assert project.module == "extended_sequence_design"
         assert project.data["fragment_count"] == response.data["fragment_count"]
+        assert project.data["insert_start"] == response.data["insert_start"] == insert.start
+        assert project.data["insert_end"] == response.data["insert_end"] == insert.end
+        assert project.data["topology"] == response.data["topology"] == "linear"
+        assert "backbone_length" not in project.data
 
     def test_rejects_an_overhang_outside_the_method(self, auth_client):
         response = auth_client.post(reverse(self.url_name), {
@@ -299,7 +310,7 @@ class TestAssemblyEndpoint:
         bench protocol printed from it — describing oligos nobody ordered.
         """
         gene = _random_gene(2_400, seed=7)
-        expected = design_merzoug_assembly(
+        expected = design_extended_sequence(
             gene, target_oligo_length=90, overhang_length=4,
         )
         response = auth_client.post(reverse(self.url_name), {
@@ -332,7 +343,7 @@ class TestDownloads:
         })
         assert response.status_code == 200
         text = response.content.decode()
-        assert "MERZOUG ASSEMBLY" in text
+        assert "EXTENDED SEQUENCE DESIGN" in text
         assert "No PCR" in text
         assert "PHOSPHORYLATION" in text
         assert "pGS-EntA_protocol.txt" in response["Content-Disposition"]
@@ -417,6 +428,34 @@ class TestCloneEndpoint:
         assert insert[0]["start"] == data["insert_start"]
         assert insert[0]["end"] == data["insert_end"]
 
+    def test_cassette_parts_are_coordinate_level_annotations(self, auth_client):
+        """The viewer can show the tag, cleavage site and target without motif guesses."""
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": LONG_INSERT,
+            "vector": build_vector(),
+            "name": "Insulin cassette",
+            "cleavage_site": "Thrombin",
+        })
+        assert response.status_code == 200, response.data
+        data = response.data
+        by_name = {}
+        for annotation in data["annotations"]:
+            by_name.setdefault(annotation["name"], []).append(annotation)
+
+        assert "6×His tag" in by_name
+        assert "Thrombin site" in by_name
+        assert "Insulin cassette target" in by_name
+
+        cassette = next(
+            annotation for annotation in by_name["Insulin cassette"]
+            if annotation["type"] == "CDS"
+        )
+        assert cassette["translation_start"] == data["insert_start"] + data["insert"]["orf_start"]
+        assert cassette["translation_end"] == data["insert_end"]
+
+        tag = by_name["6×His tag"][0]
+        assert data["plasmid"][tag["start"]:tag["end"]] == "CACCACCACCACCACCAC"
+
     def test_vector_annotations_are_carried_over(self, auth_client):
         vector = build_vector()
         response = auth_client.post(reverse(self.url_name), {
@@ -480,7 +519,7 @@ class TestCloneEndpoint:
         from gsynth_engine.cloning import clone
 
         vector = build_vector()
-        plan = design_merzoug_assembly(LONG_INSERT)
+        plan = design_extended_sequence(LONG_INSERT)
         expected = clone(
             vector, plan.construct_forward, insert_reverse=plan.construct_reverse,
             left_enzyme="NdeI", right_enzyme="XhoI", orf_start=plan.ssd.orf_start,
@@ -673,6 +712,36 @@ class TestOptimiseEndpoint:
         assert data["rare_codons_after"] < data["rare_codons_before"]
         assert 40 <= data["gc_after"] <= 60
 
+    def test_host_catalogue_is_public_and_identifies_sources(self, api_client):
+        response = api_client.get(reverse("design-codon-hosts"))
+        assert response.status_code == 200
+        assert response.data["default"] == "ecoli"
+        hosts = {host["key"]: host for host in response.data["hosts"]}
+        assert {"ecoli", "s_cerevisiae", "k_phaffii", "b_subtilis"} <= set(hosts)
+        assert "Kazusa Codon Usage Database" in hosts["s_cerevisiae"]["source"]
+
+    def test_selected_host_controls_the_usage_table(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": "MLRLKFY",
+            "is_protein": True,
+            "keep_stop": False,
+            "host": "s_cerevisiae",
+            "gc_min": 10,
+            "gc_max": 90,
+            "avoid_rare": False,
+        }, format="json")
+        assert response.status_code == 200, response.data
+        assert response.data["host"] == "s_cerevisiae"
+        assert response.data["table"] == "Saccharomyces cerevisiae"
+        assert response.data["protein"] == "MLRLKFY"
+
+    def test_unknown_host_is_refused(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "sequence": self.DONOR,
+            "host": "unknown-host",
+        })
+        assert response.status_code == 400
+
     def test_the_cloning_sites_are_removed(self, auth_client):
         """A gene with an internal NdeI site cannot be cloned NdeI/XhoI."""
         from gsynth_engine.cloning import find_sites
@@ -770,6 +839,76 @@ class TestExport:
             auth_client.post(reverse("design-clone-export"), payload)
         )
         assert str(exported.seq).upper() == designed["plasmid"]
+
+    def test_reviewed_product_annotations_are_saved_and_exported(self, auth_client):
+        payload = {
+            "sequence": LONG_INSERT,
+            "vector_key": "pET-21a",
+            "name": "EntA",
+            "product_annotations": [{
+                "name": "reviewed therapeutic insert",
+                "type": "mat_peptide",
+                "start": 100,
+                "end": 160,
+                "direction": 1,
+                "color": "#3F7A52",
+                "translation_start": 100,
+                "translation_end": 160,
+                "truncated": False,
+            }],
+            "save_as_project": True,
+        }
+        designed = auth_client.post(reverse("design-clone"), payload)
+        assert designed.status_code == 200, designed.data
+        assert designed.data["annotations"] == payload["product_annotations"]
+
+        project = Project.objects.get(pk=designed.data["project_id"])
+        assert project.data["annotations"] == payload["product_annotations"]
+
+        exported = self.parse_genbank(
+            auth_client.post(reverse("design-clone-export"), payload)
+        )
+        labels = {
+            feature.qualifiers.get("label", [""])[0]
+            for feature in exported.features if feature.type != "source"
+        }
+        assert "reviewed therapeutic insert" in labels
+
+    def test_a_reviewed_annotation_cannot_escape_the_product_coordinates(self, auth_client):
+        response = auth_client.post(reverse("design-clone-export"), {
+            "sequence": LONG_INSERT,
+            "vector_key": "pET-21a",
+            "name": "EntA",
+            "product_annotations": [{
+                "name": "invalid feature",
+                "type": "misc_feature",
+                "start": 999_999,
+                "end": 1_000_020,
+                "direction": 1,
+                "color": "#3F7A52",
+            }],
+        })
+        assert response.status_code == 400
+        assert "outside" in response.data["detail"]
+
+    def test_reviewed_cds_translation_must_stay_inside_its_feature(self, auth_client):
+        response = auth_client.post(reverse("design-clone-export"), {
+            "sequence": LONG_INSERT,
+            "vector_key": "pET-21a",
+            "name": "EntA",
+            "product_annotations": [{
+                "name": "invalid CDS",
+                "type": "CDS",
+                "start": 100,
+                "end": 160,
+                "direction": 1,
+                "color": "#3F7A52",
+                "translation_start": 99,
+                "translation_end": 160,
+            }],
+        })
+        assert response.status_code == 400
+        assert "Translation coordinates" in str(response.data)
 
     def test_the_plasmid_exports_as_fasta(self, auth_client):
         response = auth_client.post(
@@ -1163,6 +1302,67 @@ class TestAlignEndpoint:
 
 
 @pytest.mark.django_db
+class TestHybridizationEndpoint:
+    url_name = "design-hybridize"
+
+    def test_requires_authentication(self, api_client):
+        response = api_client.post(reverse(self.url_name), {
+            "first": "AATTATGC", "second": "GGCCGCAT",
+        })
+        assert response.status_code == 401
+
+    def test_draws_antiparallel_strands_and_both_five_prime_overhangs(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "first": "AATTATGC", "second": "GGCCGCAT",
+        }, format="json")
+
+        assert response.status_code == 200, response.data
+        assert response.data["top"] == "AATTATGC    "
+        assert response.data["bottom"] == "    TACGCCGG"
+        assert response.data["marks"] == "    ||||    "
+        assert response.data["complementarity"] == "exact"
+        assert response.data["left_end"]["polarity"] == "5′"
+        assert response.data["left_end"]["sequence"] == "AATT"
+        assert response.data["right_end"]["polarity"] == "5′"
+        assert response.data["right_end"]["sequence"] == "GGCC"
+
+    def test_a_mismatch_is_explicit_and_not_given_a_perfect_match_tm(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "first": "ATGCCGTA", "second": "TACGACAT",
+        }, format="json")
+
+        assert response.status_code == 200, response.data
+        assert response.data["mismatches"] == 1
+        assert "×" in response.data["marks"]
+        assert response.data["tm_c"] is None
+        assert response.data["predicted_state"] == "mismatches_not_thermodynamically_scored"
+
+    def test_conditions_are_echoed_with_the_thermodynamic_result(self, auth_client):
+        sequence = "ATGCCGTAGCTAGCTA"
+        response = auth_client.post(reverse(self.url_name), {
+            "first": sequence,
+            "second": "TAGCTAGCTACGGCAT",
+            "analysis_temperature_c": 37,
+            "oligo_nM": 20_000,
+            "na_mM": 75,
+            "mg_mM": 1.5,
+        }, format="json")
+
+        assert response.status_code == 200, response.data
+        assert response.data["tm_c"] is not None
+        assert response.data["conditions"]["summary"] == (
+            "20 µM total strand, 75 mM Na⁺, 1.5 mM Mg²⁺"
+        )
+
+    def test_invalid_dna_is_refused(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "first": "ATUG", "second": "CAT",
+        }, format="json")
+        assert response.status_code == 400
+        assert "not A, C, G or T" in response.data["detail"]
+
+
+@pytest.mark.django_db
 class TestPrimerExport:
     url_name = "design-primers-export"
 
@@ -1297,7 +1497,39 @@ class TestValidationAndJunctionViews:
 
         assert "NdeI" in sites and "XhoI" in sites
         assert sites["NdeI"]["used"] is True
-        assert all(s["cuts"] == 1 for s in data["restriction_sites"] if not s["used"])
+        assert any(s["cuts"] == 1 and not s["used"] for s in data["restriction_sites"])
+        assert any(s["cuts"] > 1 and not s["used"] for s in data["restriction_sites"])
+
+    def test_hindiii_is_returned_when_it_is_used_for_cloning(self, auth_client):
+        data = self.cloned(
+            auth_client,
+            left_enzyme="NdeI",
+            right_enzyme="HindIII",
+        )
+        sites = [site for site in data["restriction_sites"] if site["name"] == "HindIII"]
+
+        assert data["is_clonable"], data["problems"]
+        assert len(sites) == 1
+        assert sites[0]["used"] is True
+        assert sites[0]["recognition"] == "AAGCTT"
+
+    def test_cloning_response_includes_the_complete_diagnostic_digest_gel(self, auth_client):
+        data = self.cloned(auth_client, right_enzyme="HindIII")
+        gel = data["gel"]
+        lane = gel["lanes"][0]
+        sizes = [band["size_bp"] for band in lane["bands"]]
+
+        assert gel["prediction_only"] is True
+        assert lane["name"] == "NdeI + HindIII"
+        assert len(sizes) == 2
+        assert sum(sizes) == data["length"]
+
+    def test_every_catalogued_restriction_site_has_drawable_coordinates(self, auth_client):
+        data = self.cloned(auth_client)
+        for site in data["restriction_sites"]:
+            assert site["start"] >= 0
+            assert site["end"] > site["start"]
+            assert len(site["recognition"]) == site["end"] - site["start"]
 
     def test_an_annotated_site_really_is_where_it_says(self, auth_client):
         data = self.cloned(auth_client)
@@ -1314,16 +1546,15 @@ class TestValidationAndJunctionViews:
                              reverse_complement(site["recognition"])), site["name"]
             assert site["wraps"] == (site["end"] > length)
 
-    def test_multi_cutters_are_left_off_unless_they_are_the_pair(self, auth_client):
-        """A site appearing eleven times is noise on a map."""
+    def test_multi_cutters_are_returned_for_the_explicit_all_sites_filter(self, auth_client):
+        """The client may hide these by default, but the API must not erase them."""
         data = self.cloned(auth_client)
-        for site in data["restriction_sites"]:
-            assert site["cuts"] == 1 or site["used"]
+        assert any(site["cuts"] > 1 and not site["used"] for site in data["restriction_sites"])
 
 
 @pytest.mark.django_db
 class TestTraceVerifyEndpoint:
-    """Uploading .ab1 traces rather than pasting the letters off them.
+    """Uploading ABIF/SCF traces rather than pasting the letters off them.
 
     The trace is what separates a mutation from a bad call, so the response
     has to carry the confidence — not just the difference.
@@ -1346,6 +1577,14 @@ class TestTraceVerifyEndpoint:
         blob = build_ab1(sequence, quality if quality is not None else [45] * len(sequence))
         return SimpleUploadedFile(name, blob, content_type="application/octet-stream")
 
+    def _upload_scf(self, sequence, quality=None, name="facility-export.ab1"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from gsynth_engine.tests.test_chromatogram import build_scf
+
+        blob = build_scf(sequence, quality if quality is not None else [45] * len(sequence))
+        return SimpleUploadedFile(name, blob, content_type="application/octet-stream")
+
     def _changed_read(self, at=100):
         piece = list(self.DESIGN[30:230])
         piece[at] = {"A": "G", "G": "A", "C": "T", "T": "C"}[piece[at]]
@@ -1361,6 +1600,17 @@ class TestTraceVerifyEndpoint:
         response = auth_client.post(reverse(self.url_name), {
             "design": self.DESIGN, "circular": False,
             "traces": [self._upload(self.DESIGN[30:230])],
+            "region_start": 30, "region_end": 230,
+        }, format="multipart")
+        assert response.status_code == 200, response.data
+        assert response.data["is_verified"] is True
+        assert response.data["differences"] == []
+        assert response.data["traces"][0]["mean_quality"] == 45.0
+
+    def test_an_scf_trace_with_an_ab1_name_is_detected_by_content(self, auth_client):
+        response = auth_client.post(reverse(self.url_name), {
+            "design": self.DESIGN, "circular": False,
+            "traces": [self._upload_scf(self.DESIGN[30:230])],
             "region_start": 30, "region_end": 230,
         }, format="multipart")
         assert response.status_code == 200, response.data
@@ -1430,6 +1680,25 @@ class TestTraceVerifyEndpoint:
         assert len(track["peaks"]) == len(track["sequence"])
         assert set(track["traces"]) == set("ACGT")
 
+    def test_requested_quality_cutoff_controls_the_verified_alignment(self, auth_client):
+        """The API must not display one cutoff while silently using Q13."""
+        read = self.DESIGN[30:230]
+        quality = [2] * 12 + [45] * (len(read) - 24) + [2] * 12
+
+        strict = auth_client.post(reverse(self.url_name), {
+            "design": self.DESIGN, "circular": False,
+            "traces": [self._upload(read, quality)], "trim_quality": 13,
+        }, format="multipart")
+        permissive = auth_client.post(reverse(self.url_name), {
+            "design": self.DESIGN, "circular": False,
+            "traces": [self._upload(read, quality)], "trim_quality": 0,
+        }, format="multipart")
+
+        assert strict.status_code == permissive.status_code == 200
+        assert strict.data["reads"][0]["trimmed_start"] == 12
+        assert permissive.data["reads"][0]["trimmed_start"] == 0
+        assert permissive.data["coverage"] > strict.data["coverage"]
+
     def test_reverse_track_is_complemented_into_reference_orientation(self, auth_client):
         from gsynth_engine.sequence import reverse_complement
 
@@ -1445,6 +1714,28 @@ class TestTraceVerifyEndpoint:
         assert track["reverse_complemented"] is True
         assert track["sequence"] == forward
         assert track["peaks"] == sorted(track["peaks"])
+
+    def test_forward_reverse_calls_are_assembled_before_coverage(self, auth_client):
+        from gsynth_engine.sequence import reverse_complement
+
+        forward = self.DESIGN[:190]
+        reverse_read = reverse_complement(self.DESIGN[120:])
+        response = auth_client.post(reverse(self.url_name), {
+            "design": self.DESIGN, "circular": False,
+            "traces": [
+                self._upload(forward, name="forward.ab1"),
+                self._upload(reverse_read, name="reverse.ab1"),
+            ],
+            "region_start": 0, "region_end": len(self.DESIGN),
+        }, format="multipart")
+
+        assert response.status_code == 200, response.data
+        consensus = response.data["raw_consensus"]
+        assert consensus["coverage"] == 100.0
+        assert consensus["identity"] == 100.0
+        assert consensus["fully_covered"] is True
+        assert consensus["bidirectional_overlap"] > 0
+        assert consensus["bidirectional_agreement"] == 100.0
 
     def test_matches_what_the_engine_measured(self, auth_client):
         """The response reports the engine's numbers, not its own."""
@@ -1481,7 +1772,7 @@ class TestTraceVerifyEndpoint:
             "traces": [SimpleUploadedFile("scan.pdf", b"%PDF-1.4" + b"\x00" * 500)],
         }, format="multipart")
         assert response.status_code == 400
-        assert "not an .ab1" in response.data["detail"]
+        assert "not a supported Sanger trace" in response.data["detail"]
 
     def test_no_trace_at_all_is_refused(self, auth_client):
         response = auth_client.post(reverse(self.url_name), {

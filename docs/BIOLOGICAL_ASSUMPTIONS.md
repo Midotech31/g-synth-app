@@ -31,6 +31,12 @@ qualified scientist's review of the intended expression system.
   toxicity, mRNA structure, codon usage, and protein stability.
 - Tag and protease-site predictions are sequence predictions, not evidence of
   accessibility, cleavage efficiency, solubility, or purification yield.
+- Factor Xa recognition is defined at peptide level as IEGR↓ (with Asp also
+  tolerated at P3 by the supplier). G-Synth fixes the DNA spelling to
+  `ATC-GAA-GGT-CGT` for reproducible oligo output and E. coli-compatible codon
+  use. Other synonymous spellings encode the same peptide, but the fixed
+  sequence avoids the rare E. coli AGG codon and makes exported oligos
+  reproducible. This exact choice is protected by a golden molecular test.
 
 ## Oligo assembly and PCR
 
@@ -39,6 +45,12 @@ qualified scientist's review of the intended expression system.
   within the design. This reduces misassembly but does not guarantee yield.
 - Primer Tm is a model under stated ionic conditions. Annealing temperature,
   extension time, polymerase choice, and additives require empirical tuning.
+- A tailed cloning primer hybridises through its 3′ annealing region in the
+  first cycle. Its 5′ clamp and restriction site are intentionally unpaired;
+  they become double-stranded only after extension and subsequent cycles.
+- Virtual gels plot sequence-derived fragment sizes on a logarithmic migration
+  axis. Band intensity, smearing, partial digestion, supercoiled topology and
+  matrix/buffer effects are not inferred and require an experimental gel.
 - Long-oligo synthesis quality, secondary structure, and supplier-specific
   purification remain experimental constraints.
 

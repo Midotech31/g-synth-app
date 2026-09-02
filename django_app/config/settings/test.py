@@ -21,3 +21,8 @@ REST_FRAMEWORK = {
 
 # Fast, deterministic hashing — tests don't need PBKDF2's work factor.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+# The public UI uses the deterministic bundled Learn library. Enable the
+# separate optional tutor endpoint only inside its isolated API tests so the
+# adapter's validation and failure handling remain covered.
+TUTOR_ENABLED = True

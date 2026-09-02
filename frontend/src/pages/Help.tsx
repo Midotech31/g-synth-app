@@ -2,12 +2,7 @@ import { Link } from "react-router-dom";
 
 import Icon, { type IconName } from "../components/Icon";
 
-/**
- * What each page does, the method behind Design, and what the messages on
- * screen mean. Reference, not a tutorial — the wording below is the same
- * claim the README and CLAUDE.md make, said for someone at the bench rather
- * than someone reading the source.
- */
+/** Concise bench-facing reference for each workflow and its evidence. */
 
 type Section = {
   to: string;
@@ -29,7 +24,7 @@ const SECTIONS: Section[] = [
   },
   {
     to: "/design", name: "Design", icon: "helix",
-    summary: "Build the cassette and cut it into oligo pairs for Merzoug assembly — see below.",
+    summary: "Use Small Sequence Design (SSD) for one oligo pair or Extended Sequence Design (ESD) for tiled pairs.",
     points: [
       "Choose the tag, linker, protease site, and the enzyme pair the cassette will carry at each end.",
       "The page hands back the oligos to order, a bench protocol, and the hybridisation view — both strands drawn aligned, with the overhangs showing.",
@@ -37,29 +32,51 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    to: "/clone", name: "Clone", icon: "plate",
-    summary: "Cut a vector and put the construct in.",
+    to: "/hybridize", name: "Hybridization", icon: "check",
+    summary: "Verify the designed duplex before it enters a cloning simulation.",
     points: [
-      "pET-21a(+) and pET-21(+) ship with their sequences; any other backbone is imported — SnapGene .dna, GenBank or FASTA — and checked against the catalogue entry, so pasting the wrong one is caught rather than cloned into.",
-      "Click a feature or a restriction site on the plasmid map to see exactly what it is and the bases it spans.",
-      "Each seam is drawn as the two ends that made it, so “the overhangs match” can be checked instead of believed.",
+      "Both ordered molecules remain entered 5′→3′; G-Synth reverses the partner only in the physical drawing so the duplex is antiparallel.",
+      "The result always includes both the compact pairing overview and a nucleotide-level double-strand view, with mismatches and exposed 5′/3′ cohesive ends distinguished.",
+      "A design transfer runs the hybridization automatically and carries its verified strands and enzyme pair into restriction cloning in one click.",
     ],
   },
   {
-    to: "/verify", name: "Check", icon: "microscope",
+    to: "/clone", name: "Restriction cloning", icon: "plate",
+    summary: "Simulate restriction digestion, end compatibility and ligation into a vector.",
+    points: [
+      "pET-21a(+) and pET-21(+) ship with their sequences; any other backbone is imported — SnapGene .dna, GenBank or FASTA — and checked against the catalogue entry, so pasting the wrong one is caught rather than cloned into.",
+      "Click a feature or a restriction site on the plasmid map to see exactly what it is and the bases it spans.",
+      "Restriction sites default to useful single-cutters plus the cloning pair. Enable multi-cutters to display every occurrence in the full catalogue; origin-crossing sites are split across both map ends rather than hidden.",
+      "Each seam is drawn as the two ends that made it, so “the overhangs match” can be checked instead of believed.",
+      "The diagnostic-gel simulation digests the final recombinant sequence with the cloning pair and plots every calculated fragment beside a selectable ladder.",
+    ],
+  },
+  {
+    to: "/verify", name: "Validate", icon: "microscope",
     summary: "Close the loop: ligation amounts, sequencing primers, and what the reads say.",
     points: [
       "Ligation is worked out in fmol, not nanograms — at equal mass a 5.4 kb vector outnumbers a 150 bp insert thirty-six to one.",
       "Sequencing primers sit back from the insert rather than at it.",
-      "Upload the .ab1 traces the facility sends back and compare them to the design directly — differences below Q20 confidence are marked unconfident rather than reported as mutations.",
+      "Upload the ABIF (.ab1) or SCF traces the facility sends back and compare them to the design directly — differences below Q20 confidence are marked unconfident rather than reported as mutations.",
+      "In Projects, the Annotated view expands a locus into coordinates, overlapping feature tracks and translation. Add, rename, edit or delete any feature; an exact-motif scan proposes common elements for review before saving them to GenBank.",
     ],
   },
   {
-    to: "/align", name: "Compare", icon: "scales",
-    summary: "Align two sequences that are not assumed to be the same thing.",
+    to: "/pcr", name: "Primer design & PCR", icon: "target",
+    summary: "A supporting workflow for conventional or cloning PCR and primer annealing.",
+    points: [
+      "The primer–template view aligns both oligos base by base. A cloning primer’s 5′ clamp and restriction site are shown unpaired in cycle 1; only its 3′ region hybridizes and sets the annealing temperature.",
+      "The product is assembled from the primer and template sequences, then cut in silico with the selected enzymes. Internal or junction-created sites block the design.",
+      "The predicted gel shows the calculated amplicon beside an expected no-template control and a selectable generic DNA ladder. It is a size prediction, not experimental evidence.",
+    ],
+  },
+  {
+    to: "/align", name: "Sequence alignment", icon: "scales",
+    summary: "Compare sequence similarity as a supporting analysis, separately from physical hybridization.",
     points: [
       "Two strains, a design against what a supplier returned, a protein against its homologue — anything the rest of the workflow does not already cover.",
       "Whole-of-both, best-stretch, and shorter-in-longer alignment modes, on nucleotide or protein sequences.",
+      "Alignment remains available in the same analysis workspace but has its own route and language, so sequence similarity is never presented as annealing evidence.",
     ],
   },
 ];
@@ -99,11 +116,11 @@ export default function Help() {
         </div>
 
         <div className="card">
-          <div className="card-head"><h2>The Merzoug method, in short</h2></div>
+          <div className="card-head"><h2>SSD and ESD, in short</h2></div>
           <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
             <p className="note">
-              Design does not build the cassette with PCR. It cuts the finished construct, on paper, into
-              short fragments and orders each one as two oligos &mdash; a forward strand and a reverse
+              Small Sequence Design (SSD) emits one complementary synthesis pair. When the construct is
+              longer, Extended Sequence Design (ESD) cuts it in silico into short fragments and orders each as two oligos &mdash; a forward strand and a reverse
               strand &mdash; which anneal into a short double-stranded piece with a single-stranded
               overhang left sticking out at each end.
             </p>
@@ -138,7 +155,7 @@ export default function Help() {
               costs a little translation speed, not the strategy.
             </p>
             <p className="note">
-              On the Check page, a difference between a sequencing read and the design is marked
+              On the Validate page, a difference between a sequencing read and the design is marked
               <strong> unconfident</strong> when the trace&rsquo;s quality at that position falls below the
               threshold a base call is trusted at &mdash; the same letters can mean a real change or a bad
               peak, and only the trace tells them apart.

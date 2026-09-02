@@ -9,11 +9,12 @@ from __future__ import annotations
 import pytest
 
 from gsynth_engine import vectors
+from gsynth_engine.chromatogram import Chromatogram
 from gsynth_engine.cloning import clone
 from gsynth_engine.sequence import SequenceError, reverse_complement
 from gsynth_engine.ssd import design_small_sequence
 from gsynth_engine.tests.test_cloning import clean_filler
-from gsynth_engine.verify import verify, verify_read
+from gsynth_engine.verify import assemble_consensus, verify, verify_read
 
 
 @pytest.fixture(scope="module")
@@ -86,6 +87,36 @@ class TestPlacing:
         result, _ = construct
         with pytest.raises(SequenceError, match="is empty"):
             verify_read(result.plasmid, "", circular=True)
+
+    def test_short_linear_reference_inside_a_long_t7_read(self):
+        """Vector flanks around a short insert are not alignment failures.
+
+        This is the geometry of the experimental insulin-glargine T7 reads:
+        the sequencer reads through vector, across the complete 123 bp insert,
+        and back into vector while validation targets the insert alone.
+        """
+        reference = clean_filler(123, 91)
+        read = clean_filler(180, 92) + reference + clean_filler(210, 93)
+        aligned = verify_read(reference, read, circular=False, trim=0)
+
+        assert aligned.start == 0
+        assert aligned.end == len(reference)
+        assert aligned.identity == 100.0
+        assert aligned.matched == len(reference)
+        assert aligned.is_clean
+
+    def test_short_linear_reference_inside_a_long_reverse_t7_read(self):
+        reference = clean_filler(156, 94)
+        read = reverse_complement(
+            clean_filler(160, 95) + reference + clean_filler(190, 96)
+        )
+        aligned = verify_read(reference, read, circular=False, trim=0)
+
+        assert aligned.reverse_complemented
+        assert aligned.start == 0
+        assert aligned.end == len(reference)
+        assert aligned.identity == 100.0
+        assert aligned.matched == len(reference)
 
 
 class TestDifferences:
@@ -244,3 +275,46 @@ class TestReport:
         )
         assert len(report.differences) == 1
         assert not report.is_verified
+
+
+class TestConsensus:
+    @staticmethod
+    def trace(name: str, sequence: str) -> Chromatogram:
+        return Chromatogram(
+            sequence=sequence,
+            quality=[30] * len(sequence),
+            peaks=list(range(len(sequence))),
+            traces={},
+            name=name,
+        )
+
+    def test_forward_and_reverse_reads_assemble_to_full_coverage(self):
+        reference = clean_filler(180, 301)
+        traces = {
+            "forward": self.trace("forward", reference[:120]),
+            "reverse": self.trace("reverse", reverse_complement(reference[60:])),
+        }
+
+        consensus = assemble_consensus(reference, traces)
+
+        assert consensus.sequence == reference
+        assert consensus.coverage == 100.0
+        assert consensus.identity == 100.0
+        assert consensus.bidirectional_overlap == pytest.approx(33.3, abs=0.1)
+        assert consensus.bidirectional_agreement == 100.0
+        assert consensus.fully_covered
+        assert not consensus.differences
+
+    def test_a_tied_disagreement_is_not_silently_called(self):
+        reference = clean_filler(180, 302)
+        changed = list(reference[60:])
+        changed[30] = "A" if changed[30] != "A" else "C"
+        traces = {
+            "forward": self.trace("forward", reference[:120]),
+            "reverse": self.trace("reverse", reverse_complement("".join(changed))),
+        }
+
+        consensus = assemble_consensus(reference, traces)
+
+        assert consensus.sequence[90] == "N"
+        assert consensus.bidirectional_agreement < 100.0

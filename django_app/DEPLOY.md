@@ -22,9 +22,9 @@ Both are free and neither asks for a card.
 
 ## Part 1 — Database (Supabase) · about 5 minutes
 
-You need this anyway: your **live Streamlit app is currently losing every
-account on each restart** because it has no persistent database. The same
-Supabase database fixes that app *and* powers this API.
+G-Synth requires a persistent PostgreSQL database so accounts, projects and
+audit records survive service restarts. Supabase provides that database for
+the API.
 
 1. Open **https://supabase.com** → **Start your project** → sign in with
    GitHub.
@@ -47,21 +47,6 @@ Supabase database fixes that app *and* powers this API.
 
 > Treat it like a password — it grants full access to the database. Never
 > paste it into a chat, an issue, or a commit.
-
-### While you're here: fix the live Streamlit app
-
-1. Go to **https://share.streamlit.io** → your G-Synth app → **⋮** →
-   **Settings** → **Secrets**.
-2. Paste this single line (with your real URL) and **Save**:
-
-   ```toml
-   DATABASE_URL = "postgresql://postgres.abcdefgh:YOURPASSWORD@aws-0-eu-central-1.pooler.supabase.com:5432/postgres"
-   ```
-
-3. The app restarts by itself. The yellow **"Demo mode"** banner disappears
-   — accounts are now permanent.
-
----
 
 ## Part 2 — API server (Render) · about 5 minutes
 
@@ -86,6 +71,11 @@ Your URL appears at the top of the service page, in the form
 ## Check it worked
 
 Open the **workspace** URL (`gsynth-app…onrender.com`), not the API's.
+
+Learn is bundled into the frontend and works without a model or network call.
+The separate optional tutor API remains disabled (`TUTOR_ENABLED=false`); leave
+it off unless a private approved endpoint and its privacy, retention and cost
+implications have been reviewed.
 Create an account and design something — that exercises both services and
 the database in one go. The API's own URL only answers `/api/…`; opening its
 root gives a 404, which is correct and not a fault.

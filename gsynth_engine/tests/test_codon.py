@@ -16,6 +16,7 @@ from gsynth_engine.cloning import find_sites, translate
 from gsynth_engine.codon import (
     ECOLI,
     SYNONYMS,
+    TABLES,
     Constraints,
     back_translate,
     build_table,
@@ -222,6 +223,40 @@ class TestCodonTable:
         for amino_acid, codons in SYNONYMS.items():
             top = max(ECOLI.weight(c) for c in codons)
             assert top == pytest.approx(1.0), amino_acid
+
+    def test_every_bundled_host_is_complete_and_normalized(self):
+        assert set(TABLES) == {
+            "ecoli", "s_cerevisiae", "k_phaffii", "b_subtilis",
+            "h_sapiens", "c_griseus", "s_frugiperda", "n_benthamiana",
+        }
+        for key, table in TABLES.items():
+            assert len(table.weights) == 64, key
+            for amino_acid, codons in SYNONYMS.items():
+                assert max(table.weight(codon) for codon in codons) == pytest.approx(1.0), (
+                    key, amino_acid
+                )
+
+    def test_host_selection_changes_codons_without_changing_protein(self):
+        protein = "MLRLKFY"
+        bacterial = back_translate(protein, table=TABLES["ecoli"])
+        yeast = back_translate(protein, table=TABLES["s_cerevisiae"])
+        assert bacterial != yeast
+        assert translate(bacterial) == protein
+        assert translate(yeast) == protein
+
+    @pytest.mark.parametrize(("host", "amino_acid", "preferred"), [
+        ("s_cerevisiae", "L", "TTG"),
+        ("k_phaffii", "K", "AAG"),
+        ("b_subtilis", "K", "AAA"),
+        ("h_sapiens", "F", "TTC"),
+        ("c_griseus", "I", "ATC"),
+        ("s_frugiperda", "Y", "TAC"),
+        ("n_benthamiana", "A", "GCT"),
+    ])
+    def test_species_profiles_preserve_published_rankings(
+        self, host: str, amino_acid: str, preferred: str,
+    ):
+        assert TABLES[host].best(amino_acid) == preferred
 
     def test_the_known_e_coli_preferences(self):
         """Leucine reads CTG, arginine CGT, isoleucine ATC — the textbook

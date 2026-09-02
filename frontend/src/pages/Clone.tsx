@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { SeqViz } from "seqviz";
 
 import {
   ApiError,
@@ -10,9 +9,12 @@ import {
   type CloneParams,
   type CloneResult,
   type DesignParams,
+  type JunctionView,
   type VectorSpec,
 } from "../api/client";
 import InsertForm from "../components/InsertForm";
+import ConstructWorkbench from "../components/ConstructWorkbench";
+import CoreWorkflowTrail from "../components/CoreWorkflowTrail";
 import JunctionDuplex from "../components/JunctionDuplex";
 import Icon from "../components/Icon";
 import LiveStatus from "../components/LiveStatus";
@@ -63,6 +65,8 @@ type PreDigested = {
   bottom: string;
   leftEnzyme: string | null;
   rightEnzyme: string | null;
+  name?: string;
+  origin?: "design" | "hybridization" | "pcr";
 };
 
 export default function Clone() {
@@ -74,15 +78,10 @@ export default function Clone() {
   const [vector, setVector] = useWorkspaceState<Vector>("clone.vector", EMPTY_VECTOR);
   const [vectorLoaded, setVectorLoaded] = useWorkspaceState("clone.vectorLoaded", false);
   const [result, setResult, clearResult] = useWorkspaceState<CloneResult | null>("clone.result", null);
+  const [productAnnotations, setProductAnnotations, clearProductAnnotations] = useWorkspaceState<Annotation[] | null>("clone.productAnnotations", null);
   const [fragment, setFragment, clearFragment] = useWorkspaceState("clone.fragment", true);
-  const [mapView, setMapView, clearMapView] = useWorkspaceState<"circular" | "linear" | "both">("clone.mapView", "circular");
-  const [showSites, setShowSites, clearShowSites] = useWorkspaceState("clone.showSites", true);
-  const [onlyUsedSites, setOnlyUsedSites, clearOnlyUsedSites] = useWorkspaceState("clone.onlyUsedSites", false);
-  const [selected, setSelected, clearSelected] = useWorkspaceState<{
-    name: string; start: number; end: number; direction: number; color: string;
-    kind: "feature" | "site"; recognition?: string; cuts?: number; used?: boolean;
-  } | null>("clone.selected", null);
-  const [showEnds, setShowEnds, clearShowEnds] = useWorkspaceState("clone.showEnds", true);
+  const [assemblyDetail, setAssemblyDetail, clearAssemblyDetail] = useWorkspaceState<"simple" | "detailed">("clone.assemblyDetail", "simple");
+  const [ligationCommitted, setLigationCommitted, clearLigationCommitted] = useWorkspaceState("clone.ligationCommitted", false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved, clearSaved] = useWorkspaceState("clone.saved", "");
@@ -98,8 +97,16 @@ export default function Clone() {
   useEffect(() => {
     if (!location.state?.preDigested) return;
     setPreDigested(location.state.preDigested);
+    setParams((current) => ({
+      ...current,
+      name: location.state?.preDigested?.name ?? current.name,
+      left_enzyme: location.state?.preDigested?.leftEnzyme ?? current.left_enzyme,
+      right_enzyme: location.state?.preDigested?.rightEnzyme ?? current.right_enzyme,
+    }));
     setResult(null);
-  }, [location.state?.preDigested, setPreDigested, setResult]);
+    setProductAnnotations(null);
+    setLigationCommitted(false);
+  }, [location.state?.preDigested, setLigationCommitted, setParams, setPreDigested, setProductAnnotations, setResult]);
 
   // Load the vector list, then the default vector's own sequence, so the
   // page is usable without importing anything.
@@ -184,6 +191,19 @@ export default function Clone() {
     setSaved("");
   }, []);
 
+  function setTransferredEnzyme(side: "leftEnzyme" | "rightEnzyme", enzyme: string) {
+    setPreDigested((current) => current ? { ...current, [side]: enzyme } : current);
+    setParams((current) => ({
+      ...current,
+      [side === "leftEnzyme" ? "left_enzyme" : "right_enzyme"]: enzyme,
+    }));
+    setResult(null);
+    setProductAnnotations(null);
+    setLigationCommitted(false);
+    setSaved("");
+    setError("");
+  }
+
   async function importFile(file: File) {
     setError("");
     try {
@@ -208,10 +228,11 @@ export default function Clone() {
     setBusy(true);
     setError("");
     setSaved("");
+    if (!saveAsProject) setLigationCommitted(false);
     try {
-      const data = await api.clone(clonePayload(saveAsProject));
+      const data = await api.clone(clonePayload(saveAsProject, saveAsProject));
       setResult(data);
-      setSelected(null);        // a stale selection would name a feature from the last plasmid
+      setProductAnnotations(data.annotations);
       if (data.project_id) setSaved(`Saved to your projects (#${data.project_id}).`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "The cloning failed.");
@@ -224,7 +245,7 @@ export default function Clone() {
   /** The exact molecule represented by the current inputs. Clone, save and
    * export all use this builder so a PCR-derived insert cannot silently turn
    * back into the ordinary insert form on one of those paths. */
-  function clonePayload(saveAsProject = false): CloneParams {
+  function clonePayload(saveAsProject = false, includeReviewedAnnotations = false): CloneParams {
     return {
       ...params,
       // A cut PCR product is an insert, not a gene: designing one around it
@@ -245,6 +266,9 @@ export default function Clone() {
       vector: vector.bundled ? "" : vector.sequence,
       vector_name: vector.name,
       vector_annotations: vector.bundled ? undefined : vector.annotations,
+      product_annotations: includeReviewedAnnotations
+        ? productAnnotations ?? result?.annotations
+        : undefined,
       vector_is_circular: vector.circular,
       fragment,
       save_as_project: saveAsProject,
@@ -257,65 +281,13 @@ export default function Clone() {
     try {
       await api.download(
         `/api/design/clone/export/?filetype=${filetype}`,
-        clonePayload(),
+        clonePayload(false, true),
         `${safe}.${filetype === "fasta" ? "fasta" : "gb"}`,
       );
     } catch {
       setError("The download failed. Try cloning again first.");
     }
   }
-
-  /** What the map draws: the features, plus restriction sites when asked.
-   *
-   * A site that straddles the origin has an end past the sequence length,
-   * which the viewer cannot place — it stays in the count but is not drawn.
-   */
-  /** Sites the filters keep, and of those the ones the viewer can place. */
-  const chosenSites = useMemo(
-    () => (result?.restriction_sites ?? []).filter(
-      (site) => (onlyUsedSites ? site.used : true),
-    ),
-    [result, onlyUsedSites],
-  );
-  const visibleSites = useMemo(
-    () => chosenSites.filter((site) => !site.wraps),
-    [chosenSites],
-  );
-
-  const mapAnnotations = useMemo(() => {
-    const base = (result?.annotations ?? []).map((a) => ({
-      name: a.name,
-      start: a.start,
-      end: a.end,
-      direction: (a.direction === -1 ? -1 : 1) as 1 | -1,
-      color: a.color,
-    }));
-    if (!result || !showSites) return base;
-
-    const sites = visibleSites.map((site) => ({
-        name: site.name,
-        start: site.start,
-        end: site.end,
-        direction: 1 as 1,
-        color: site.color,
-      }));
-    return [...base, ...sites];
-  }, [result, showSites, visibleSites]);
-
-  /** Everything a click could land on, features and sites together, so one
-   *  handler can find whichever the cursor was actually over. */
-  const clickable = useMemo(() => {
-    const features = (result?.annotations ?? []).map((a) => ({
-      kind: "feature" as const, name: a.name, start: a.start, end: a.end,
-      direction: a.direction, color: a.color,
-    }));
-    const sites = showSites ? visibleSites.map((s) => ({
-      kind: "site" as const, name: s.name, start: s.start, end: s.end,
-      direction: 1, color: s.color, recognition: s.recognition,
-      cuts: s.cuts, used: s.used,
-    })) : [];
-    return [...features, ...sites];
-  }, [result, showSites, visibleSites]);
 
   const vectorLength = vector.sequence.replace(/[^ACGTacgt]/g, "").length;
   const insertReady = preDigested
@@ -325,23 +297,23 @@ export default function Clone() {
   const spec = vectors.find((v) => v.key === vector.key) ?? null;
 
   const status = busy
-    ? "Cloning…"
+    ? "Checking insert and vector ends…"
     : result === null
       ? ""
       : result.is_clonable
-        ? `Clonable: ${result.length.toLocaleString()} bp plasmid, ${result.validation.filter((c) => c.passed).length} of ${result.validation.length} checks passed.`
+        ? ligationCommitted
+          ? `Ligation simulated: ${result.length.toLocaleString()} bp plasmid assembled.`
+          : `Ends compatible: ${result.validation.filter((c) => c.passed).length} of ${result.validation.length} checks passed; ready for simulated ligation.`
         : "This will not clone. Read the reasons above the result.";
 
   function clearWorkspace() {
     clearPreDigested();
     clearParams();
     clearResult();
+    clearProductAnnotations();
     clearFragment();
-    clearMapView();
-    clearShowSites();
-    clearOnlyUsedSites();
-    clearSelected();
-    clearShowEnds();
+    clearAssemblyDetail();
+    clearLigationCommitted();
     clearSaved();
     setError("");
   }
@@ -351,7 +323,7 @@ export default function Clone() {
     try {
       await api.download(
         "/api/design/clone/worksheet/",
-        clonePayload(),
+        clonePayload(false, true),
         `${safe}_bench_worksheet.txt`,
       );
     } catch (err) {
@@ -365,11 +337,12 @@ export default function Clone() {
 
       <div className="topbar">
         <div className="grow">
-          <h1>Clone into a vector</h1>
+          <h1>Restriction enzyme cloning simulation</h1>
           <p className="sub">
-            Cut the vector, drop the construct in, and see the plasmid you end
-            up with — junctions, reading frame and all.
+            Digest vector and insert in silico, verify both exposed ends and
+            orientation, then ligate the compatible product.
           </p>
+          <CoreWorkflowTrail active="cloning" />
         </div>
         <button className="btn btn-outline" onClick={clearWorkspace} disabled={busy}>
           Clear
@@ -378,10 +351,10 @@ export default function Clone() {
           className="btn btn-primary"
           onClick={() => runClone(false)}
           disabled={busy || !ready}
-          title={ready ? "Clone" : "Add a vector and an insert first"}
+          title={ready ? "Simulate restriction digestion" : "Add a vector and an insert first"}
         >
           {busy && <span className="spinner" />}
-          {busy ? "Cloning…" : "Clone"}
+          {busy ? "Digesting…" : result ? "Recheck digestion" : "Simulate digestion"}
         </button>
       </div>
 
@@ -516,26 +489,75 @@ export default function Clone() {
                 </div>
               </div>
               {preDigested && (
-                /* Without this the page silently ignores the insert form, and
-                   the reader has no way to tell why their edits do nothing. */
                 <div className="notice notice-info" style={{ margin: "0 1.1rem", marginTop: "0.9rem" }}>
-                  <strong>Using a cut PCR product.</strong>{" "}
-                  {preDigested.top.length} bp with {preDigested.leftEnzyme} and{" "}
-                  {preDigested.rightEnzyme} ends, ligated as supplied &mdash; the
-                  options below are not applied to it.{" "}
+                  <strong>
+                    {preDigested.origin === "hybridization"
+                      ? "Using the duplex validated in Hybridization."
+                      : preDigested.origin === "design"
+                        ? "Using the duplex produced by Design."
+                        : preDigested.origin === "pcr"
+                          ? "Using the digested PCR product."
+                          : "Using a pre-digested duplex."}
+                  </strong>{" "}
+                  {preDigested.top.length} bp with{" "}
+                  {preDigested.leftEnzyme ?? params.left_enzyme} and{" "}
+                  {preDigested.rightEnzyme ?? params.right_enzyme} end assignments.
+                  G-Synth will compare the observed
+                  strand geometry with the vector before enabling ligation.{" "}
                   <button
                     className="btn btn-ghost"
                     style={{ padding: "0.1rem 0.4rem", fontSize: "0.8rem" }}
                     onClick={() => {
                       setPreDigested(null);
                       setResult(null);
-                      setSelected(null);
+                      setProductAnnotations(null);
+                      setLigationCommitted(false);
                       setSaved("");
                       setError("");
                     }}
                   >
-                    Design an insert instead
+                    Change insert or enzymes
                   </button>
+                  <div className="transferred-enzyme-grid">
+                    <div className="field">
+                      <label htmlFor="transferred-left-enzyme">Left restriction enzyme</label>
+                      <select
+                        id="transferred-left-enzyme"
+                        value={preDigested.leftEnzyme ?? params.left_enzyme}
+                        disabled={!catalogue}
+                        onChange={(event) => setTransferredEnzyme("leftEnzyme", event.target.value)}
+                      >
+                        {catalogue
+                          ? catalogue.enzymes.map((enzyme) => (
+                              <option key={enzyme.name} value={enzyme.name}>
+                                {enzyme.name} · {enzyme.overhang || "blunt"} {enzyme.overhang_type}
+                              </option>
+                            ))
+                          : <option>{preDigested.leftEnzyme ?? params.left_enzyme}</option>}
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="transferred-right-enzyme">Right restriction enzyme</label>
+                      <select
+                        id="transferred-right-enzyme"
+                        value={preDigested.rightEnzyme ?? params.right_enzyme}
+                        disabled={!catalogue}
+                        onChange={(event) => setTransferredEnzyme("rightEnzyme", event.target.value)}
+                      >
+                        {catalogue
+                          ? catalogue.enzymes.map((enzyme) => (
+                              <option key={enzyme.name} value={enzyme.name}>
+                                {enzyme.name} · {enzyme.overhang || "blunt"} {enzyme.overhang_type}
+                              </option>
+                            ))
+                          : <option>{preDigested.rightEnzyme ?? params.right_enzyme}</option>}
+                      </select>
+                    </div>
+                    <p className="field-hint">
+                      Changing an assignment never changes the transferred bases;
+                      the simulation must prove that the new cut geometry is compatible.
+                    </p>
+                  </div>
                 </div>
               )}
               <div className="card-body">
@@ -544,14 +566,16 @@ export default function Clone() {
                     Validated defaults add a 6×His tag, flexible linkers and a Thrombin site, using 90 nt oligos with 4 nt assembly junctions.
                   </div>
                 )}
-                <InsertForm
-                  params={params}
-                  catalogue={catalogue}
-                  onChange={set}
-                  showFragmentation={fragment}
-                  idPrefix="clone-"
-                  expert={experience === "expert"}
-                />
+                {!preDigested && (
+                  <InsertForm
+                    params={params}
+                    catalogue={catalogue}
+                    onChange={set}
+                    showFragmentation={fragment}
+                    idPrefix="clone-"
+                    expert={experience === "expert"}
+                  />
+                )}
                 {experience === "expert" && <div className="checks">
                   <label>
                     <input type="checkbox" checked={!fragment}
@@ -573,7 +597,7 @@ export default function Clone() {
                   <span>
                     {vectorLength === 0
                       ? "Import or paste a vector to begin."
-                      : "Set the insert and its ends, then press Clone."}
+                      : "Set the insert and its ends, then press Check ends."}
                   </span>
                 </div>
               </div>
@@ -594,9 +618,10 @@ export default function Clone() {
                 <div className={`notice ${result.is_clonable ? "notice-ok" : "notice-error"}`}>
                   {result.is_clonable ? (
                     <>
-                      <strong>Clonable.</strong> {result.left_enzyme} and{" "}
-                      {result.right_enzyme} each cut {result.vector_name} once, the
-                      ends match, and the insert goes in one orientation.
+                      <strong>{ligationCommitted ? "Ligation simulated." : "Ready to ligate."}</strong>{" "}
+                      {result.left_enzyme} and {result.right_enzyme} each cut{" "}
+                      {result.vector_name} once, the ends match, and the insert goes
+                      in one orientation{ligationCommitted ? "." : "; inspect the ends below before joining them."}
                     </>
                   ) : (
                     <>
@@ -634,158 +659,24 @@ export default function Clone() {
 
                 <div className="card">
                   <div className="card-head">
-                    <h2 style={{ flex: 1 }}>Map</h2>
-                    <div className="seg-toggle" role="group" aria-label="Map view">
-                      {(["circular", "linear", "both"] as const).map((option) => (
-                        <button key={option} type="button"
-                                className={mapView === option ? "on" : ""}
-                                aria-pressed={mapView === option}
-                                onClick={() => setMapView(option)}>
-                          {option[0].toUpperCase() + option.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="card-body" style={{ paddingBottom: "0.5rem" }}>
-                    <div className="map-filters">
-                      <label>
-                        <input type="checkbox" checked={showSites}
-                               onChange={(e) => setShowSites(e.target.checked)} />
-                        Restriction sites
-                      </label>
-                      <label>
-                        <input type="checkbox" checked={onlyUsedSites}
-                               disabled={!showSites}
-                               onChange={(e) => setOnlyUsedSites(e.target.checked)} />
-                        Only the pair used for cloning
-                      </label>
-                      {showSites && (
-                        <span className="label">
-                          {visibleSites.length} of {chosenSites.length} sites drawn
-                          {chosenSites.length > visibleSites.length && (
-                            <>
-                              {" · "}
-                              {chosenSites.length - visibleSites.length} spans the
-                              origin
-                            </>
-                          )}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="seq-stage" style={{ minHeight: 460 }}>
-                    <SeqViz
-                      name={result.name}
-                      seq={result.plasmid}
-                      annotations={mapAnnotations}
-                      viewer={mapView}
-                      showIndex
-                      onSelection={(sel) => {
-                        if (sel.type !== "ANNOTATION" || sel.start === undefined || sel.end === undefined) {
-                          return;
-                        }
-                        const covering = clickable.filter(
-                          (a) => a.start <= sel.start! && a.end >= sel.end!,
-                        );
-                        if (!covering.length) return;
-                        const hit = covering.reduce((smallest, a) =>
-                          a.end - a.start < smallest.end - smallest.start ? a : smallest,
-                        );
-                        setSelected(hit);
-                      }}
-                      highlights={
-                        selected ? [{ start: selected.start, end: selected.end, color: selected.color }] : []
-                      }
-                      style={{ height: "100%", width: "100%" }}
-                    />
-                  </div>
-
-                  {/* What was clicked. A restriction site and a vector
-                      feature answer different questions — a site's recognition
-                      sequence and cut count matter more than its strand — so
-                      the panel shows what fits the kind rather than one shape
-                      forced onto both. */}
-                  {selected && (
-                    <div className="card-body feature-detail" style={{ borderTop: "1px solid var(--line)" }}>
-                      <div className="card-head" style={{ padding: 0, border: "none", marginBottom: "0.6rem" }}>
-                        <span className="dot" style={{ background: selected.color }} />
-                        {/* Inside the map card, under its own heading. */}
-                        <h3 style={{ flex: 1, fontSize: "1rem" }}>
-                          {selected.name}
-                          {selected.kind === "site" && (
-                            <span className="label" style={{ marginLeft: "0.5rem" }}>restriction site</span>
-                          )}
-                        </h3>
-                        <button className="btn btn-ghost" onClick={() => setSelected(null)}
-                                title="Clear selection" aria-label="Clear selection">
-                          <Icon name="cross" size={14} />
-                        </button>
-                      </div>
-                      <div className="stat-row">
-                        <div className="stat">
-                          <div className="k">Position</div>
-                          <div className="v" style={{ fontSize: "1.05rem" }}>
-                            {(selected.start + 1).toLocaleString()}–{selected.end.toLocaleString()}
-                          </div>
-                        </div>
-                        <div className="stat">
-                          <div className="k">Length</div>
-                          <div className="v">
-                            {(selected.end - selected.start).toLocaleString()}<small>bp</small>
-                          </div>
-                        </div>
-                        {selected.kind === "feature" ? (
-                          <div className="stat">
-                            <div className="k">Strand</div>
-                            <div className="v" style={{ fontSize: "1.05rem" }}>
-                              {selected.direction === -1 ? "reverse" : "forward"}
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="stat">
-                              <div className="k">Recognition</div>
-                              <div className="v mono" style={{ fontSize: "1.05rem" }}>
-                                {selected.recognition}
-                              </div>
-                            </div>
-                            <div className="stat">
-                              <div className="k">Cuts here</div>
-                              <div className="v" style={{ fontSize: "1.05rem" }}>
-                                {selected.cuts}{selected.used ? " · used for cloning" : ""}
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                      <div className="seq-block" style={{ marginTop: "0.6rem" }}>
-                        {selected.direction === -1
-                          ? result.plasmid.slice(selected.start, selected.end)
-                              .split("").reverse()
-                              .map((b) => ({ A: "T", T: "A", G: "C", C: "G" } as Record<string, string>)[b] ?? b)
-                              .join("")
-                          : result.plasmid.slice(selected.start, selected.end)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="card">
-                  <div className="card-head">
-                    <h2 style={{ flex: 1 }}>Checks</h2>
+                    <h2 style={{ flex: 1 }}>Compatibility checks</h2>
                     <span className="label">
-                      {result.validation.filter((c) => c.passed).length}
+                      {result.validation.filter((check) => check.passed).length}
                       {" of "}{result.validation.length} passed
                     </span>
                   </div>
                   <div className="card-body">
                     <ul className="check-list">
-                      {result.validation.map((row) => (
-                        <li key={row.check} className={row.passed ? "ok" : "bad"}>
-                          <Icon name={row.passed ? "check" : "cross"} size={16} className="mark" />
+                      {result.validation.map((check) => (
+                        <li key={check.check} className={check.passed ? "ok" : "bad"}>
+                          <Icon
+                            name={check.passed ? "check" : "cross"}
+                            size={16}
+                            className="mark"
+                          />
                           <span>
-                            <strong>{row.check}</strong>
-                            <span className="detail">{row.detail}</span>
+                            <strong>{check.check}</strong>
+                            <span className="detail">{check.detail}</span>
                           </span>
                         </li>
                       ))}
@@ -793,52 +684,77 @@ export default function Clone() {
                   </div>
                 </div>
 
-                <div className="card">
+                <div className="card clone-assembly-card">
                   <div className="card-head">
-                    <h2 style={{ flex: 1 }}>Junctions</h2>
-                    <label className="inline-check">
-                      <input type="checkbox" checked={showEnds}
-                             onChange={(e) => setShowEnds(e.target.checked)} />
-                      Show the ends before ligation
-                    </label>
-                    <button className="btn btn-outline"
-                            onClick={() => void exportPlasmid("genbank")}
-                            disabled={!result.is_clonable || result.preflight?.can_export === false}
-                            title="Opens in SnapGene, Benchling or ApE with its features">
-                      GenBank
-                    </button>
-                    <button className="btn btn-outline"
-                            onClick={() => void exportPlasmid("fasta")}
-                            disabled={!result.is_clonable || result.preflight?.can_export === false}>
-                      FASTA
-                    </button>
-                    <button className="btn btn-outline"
-                            onClick={() => void downloadWorksheet()}
-                            disabled={!result.is_clonable || result.preflight?.can_export === false}>
-                      Bench worksheet
-                    </button>
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => runClone(true)}
-                      disabled={busy || !result.is_clonable || result.preflight?.can_export === false}
-                    >
-                      Save plasmid
-                    </button>
+                    <div style={{ flex: 1 }}>
+                      <h2>Insert–vector end compatibility</h2>
+                      <span className="label">Vector + duplex insert → recombinant product</span>
+                    </div>
+                    <div className="seg-toggle" role="group" aria-label="Junction detail level">
+                      {(["simple", "detailed"] as const).map((level) => (
+                        <button
+                          key={level}
+                          type="button"
+                          className={assemblyDetail === level ? "on" : ""}
+                          aria-pressed={assemblyDetail === level}
+                          onClick={() => setAssemblyDetail(level)}
+                        >
+                          {level[0].toUpperCase() + level.slice(1)}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-                    {result.junction_views.map((view) => (
-                      <JunctionDuplex key={view.name} view={view} showEnds={showEnds} />
-                    ))}
-                    <p className="note" style={{ margin: 0 }}>
-                      Coloured bases are the overhang. Both pieces carry it, on
-                      opposite strands — that is what lets them anneal, and a
-                      site that survives the join is how the clone gets
-                      verified on a gel.
-                    </p>
+                  <div className="card-body clone-assembly-body">
+                    <div className="clone-molecule-flow" aria-label="Cloning assembly flow">
+                      <div><span className="label">Vector</span><strong>{result.vector_name}</strong><small>{result.backbone_length.toLocaleString()} bp after digestion</small></div>
+                      <Icon name="arrowRight" size={20} />
+                      <div><span className="label">Insert</span><strong>{params.name || "construct"}</strong><small>{result.insert_length.toLocaleString()} bp duplex</small></div>
+                      <Icon name="arrowRight" size={20} />
+                      <div className={ligationCommitted ? "product ready" : "product"}><span className="label">Product</span><strong>{ligationCommitted ? `${result.length.toLocaleString()} bp plasmid` : "Waiting for ligation"}</strong><small>{ligationCommitted ? "joined in silico" : "review both junctions first"}</small></div>
+                    </div>
+
+                    {assemblyDetail === "simple" ? (
+                      <div className="clone-junction-grid">
+                        {result.junction_views.map((view) => <CloneJunctionSummary key={view.name} view={view} />)}
+                      </div>
+                    ) : (
+                      <div className="clone-junction-detail">
+                        {result.junction_views.map((view) => <JunctionDuplex key={view.name} view={view} showEnds />)}
+                      </div>
+                    )}
+
+                    <div className="clone-ligation-action">
+                      <div>
+                        <strong>{result.is_clonable ? "Every exposed insert end has the complementary vector end." : "At least one junction is incompatible."}</strong>
+                        <span>{result.is_clonable ? "The button simulates joining the phosphodiester backbone; it does not represent an experimental ligation." : "Ligation remains disabled until enzyme sites, polarity and overhang sequences all agree."}</span>
+                      </div>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => setLigationCommitted(true)}
+                        disabled={ligationCommitted || !result.is_clonable || result.preflight?.can_export === false}
+                      >
+                        <Icon name="plate" size={17} />
+                        {ligationCommitted ? "Ends ligated" : "Ligate compatible ends"}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {result.protein && (
+                <ConstructWorkbench
+                  result={result}
+                  vector={vector}
+                  constructName={params.name || result.name}
+                  catalogue={catalogue}
+                  ligated={ligationCommitted}
+                  annotations={productAnnotations ?? result.annotations}
+                  onAnnotationsChange={setProductAnnotations}
+                  onExport={(filetype) => void exportPlasmid(filetype)}
+                  onWorksheet={() => void downloadWorksheet()}
+                  onSave={() => void runClone(true)}
+                  busy={busy}
+                />
+
+                {ligationCommitted && result.protein && (
                   <div className="card">
                     <div className="card-head">
                       <h2 style={{ flex: 1 }}>Protein</h2>
@@ -853,9 +769,7 @@ export default function Clone() {
                               key={`${tag.name}-${tag.end}`}
                               className={tag.present ? "tag-row on" : "tag-row"}
                             >
-                              <span className="pill">
-                                {tag.end}-term {tag.name}
-                              </span>
+                              <span className="pill">{tag.end}-term {tag.name}</span>
                               <span>
                                 {tag.present
                                   ? `on the protein at residue ${tag.position}`
@@ -895,5 +809,46 @@ export default function Clone() {
         </div>
       </div>
     </>
+  );
+}
+
+function CloneJunctionSummary({ view }: { view: JunctionView }) {
+  const [start, end] = view.overhang_span;
+  const vectorEnd = view.overhang
+    ? view.joined_top.slice(start, end).trim()
+    : "blunt";
+  const insertEnd = view.overhang
+    ? view.joined_bottom.slice(start, end).trim()
+    : "blunt";
+  const pairing = view.overhang
+    ? view.joined_pairs.slice(start, end).trim()
+    : "flush";
+
+  return (
+    <div className={view.compatible ? "clone-junction-summary compatible" : "clone-junction-summary incompatible"}>
+      <div className="clone-junction-summary-head">
+        <div>
+          <span className="label">{view.name}</span>
+          <strong>{view.enzyme}</strong>
+        </div>
+        <span className={view.compatible ? "pill pill-ok" : "pill pill-bad"}>
+          {view.compatible ? "complementary" : "blocked"}
+        </span>
+      </div>
+      <div className="clone-junction-seqs" aria-label={`${view.name} cohesive ends`}>
+        <div>
+          <span>Vector end</span>
+          <code>{view.overhang ? `5′-${vectorEnd}-3′` : "blunt"}</code>
+        </div>
+        <span className="clone-pair-mark" aria-hidden="true">
+          {view.compatible ? pairing : "×".repeat(Math.max(view.overhang.length, 1))}
+        </span>
+        <div>
+          <span>Insert end</span>
+          <code>{view.overhang ? `3′-${insertEnd}-5′` : "blunt"}</code>
+        </div>
+      </div>
+      <p>{view.compatible ? `${view.kind} cohesive ends align with opposite polarity.` : view.reason}</p>
+    </div>
   );
 }

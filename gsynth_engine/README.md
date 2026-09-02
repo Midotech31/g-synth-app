@@ -3,18 +3,18 @@
 The part of G-Synth that is genuinely G-Synth's: the design logic for
 synthesising and cloning genes by **oligo hybridisation and ligation**.
 
-Pure Python, no framework, no UI, no dependencies. Both the Streamlit app
-and the Django API import it, so there is one implementation of the biology
-and one set of tests protecting it.
+Pure Python, no framework, no UI, no runtime dependencies. The Django API
+imports it, so there is one implementation of the biology and one set of
+tests protecting it.
 
 ```
 peptide / gene
    │
-   ├─ SSD              forward + reverse oligos carrying the exact sticky
+   ├─ SSD              Small Sequence Design: one forward/reverse pair carrying the exact sticky
    │                   ends of a chosen restriction pair, plus ATG, 6×His,
    │                   flexible linkers and a protease cleavage site
    │
-   ├─ Merzoug Assembly long constructs split into oligo pairs joined by
+   ├─ ESD              Extended Sequence Design: long constructs split into oligo pairs joined by
    │                   complementary 4–8 nt overhangs, ligated successively.
    │                   No PCR at any step.
    │
@@ -24,10 +24,10 @@ peptide / gene
 ## Use it
 
 ```python
-from gsynth_engine import design_merzoug_assembly
+from gsynth_engine import design_extended_sequence
 from gsynth_engine.protocol import bench_protocol, order_sheet_csv
 
-plan = design_merzoug_assembly(
+plan = design_extended_sequence(
     "GGCATCGTGGAACAGTGCTGCACC...",     # your insert
     enzyme_pair="NdeI / XhoI",
     cleavage_site="Thrombin",
@@ -55,7 +55,7 @@ result.segments                     # labelled parts, for display
 
 ## What the tests protect
 
-`pytest gsynth_engine` — 135 tests.
+`pytest gsynth_engine` — 1,098 tests.
 
 **Golden tests** (`test_ssd_golden.py`) reproduce the two worked examples in
 the G-Synth specification base for base, both strands. They are the
@@ -67,16 +67,13 @@ overhang and the ATG **overlap by one base**, and ligation restores `CATATG`
 because the cut vector supplies the `CA`. That is easy to "simplify" by
 accident.
 
-**Duplex integrity** (`test_duplex_integrity.py`) checks, for all 19 enzymes
+**Duplex integrity** (`test_duplex_integrity.py`) checks every supported enzyme
 in both the left and right positions, that the two oligos actually anneal
-without a mismatch. G-Synth 2.x stored one pair of post-cut remainders per
-enzyme, but what each oligo must carry depends on which end the enzyme sits
-at — the stored values were right for NdeI-as-left and XhoI-as-right (the
-validated pair) and wrong for every other enzyme, producing duplexes that
-would not have annealed. Remainders are now derived from the cut positions,
-so all 19 are correct.
+without a mismatch. A single stored pair of post-cut remainders is insufficient
+because what each oligo must carry depends on which end the enzyme occupies.
+Remainders are therefore derived from top- and bottom-strand cut positions.
 
-**Assembly** (`test_merzoug.py`) checks the method's promise directly:
+**Assembly** (`test_esd.py`) checks the method's promise directly:
 ligating the oligo pairs in order reproduces the design on both strands, for
 inserts from 220 to 1500 bp and overhangs of 4, 6 and 8 nt. Junction
 overhangs must be unique, non-palindromic, not homopolymers, not all-AT or

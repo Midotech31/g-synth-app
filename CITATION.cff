@@ -7,7 +7,7 @@
 # be checked against the results it produced.
 
 cff-version: 1.2.0
-title: "G-Synth: PCR-free gene synthesis and cloning design with verified assembly"
+title: "G-Synth: Small Sequence Design and Extended Sequence Design with verified assembly"
 message: "If you use this software in published work, please cite it as below."
 type: software
 
@@ -26,8 +26,9 @@ date-released: "2026-08-29"
 
 abstract: >-
   G-Synth automates a laboratory gene synthesis and cloning workflow: codon
-  optimisation that provably preserves the protein, PCR-free oligo assembly
-  with orthogonal overhangs (Merzoug assembly), in-silico cloning into a
+  optimisation that preserves the translated protein, Small Sequence Design
+  for one synthesis pair, Extended Sequence Design for tiled PCR-free oligo
+  assembly with orthogonal overhangs, in-silico cloning into a
   vector, and quality-aware verification of the result against Sanger traces
   in a public reference-aligned chromatogram viewer. Designs are
   re-ligated in silico on both strands and checked against the sticky ends the

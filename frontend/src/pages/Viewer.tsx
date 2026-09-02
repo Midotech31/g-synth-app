@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { SeqViz } from "seqviz";
 
@@ -6,11 +6,15 @@ import {
   ApiError,
   api,
   type Annotation,
+  type DetectedFeature,
   type PreflightReport,
   type Project,
   type Provenance,
 } from "../api/client";
 import Icon from "../components/Icon";
+import AnnotatedSequenceView from "../components/AnnotatedSequenceView";
+import AnnotationEditor from "../components/AnnotationEditor";
+import ConfirmDialog from "../components/ConfirmDialog";
 import LiveStatus from "../components/LiveStatus";
 import PreflightPanel from "../components/PreflightPanel";
 
@@ -57,15 +61,24 @@ export function sequenceForAnnotation(sequence: string, annotation: Annotation):
   return annotation.direction === -1 ? reverseComplement(span) : span;
 }
 
-type ViewMode = "circular" | "linear" | "both";
+type ViewMode = "circular" | "linear" | "both" | "annotated";
 
 export default function Viewer() {
   const { id } = useParams();
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [mode, setMode] = useState<ViewMode>("circular");
   const [selected, setSelected] = useState<Annotation | null>(null);
   const [status, setStatus] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [savingAnnotation, setSavingAnnotation] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [detected, setDetected] = useState<DetectedFeature[]>([]);
+  const [chosenMatches, setChosenMatches] = useState<Set<number>>(new Set());
+  const announcedProjectId = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,6 +102,54 @@ export default function Viewer() {
     [project],
   );
 
+  const saveAnnotationList = async (
+    next: Annotation[],
+    message: string,
+    selectedIndex: number | null = null,
+  ) => {
+    if (!project) return false;
+    setSavingAnnotation(true);
+    setActionError("");
+    try {
+      const updated = await api.updateProjectAnnotations(project.id, next);
+      setProject(updated);
+      const saved = updated.data?.annotations ?? [];
+      setSelected(selectedIndex === null ? null : saved[selectedIndex] ?? null);
+      setStatus(message);
+      return true;
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Could not save those annotations.");
+      return false;
+    } finally {
+      setSavingAnnotation(false);
+    }
+  };
+
+  const openNewAnnotation = () => {
+    setEditingIndex(null);
+    setEditorOpen(true);
+  };
+
+  const detectFeatures = async () => {
+    if (!project) return;
+    setDetecting(true);
+    setActionError("");
+    try {
+      const result = await api.detectCommonFeatures(project.id);
+      setDetected(result.matches);
+      setChosenMatches(new Set(result.matches.map((_, index) => index)));
+      setStatus(
+        result.matches.length
+          ? `${result.matches.length} exact motif ${result.matches.length === 1 ? "match" : "matches"} found for review.`
+          : "No additional curated motif matches were found.",
+      );
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Could not scan for common features.");
+    } finally {
+      setDetecting(false);
+    }
+  };
+
   // SeqViz wants its own shape; keep the mapping in one place.
   const seqvizAnnotations = useMemo(
     () =>
@@ -111,7 +172,8 @@ export default function Viewer() {
     // Set a render after the record lands, not with it: a live region that
     // arrives already holding its sentence is never announced, only one
     // already on the page whose contents then change.
-    if (project) {
+    if (project && announcedProjectId.current !== project.id) {
+      announcedProjectId.current = project.id;
       setStatus(
         `${project.name} opened. ${project.sequence.length.toLocaleString()} bases, ` +
         `${project.data?.annotations?.length ?? 0} features.`,
@@ -177,8 +239,8 @@ export default function Viewer() {
             {project.notes || `${topology} sequence`}
           </p>
         </div>
-        <div style={{ display: "flex", gap: "0.4rem" }} role="group" aria-label="Map view">
-          {(["circular", "linear", "both"] as ViewMode[]).map((m) => (
+        <div className="map-view-switch" role="group" aria-label="Map view">
+          {(["circular", "linear", "both", "annotated"] as ViewMode[]).map((m) => (
             <button
               key={m}
               className={`btn ${mode === m ? "btn-primary" : "btn-outline"}`}
@@ -191,13 +253,14 @@ export default function Viewer() {
                   : `Show the ${m} view`
               }
             >
-              {m[0].toUpperCase() + m.slice(1)}
+              {m === "annotated" ? "Annotated" : m[0].toUpperCase() + m.slice(1)}
             </button>
           ))}
         </div>
       </div>
 
       <div className="content" style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+        {actionError && <div className="notice notice-error" role="alert">{actionError}</div>}
         <div className="card">
           <div className="card-body stat-row">
             <div className="stat">
@@ -227,37 +290,30 @@ export default function Viewer() {
           </div>
         </div>
 
-        <PreflightPanel report={preflight} />
-
-        {provenance?.output_sha256 && (
-          <div className="card">
-            <div className="card-head">
-              <h2 style={{ flex: 1 }}>Reproducibility record</h2>
-              <button className="btn btn-outline" onClick={() => {
-                void navigator.clipboard.writeText(JSON.stringify(provenance, null, 2));
-                setStatus("Provenance manifest copied.");
-              }}>Copy manifest</button>
-            </div>
-            <div className="card-body provenance-grid">
-              <div><span>Engine</span><strong>{provenance.engine_version ?? "unknown"}</strong></div>
-              <div><span>Workflow</span><strong>{provenance.workflow ?? project.module}</strong></div>
-              <div><span>Generated</span><strong>{provenance.generated_at ? new Date(provenance.generated_at).toLocaleString() : "not recorded"}</strong></div>
-              <div><span>Output SHA-256</span><code title={provenance.output_sha256}>{provenance.output_sha256}</code></div>
-              {provenance.vector_sha256 && <div><span>Vector SHA-256</span><code title={provenance.vector_sha256}>{provenance.vector_sha256}</code></div>}
-              <div><span>Enzyme table SHA-256</span><code title={provenance.enzyme_table?.sha256}>{provenance.enzyme_table?.sha256 ?? "not recorded"}</code></div>
-            </div>
-          </div>
-        )}
-
         <div className="viewer-layout">
-          <div className="card seq-stage">
-            <SeqViz
-              name={project.name}
+          <div className={`card seq-stage ${mode === "annotated" ? "seq-stage-annotated" : ""}`}>
+            {mode === "annotated" ? (
+              <AnnotatedSequenceView
+                sequence={project.sequence}
+                annotations={annotations}
+                selected={selected}
+                preferredName={project.name}
+                circular={topology === "circular"}
+                onSelect={(annotation) => setSelected(annotation)}
+              />
+            ) : (
+              <SeqViz
+              /* The full construct name is already the page heading. SeqViz
+                 places its name inside the circular map where it can collide
+                 with dense feature labels, so the centre is reserved for the
+                 base-pair count. */
+              name=""
               seq={project.sequence}
               annotations={seqvizAnnotations}
               viewer={mode}
               showComplement
               showIndex
+              disableExternalFonts
               // Clicking a feature in the map selects it here too, so one
               // click either shows the same detail — an annotation is one
               // fact, not two independent views of it.
@@ -276,8 +332,9 @@ export default function Viewer() {
               highlights={
                 selected ? [{ start: selected.start, end: selected.end, color: selected.color }] : []
               }
-              style={{ height: "100%", width: "100%" }}
-            />
+                style={{ height: "100%", width: "100%" }}
+              />
+            )}
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
@@ -285,11 +342,96 @@ export default function Viewer() {
               <div className="card-head">
                 <h2 style={{ flex: 1 }}>Features</h2>
                 <span className="label">{annotations.length}</span>
+                <button
+                  className="btn btn-outline"
+                  onClick={() => void detectFeatures()}
+                  disabled={detecting || savingAnnotation}
+                  title="Find exact matches to curated common DNA motifs"
+                >
+                  {detecting ? "Scanning…" : "Find common"}
+                </button>
+                <button className="btn btn-primary" onClick={openNewAnnotation}>
+                  Add feature
+                </button>
               </div>
+              {detected.length > 0 && (
+                <div className="motif-review" aria-label="Common motif matches">
+                  <div className="motif-review-intro">
+                    <strong>Review exact motif matches</strong>
+                    <p>
+                      Sequence identity supports an annotation, but does not prove biological
+                      activity. Choose only the features appropriate for this construct.
+                    </p>
+                  </div>
+                  <div className="motif-match-list">
+                    {detected.map((match, index) => {
+                      const feature = match.annotation;
+                      return (
+                        <label className="motif-match" key={`${feature.name}-${feature.start}-${index}`}>
+                          <input
+                            type="checkbox"
+                            checked={chosenMatches.has(index)}
+                            onChange={(event) => setChosenMatches((current) => {
+                              const next = new Set(current);
+                              if (event.target.checked) next.add(index); else next.delete(index);
+                              return next;
+                            })}
+                          />
+                          <span className="dot" style={{ background: feature.color }} />
+                          <span>
+                            <strong>{feature.name}</strong>
+                            <small>
+                              {(feature.start + 1).toLocaleString()}–
+                              {(feature.end > project.sequence.length
+                                ? feature.end - project.sequence.length
+                                : feature.end).toLocaleString()}
+                              {feature.direction === -1 ? " · reverse" : " · forward"}
+                            </small>
+                            <code title={match.basis}>{match.matched_sequence}</code>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="motif-review-actions">
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => {
+                        setDetected([]);
+                        setChosenMatches(new Set());
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      disabled={!chosenMatches.size || savingAnnotation}
+                      onClick={() => {
+                        const additions = detected
+                          .filter((_, index) => chosenMatches.has(index))
+                          .map((match) => match.annotation);
+                        const firstAdded = annotations.length;
+                        void saveAnnotationList(
+                          [...annotations, ...additions],
+                          `${additions.length} reviewed ${additions.length === 1 ? "feature" : "features"} added.`,
+                          firstAdded,
+                        ).then((saved) => {
+                          if (saved) {
+                            setDetected([]);
+                            setChosenMatches(new Set());
+                          }
+                        });
+                      }}
+                    >
+                      Add selected ({chosenMatches.size})
+                    </button>
+                  </div>
+                </div>
+              )}
               {annotations.length === 0 ? (
                 <div className="card-body" style={{ color: "var(--muted)", fontSize: "0.88rem" }}>
-                  This record has no annotated features. FASTA files carry sequence only —
-                  import a GenBank file to see a feature map.
+                  This record has no annotated features. Name a new insert with “Add feature”,
+                  or review exact matches to curated motifs with “Find common”.
                 </div>
               ) : (
                 <div className="feature-list">
@@ -334,6 +476,21 @@ export default function Viewer() {
                 <div className="card-head">
                   <span className="dot" style={{ background: selected.color }} />
                   <h2 style={{ flex: 1 }}>{selected.name}</h2>
+                  <button
+                    className="btn btn-outline"
+                    onClick={() => {
+                      const index = annotations.indexOf(selected);
+                      if (index >= 0) {
+                        setEditingIndex(index);
+                        setEditorOpen(true);
+                      }
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button className="btn btn-danger" onClick={() => setDeleteOpen(true)}>
+                    Delete
+                  </button>
                   <button
                     className="btn btn-ghost"
                     onClick={() => setSelected(null)}
@@ -472,12 +629,78 @@ export default function Viewer() {
           </div>
         </div>
 
+        <div className="viewer-audit-grid">
+          <PreflightPanel report={preflight} />
+
+          {provenance?.output_sha256 && (
+            <div className="card">
+              <div className="card-head">
+                <h2 style={{ flex: 1 }}>Reproducibility record</h2>
+                <button className="btn btn-outline" onClick={() => {
+                  void navigator.clipboard.writeText(JSON.stringify(provenance, null, 2));
+                  setStatus("Provenance manifest copied.");
+                }}>Copy manifest</button>
+              </div>
+              <div className="card-body provenance-grid">
+                <div><span>Engine</span><strong>{provenance.engine_version ?? "unknown"}</strong></div>
+                <div><span>Workflow</span><strong>{provenance.workflow ?? project.module}</strong></div>
+                <div><span>Generated</span><strong>{provenance.generated_at ? new Date(provenance.generated_at).toLocaleString() : "not recorded"}</strong></div>
+                <div><span>Output SHA-256</span><code title={provenance.output_sha256}>{provenance.output_sha256}</code></div>
+                {provenance.vector_sha256 && <div><span>Vector SHA-256</span><code title={provenance.vector_sha256}>{provenance.vector_sha256}</code></div>}
+                <div><span>Enzyme table SHA-256</span><code title={provenance.enzyme_table?.sha256}>{provenance.enzyme_table?.sha256 ?? "not recorded"}</code></div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <p>
           <Link to="/projects" className="back-link">
             <Icon name="arrowLeft" size={15} /> Back to projects
           </Link>
         </p>
       </div>
+
+      <AnnotationEditor
+        open={editorOpen}
+        annotation={editingIndex === null ? null : annotations[editingIndex] ?? null}
+        sequenceLength={project.sequence.length}
+        circular={topology === "circular"}
+        saving={savingAnnotation}
+        onCancel={() => setEditorOpen(false)}
+        onSave={(annotation) => {
+          const next = [...annotations];
+          const index = editingIndex === null ? next.length : editingIndex;
+          if (editingIndex === null) next.push(annotation); else next[editingIndex] = annotation;
+          void saveAnnotationList(
+            next,
+            editingIndex === null
+              ? `Feature “${annotation.name}” added.`
+              : `Feature “${annotation.name}” updated.`,
+            index,
+          ).then((saved) => {
+            if (saved) setEditorOpen(false);
+          });
+        }}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen && selected !== null}
+        title={`Delete “${selected?.name ?? "feature"}”?`}
+        body="This removes the annotation from this project and its future GenBank exports. It does not change any DNA bases."
+        confirmLabel="Delete feature"
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={() => {
+          if (!selected) return;
+          const index = annotations.indexOf(selected);
+          if (index < 0) return;
+          const name = selected.name;
+          setDeleteOpen(false);
+          void saveAnnotationList(
+            annotations.filter((_, annotationIndex) => annotationIndex !== index),
+            `Feature “${name}” deleted.`,
+          );
+        }}
+      />
     </>
   );
 }

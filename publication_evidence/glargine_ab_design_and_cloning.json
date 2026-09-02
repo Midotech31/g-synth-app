@@ -1,0 +1,264 @@
+{
+  "analysis": {
+    "software": "G-Synth",
+    "version": "1.0.0",
+    "workflow": "Small Sequence Design followed by in-silico NdeI/XhoI cloning",
+    "enzyme_pair": "NdeI / XhoI",
+    "cassette": "MGSSHHHHHHSSGLVPRGS",
+    "vector": "pET-21a(+)"
+  },
+  "source_manuscript": {
+    "path": "/home/merzoug/Downloads/Article Insuline Algerine (2)/FINAL VERSION/IJBMM/BEJ/ACS/Manuscript_Merzoug_et_al_2025_ACS_--SB.docx",
+    "sha256": "2338c8d46ecfd709ce4e1bf8007a752719fbd35795fb356b0dbfa953d187b810"
+  },
+  "chains": {
+    "A": {
+      "input": {
+        "optimised_coding_sequence": "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA",
+        "length_bp": 66,
+        "expected_chain_peptide": "GIVEQCCTSICSLYQLENYCG"
+      },
+      "design": {
+        "forward_oligo_5_to_3": "TATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTGGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAAC",
+        "reverse_oligo_5_to_3": "TCGAGTTAGCCGCAGTAGTTTTCCAGCTGGTACAGGCTGCAGATGCTGGTGCAGCACTGTTCCACGATGCCAGAACCACGCGGCACCAGACCAGAAGAGTGGTGGTGGTGGTGGTGAGAAGAACCCA",
+        "forward_length_nt": 125,
+        "reverse_length_nt": 127,
+        "forward_gc_percent": 56.8,
+        "reverse_gc_percent": 57.5,
+        "forward_tm_c": 83.4,
+        "reverse_tm_c": 84.1,
+        "left_overhang_5_to_3": "TA",
+        "right_overhang_5_to_3": "TCGA",
+        "orf_start_zero_based": 1,
+        "coding_sequence": "ATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTGGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAAC",
+        "translated_product": "MGSSHHHHHHSSGLVPRGSGIVEQCCTSICSLYQLENYCG*",
+        "expected_product_match": true,
+        "manuscript_table_3_forward_exact_match": true,
+        "manuscript_table_3_reverse_exact_match": true,
+        "duplex_core_exact_match": true,
+        "segments": [
+          {
+            "name": "NdeI overhang",
+            "start": 0,
+            "end": 4,
+            "sequence": "TATG"
+          },
+          {
+            "name": "linker",
+            "start": 4,
+            "end": 13,
+            "sequence": "GGTTCTTCT"
+          },
+          {
+            "name": "6\u00d7His tag",
+            "start": 13,
+            "end": 31,
+            "sequence": "CACCACCACCACCACCAC"
+          },
+          {
+            "name": "linker",
+            "start": 31,
+            "end": 40,
+            "sequence": "TCTTCTGGT"
+          },
+          {
+            "name": "Thrombin site",
+            "start": 40,
+            "end": 58,
+            "sequence": "CTGGTGCCGCGTGGTTCT"
+          },
+          {
+            "name": "insert",
+            "start": 58,
+            "end": 124,
+            "sequence": "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA"
+          },
+          {
+            "name": "XhoI overhang",
+            "start": 124,
+            "end": 125,
+            "sequence": "C"
+          }
+        ],
+        "warnings": [
+          "No separate ATG was added: NdeI's retained site provides the start codon."
+        ]
+      },
+      "cloning": {
+        "is_clonable": true,
+        "recombinant_length_bp": 5490,
+        "insert_length_top_strand_nt": 125,
+        "insert_start_zero_based": 5365,
+        "insert_end_zero_based_half_open": 5490,
+        "reversed_insert_relative_to_vector_numbering": true,
+        "junctions": [
+          {
+            "name": "vector \u2192 insert",
+            "enzyme": "NdeI",
+            "overhang": "TA",
+            "kind": "5'",
+            "position": 5365,
+            "context": "AGGAGATATACATATGGGTTCTTC",
+            "site_regenerated": true
+          },
+          {
+            "name": "insert \u2192 vector",
+            "enzyme": "XhoI",
+            "overhang": "TCGA",
+            "kind": "5'",
+            "position": 0,
+            "context": "ACTGCGGCTAACTCGAGCACCACC",
+            "site_regenerated": true
+          }
+        ],
+        "translated_product": "MGSSHHHHHHSSGLVPRGSGIVEQCCTSICSLYQLENYCG",
+        "problems": [],
+        "warnings": [
+          "The insert supplies its own stop codon, so nothing downstream in the vector is translated \u2014 a C-terminal tag on the vector would not appear on the protein.",
+          "pET-21a(+)'s N-terminal T7\u00b7Tag is not on this protein. Sits just downstream of the ATG, so cloning at NdeI replaces it with your own sequence.",
+          "pET-21a(+)'s C-terminal His-tag is not on this protein. Immediately after XhoI. It appears only if the insert reads in frame through XhoI without its own stop codon."
+        ],
+        "vector_tag_outcomes": [
+          {
+            "name": "T7\u00b7Tag",
+            "end": "N",
+            "present": false,
+            "position": null,
+            "note": "Sits just downstream of the ATG, so cloning at NdeI replaces it with your own sequence."
+          },
+          {
+            "name": "His-tag",
+            "end": "C",
+            "present": false,
+            "position": null,
+            "note": "Immediately after XhoI. It appears only if the insert reads in frame through XhoI without its own stop codon."
+          }
+        ]
+      }
+    },
+    "B": {
+      "input": {
+        "optimised_coding_sequence": "TTTGTGAACCAGCATCTGTGCGGCAGCCATCTGGTGGAAGCGCTGTACCTGGTGTGCGGCGAACGCGGCTTTTTTTACACCCCAAAAACCCGCCGCTAA",
+        "length_bp": 99,
+        "expected_chain_peptide": "FVNQHLCGSHLVEALYLVCGERGFFYTPKTRR"
+      },
+      "design": {
+        "forward_oligo_5_to_3": "TATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTTTTGTGAACCAGCATCTGTGCGGCAGCCATCTGGTGGAAGCGCTGTACCTGGTGTGCGGCGAACGCGGCTTTTTTTACACCCCAAAAACCCGCCGCTAAC",
+        "reverse_oligo_5_to_3": "TCGAGTTAGCGGCGGGTTTTTGGGGTGTAAAAAAAGCCGCGTTCGCCGCACACCAGGTACAGCGCTTCCACCAGATGGCTGCCGCACAGATGCTGGTTCACAAAAGAACCACGCGGCACCAGACCAGAAGAGTGGTGGTGGTGGTGGTGAGAAGAACCCA",
+        "forward_length_nt": 158,
+        "reverse_length_nt": 160,
+        "forward_gc_percent": 57.0,
+        "reverse_gc_percent": 57.5,
+        "forward_tm_c": 84.6,
+        "reverse_tm_c": 85.1,
+        "left_overhang_5_to_3": "TA",
+        "right_overhang_5_to_3": "TCGA",
+        "orf_start_zero_based": 1,
+        "coding_sequence": "ATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCTTTTGTGAACCAGCATCTGTGCGGCAGCCATCTGGTGGAAGCGCTGTACCTGGTGTGCGGCGAACGCGGCTTTTTTTACACCCCAAAAACCCGCCGCTAAC",
+        "translated_product": "MGSSHHHHHHSSGLVPRGSFVNQHLCGSHLVEALYLVCGERGFFYTPKTRR*",
+        "expected_product_match": true,
+        "manuscript_table_3_forward_exact_match": true,
+        "manuscript_table_3_reverse_exact_match": true,
+        "duplex_core_exact_match": true,
+        "segments": [
+          {
+            "name": "NdeI overhang",
+            "start": 0,
+            "end": 4,
+            "sequence": "TATG"
+          },
+          {
+            "name": "linker",
+            "start": 4,
+            "end": 13,
+            "sequence": "GGTTCTTCT"
+          },
+          {
+            "name": "6\u00d7His tag",
+            "start": 13,
+            "end": 31,
+            "sequence": "CACCACCACCACCACCAC"
+          },
+          {
+            "name": "linker",
+            "start": 31,
+            "end": 40,
+            "sequence": "TCTTCTGGT"
+          },
+          {
+            "name": "Thrombin site",
+            "start": 40,
+            "end": 58,
+            "sequence": "CTGGTGCCGCGTGGTTCT"
+          },
+          {
+            "name": "insert",
+            "start": 58,
+            "end": 157,
+            "sequence": "TTTGTGAACCAGCATCTGTGCGGCAGCCATCTGGTGGAAGCGCTGTACCTGGTGTGCGGCGAACGCGGCTTTTTTTACACCCCAAAAACCCGCCGCTAA"
+          },
+          {
+            "name": "XhoI overhang",
+            "start": 157,
+            "end": 158,
+            "sequence": "C"
+          }
+        ],
+        "warnings": [
+          "No separate ATG was added: NdeI's retained site provides the start codon."
+        ]
+      },
+      "cloning": {
+        "is_clonable": true,
+        "recombinant_length_bp": 5523,
+        "insert_length_top_strand_nt": 158,
+        "insert_start_zero_based": 5365,
+        "insert_end_zero_based_half_open": 5523,
+        "reversed_insert_relative_to_vector_numbering": true,
+        "junctions": [
+          {
+            "name": "vector \u2192 insert",
+            "enzyme": "NdeI",
+            "overhang": "TA",
+            "kind": "5'",
+            "position": 5365,
+            "context": "AGGAGATATACATATGGGTTCTTC",
+            "site_regenerated": true
+          },
+          {
+            "name": "insert \u2192 vector",
+            "enzyme": "XhoI",
+            "overhang": "TCGA",
+            "kind": "5'",
+            "position": 0,
+            "context": "CCCGCCGCTAACTCGAGCACCACC",
+            "site_regenerated": true
+          }
+        ],
+        "translated_product": "MGSSHHHHHHSSGLVPRGSFVNQHLCGSHLVEALYLVCGERGFFYTPKTRR",
+        "problems": [],
+        "warnings": [
+          "The insert supplies its own stop codon, so nothing downstream in the vector is translated \u2014 a C-terminal tag on the vector would not appear on the protein.",
+          "pET-21a(+)'s N-terminal T7\u00b7Tag is not on this protein. Sits just downstream of the ATG, so cloning at NdeI replaces it with your own sequence.",
+          "pET-21a(+)'s C-terminal His-tag is not on this protein. Immediately after XhoI. It appears only if the insert reads in frame through XhoI without its own stop codon."
+        ],
+        "vector_tag_outcomes": [
+          {
+            "name": "T7\u00b7Tag",
+            "end": "N",
+            "present": false,
+            "position": null,
+            "note": "Sits just downstream of the ATG, so cloning at NdeI replaces it with your own sequence."
+          },
+          {
+            "name": "His-tag",
+            "end": "C",
+            "present": false,
+            "position": null,
+            "note": "Immediately after XhoI. It appears only if the insert reads in frame through XhoI without its own stop codon."
+          }
+        ]
+      }
+    }
+  }
+}

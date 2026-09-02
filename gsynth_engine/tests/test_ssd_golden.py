@@ -12,6 +12,8 @@ and 2 — Non-Coding, NdeI/XhoI, Thrombin.
 """
 import pytest
 
+from gsynth_engine.cloning import translate
+from gsynth_engine.constants import CLEAVAGE_SITES
 from gsynth_engine.sequence import reverse_complement
 from gsynth_engine.ssd import design_small_sequence
 
@@ -126,6 +128,25 @@ def test_his_tag_and_thrombin_site_are_present_in_frame():
     assert coding.index("CACCACCACCACCACCAC") % 3 == 0
     assert coding.index("CTGGTGCCGCGTGGTTCT") % 3 == 0
     assert coding.index(EX1_INPUT) % 3 == 0, "the insert itself must be in frame"
+
+
+def test_factor_xa_uses_the_standard_iegr_coding_sequence():
+    """Pin the Factor Xa DNA spelling as well as its peptide.
+
+    Factor Xa recognises IEGR at protein level. G-Synth uses ATC-GAA-GGT-CGT,
+    which avoids the rare E. coli AGG arginine codon. Exact DNA is pinned
+    because changing synonymous codons still changes ordered oligos.
+    """
+    factor_xa = CLEAVAGE_SITES["Factor Xa"]
+    assert factor_xa == "ATCGAAGGTCGT"
+    assert translate(factor_xa) == "IEGR"
+
+    result = design_small_sequence(
+        EX1_INPUT, enzyme_pair="NdeI / XhoI", is_coding=False,
+        cleavage_site="Factor Xa",
+    )
+    assert factor_xa in result.coding_region
+    assert result.coding_region.index(factor_xa) % 3 == 0
 
 
 def test_cassette_translates_to_the_expected_protein():

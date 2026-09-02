@@ -56,6 +56,13 @@ services:
       - key: CORS_ALLOWED_ORIGINS
         value: https://gsynth-app.onrender.com
 
+      # The optional AI study assistant is deliberately off on the public
+      # deployment. Enable it only after provisioning and approving a private
+      # Ollama-compatible endpoint; all deterministic design tools are
+      # independent of it.
+      - key: TUTOR_ENABLED
+        value: "false"
+
       # Postgres connection string. Render asks for this when you create the
       # blueprint: paste the Supabase "Session pooler" URL. Required —
       # without it the app refuses to start rather than silently falling back
@@ -92,4 +99,3 @@ services:
       # so the client needs the API's absolute URL.
       - key: VITE_API_BASE
         value: https://gsynth-api-c2p9.onrender.com
-

@@ -45,24 +45,25 @@ function Rail() {
     items: Array<{ to: string; label: string; icon: IconName }>;
   }> = [
     {
-      label: "Design",
+      label: "Core workflow",
       items: [
-        { to: "/design", label: "Design", icon: "helix" },
         { to: "/optimise", label: "Optimise", icon: "target" },
-      ],
-    },
-    {
-      label: "Build",
-      items: [
-        { to: "/pcr", label: "PCR", icon: "microscope" },
-        { to: "/clone", label: "Clone", icon: "plate" },
+        { to: "/design", label: "Design", icon: "helix" },
+        { to: "/hybridize", label: "Hybridize", icon: "check" },
+        { to: "/clone", label: "Restriction clone", icon: "plate" },
       ],
     },
     {
       label: "Verify",
       items: [
-        { to: "/verify", label: "Check", icon: "check" },
-        { to: "/align", label: "Compare", icon: "scales" },
+        { to: "/verify", label: "Validate", icon: "check" },
+        { to: "/align", label: "Align", icon: "scales" },
+      ],
+    },
+    {
+      label: "Supporting",
+      items: [
+        { to: "/pcr", label: "Primers & PCR", icon: "microscope" },
         { to: "/learn", label: "Learn", icon: "book" },
       ],
     },
@@ -72,7 +73,7 @@ function Rail() {
     <aside className="rail">
       <NavLink to="/" end className="brand" aria-label="G-Synth home">
         <Logo size={30} tagline={false} />
-        <span className="ver">v3</span>
+        <span className="ver">v{__APP_VERSION__}</span>
       </NavLink>
 
       <nav aria-label="Workspace">
@@ -207,7 +208,8 @@ export default function App() {
             <Route path="/pcr" element={<Pcr />} />
             <Route path="/clone" element={<Clone />} />
             <Route path="/verify" element={<Verify />} />
-            <Route path="/align" element={<Align />} />
+            <Route path="/hybridize" element={<Align initialTool="hybridization" />} />
+            <Route path="/align" element={<Align initialTool="alignment" />} />
             <Route path="/learn" element={<Learn />} />
             <Route path="/projects" element={<Dashboard />} />
             <Route path="/projects/:id" element={<Viewer />} />
@@ -219,4 +221,3 @@ export default function App() {
     </BrowserRouter>
   );
 }
-

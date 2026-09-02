@@ -14,7 +14,7 @@ that names the problem without naming the fix costs the user a round trip.
 import pytest
 
 from gsynth_engine.constants import HIS_TAG, LEFT_LINKER, RIGHT_LINKER
-from gsynth_engine.merzoug import design_merzoug_assembly
+from gsynth_engine.esd import design_extended_sequence
 from gsynth_engine.sequence import SequenceError, gc_content
 from gsynth_engine.ssd import design_small_sequence
 from gsynth_engine.thermo import ANNEALING, melting_temperature
@@ -60,7 +60,7 @@ class TestTheCassetteCombinations:
         """The reverse strand is built by a parallel set of branches, so a
         combination can be right on top and wrong underneath."""
         r = design_small_sequence(INSERT, include_his_tag=tag, include_linkers=linkers)
-        plan = design_merzoug_assembly(INSERT, include_his_tag=tag,
+        plan = design_extended_sequence(INSERT, include_his_tag=tag,
                                        include_linkers=linkers)
         assert plan.verify() == []
         assert r.forward == plan.construct_forward
@@ -86,7 +86,7 @@ class TestTheNumbersTheOrderSheetPrints:
             melting_temperature(r.reverse, conditions=ANNEALING), 1)
 
     def test_fragment_numbers_match_their_own_oligos(self):
-        plan = design_merzoug_assembly(INSERT, target_oligo_length=60)
+        plan = design_extended_sequence(INSERT, target_oligo_length=60)
         for f in plan.fragments:
             assert f.forward_length == len(f.forward)
             assert f.reverse_length == len(f.reverse)
@@ -100,26 +100,26 @@ class TestWhichStrandCarriesEachOverhang:
     on the strand that cannot present it, and the picture still looks fine."""
 
     def test_a_five_prime_pair_puts_them_on_opposite_strands(self):
-        plan = design_merzoug_assembly(INSERT, enzyme_pair="NdeI / XhoI")
+        plan = design_extended_sequence(INSERT, enzyme_pair="NdeI / XhoI")
         assert plan.fragments[0].left_overhang_strand == "top"
         assert plan.fragments[-1].right_overhang_strand == "bottom"
 
     def test_a_three_prime_pair_is_the_other_way_round(self):
         """KpnI and SacI leave 3' overhangs — the same protrusion sits on the
         other strand, which is the distinction the whole model turns on."""
-        plan = design_merzoug_assembly(INSERT, enzyme_pair="KpnI / SacI")
+        plan = design_extended_sequence(INSERT, enzyme_pair="KpnI / SacI")
         assert plan.fragments[0].left_overhang_strand == "bottom"
         assert plan.fragments[-1].right_overhang_strand == "top"
 
     def test_a_blunt_end_says_blunt(self):
-        plan = design_merzoug_assembly(INSERT, enzyme_pair="EcoRV / SmaI")
+        plan = design_extended_sequence(INSERT, enzyme_pair="EcoRV / SmaI")
         assert plan.fragments[0].left_overhang_strand == "blunt"
         assert plan.fragments[-1].right_overhang_strand == "blunt"
 
     def test_internal_junctions_are_always_five_prime_on_top(self):
         """However the outer ends are cut, the stagger between fragments is
         made by the design and is always the same way round."""
-        plan = design_merzoug_assembly(INSERT, enzyme_pair="KpnI / SacI",
+        plan = design_extended_sequence(INSERT, enzyme_pair="KpnI / SacI",
                                        target_oligo_length=60)
         for fragment in plan.fragments[1:]:
             assert fragment.left_overhang_strand == "top"

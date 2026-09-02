@@ -11,33 +11,71 @@ that, when skipped, cost a fortnight.
 ## The workflow
 
 ```
-  gene  →  Optimise  →  Design  →  Clone  →  Check      Compare
-           for the      oligos +   into a    ligation ·  two
-           host         protocol   vector    primers ·   sequences
-                                             reads
+  gene  →  Optimise  →  Design  →  Hybridise  →  Clone  →  Check
+           for the      oligos +   verify the    ligate    ligation ·
+           host         protocol   duplex/ends   vector    reads
+
+                         Compare: alignment or physical hybridisation
 ```
 
 **Optimise** rewrites a gene for the organism that will express it. The protein
-never changes. The enzymes you will clone with are an input, because a gene
-that translates beautifully and carries an internal NdeI site cannot be cloned
-NdeI/XhoI.
+never changes. Select *E. coli*, *S. cerevisiae*, *K. phaffii*, *B. subtilis*,
+human, CHO-species, Sf9/Sf21-species or *N. benthamiana* codon usage, or supply
+an experiment-specific reference-gene set through the API. The enzymes you will
+clone with are also inputs, because a gene that carries an internal NdeI site
+cannot be cloned NdeI/XhoI however favourable its host codons are.
 
-**Design** builds the cassette — sticky ends, ATG, 6×His, linkers, protease
-site — and cuts it into oligo pairs for **Merzoug assembly**: fragments
-hybridised in F/R pairs with complementary 4–8 nt overhangs, ligated in order,
-no PCR at any step. It hands back the oligos to order, a bench protocol, and
+**Design** implements two original workflows. **Small Sequence Design (SSD)**
+emits one forward/reverse synthesis pair for a compact construct.
+**Extended Sequence Design (ESD)** tiles a longer construct into F/R pairs
+with complementary 4–8 nt overhangs that ligate in one order, with no PCR.
+Both hand back the exact oligos to order, a bench protocol, and
 the hybridisation view: both strands drawn aligned, with the overhangs
 showing. Nothing can be downloaded until re-ligating the fragments in silico
 reproduces the construct base for base, on both strands — and until the two
 outer ends, read off that molecule, are the sticky ends the chosen enzymes
 leave, on the right strands.
 
-**Clone** cuts a vector and puts the construct in. pET-21a(+) and pET-21(+)
+To our knowledge, G-Synth is the first disclosed automation of SSD and ESD as
+these terms are defined here: synthesis-order workflows whose exported
+molecules must reconstruct both intended strands exactly before release. This
+specific claim does not imply priority over general gene-design, DNA-assembly
+or end-to-end construction software.
+
+**Hybridise** is the mandatory molecular gate between SSD/ESD and cloning.
+Both order molecules remain entered 5′→3′; G-Synth draws them antiparallel,
+distinguishes paired bases, mismatches and exposed 5′/3′ ends, and always shows
+both a compact end/core summary and a nucleotide-level double-strand view. A
+Design handoff runs this check automatically and transfers only an exact duplex
+and its enzyme assignments to cloning. Alignment remains available as a separate
+mode for similarity comparison and may introduce gaps; hybridisation never
+hides a bulge or cohesive end behind a gap.
+
+**Restriction cloning** cuts a vector and puts the construct in. Its enzyme
+assignments can be changed without altering the transferred bases; digestion
+must then prove the new end geometry compatible before ligation. pET-21a(+) and pET-21(+)
 ship with their sequences; any other backbone is imported — SnapGene `.dna`,
 GenBank or FASTA — and checked against the catalogue entry, so pasting
 pET-28a while pET-21a is selected is caught rather than cloned into. Each seam
 is drawn as the two ends that made it, so "the overhangs match" can be checked
-instead of believed.
+instead of believed. A synchronized Vector / Insert / Product workbench keeps
+map, sequence, annotations, enzymes, oligos and the diagnostic gel on one
+coordinate system. Product inspection and export remain unavailable until the
+reviewed compatible ends are explicitly ligated. The restriction inventory is
+searchable, defaults to unique cutters plus the cloning pair, and can expose every
+multi-cutter on demand. The coordinate-level Annotated view shows regulatory
+features, cassette parts, strand direction and codon-aligned translation,
+including expression loci that cross the circular origin. Every feature can
+be created, named, edited or deleted; exact matches to a curated library of
+common promoters, operators, tags, linkers and cleavage motifs are proposed
+for review rather than silently asserted. Saved edits survive into GenBank.
+
+**Primer design and PCR simulation** are supporting tools. They distinguish a primer's hybridising 3′ region
+from its deliberately unpaired 5′ cloning tail, show how that tail enters the
+product after extension, and calculate complete diagnostic-digest fragments.
+Predicted agarose gels offer explicit generic 100 bp, 1 kb and broad-range
+marker sizes. Every gel is permanently labelled as an in-silico size
+prediction, not an experimental image.
 
 **Check** closes the loop: ligation amounts (molar, because at equal mass a
 5.4 kb vector outnumbers a 150 bp insert thirty-six to one), sequencing
@@ -46,10 +84,14 @@ the reads that come back against the design — in either orientation, with a
 substitution reported as the residue it changes. Uploaded ABI/AB1 traces are
 quality-trimmed and displayed in a reference-aligned chromatogram viewer with
 consensus, coordinates, strand direction, base calls, Phred-quality shading,
-four-channel peaks and explicit mismatches. Only evidence admitted by the
-verification algorithm is drawn as covered.
+four-channel peaks and explicit mismatches. Forward and reverse reads are
+oriented and assembled before consensus coverage is calculated; raw consensus
+coverage, bidirectional overlap, overlap agreement and quality-gated coverage
+are reported separately. Only evidence admitted by the selected quality gate
+is drawn as confidence-covered.
 
-**Compare** aligns two sequences that are not assumed to be the same thing.
+**Compare** contains both pairwise alignment and physical hybridisation. The
+two modes share inputs but keep their distinct scientific interpretations.
 
 ## Running it
 
@@ -63,10 +105,10 @@ cd g-synth-app/django_app
 docker compose up --build
 ```
 
-Open <http://localhost:5173>. This starts Postgres, Redis, the API, the
-frontend, and a local Ollama that answers the **Learn** page's questions —
-the model is pulled on first boot, so that run takes a few minutes and every
-later one takes seconds. Nothing else to install and no keys to set.
+Open <http://localhost:5173>. This starts Postgres, Redis, the API and the
+frontend. **Learn** is a bundled, searchable molecular-biology knowledge
+library, so it works offline without a model download, external service or API
+key.
 
 ### Without Docker
 
@@ -85,8 +127,11 @@ npm run dev                                                     # :5173
 ```
 
 The frontend proxies `/api` to `:8000`; point it elsewhere with
-`VITE_API_TARGET`. The Learn page needs `ollama serve` running locally, and
-says so plainly if it is not — every other page works without it.
+`VITE_API_TARGET`. Learn contains fixed, reviewable explanations of PCR,
+cloning, annotation, expression and post-sequencing validation. It does not
+send questions or sequences to an AI service. Optimise, Design, PCR, Clone,
+Check and Compare/Hybridise are deterministic calculation tools; Learn is their scoped
+reference companion.
 
 ### The engine on its own
 
@@ -98,18 +143,18 @@ pip install -e .
 ```
 
 ```python
-from gsynth_engine import design_merzoug_assembly
+from gsynth_engine import design_extended_sequence
 
-plan = design_merzoug_assembly(my_gene, enzyme_pair="NdeI / XhoI", is_coding=True)
+plan = design_extended_sequence(my_gene, enzyme_pair="NdeI / XhoI", is_coding=True)
 assert plan.verify() == []          # empty means the oligos re-ligate to the design
 ```
 
 ### Tests
 
 ```bash
-python -m pytest gsynth_engine/tests -q     # 1,056 — the biology
-cd django_app && python -m pytest -q        # 232 — the HTTP layer
-cd frontend && npm test                     # 57 — the interface
+python -m pytest gsynth_engine/tests -q     # 1,098 — the biology
+cd django_app && python -m pytest -q        # 262 — the HTTP layer
+cd frontend && npm test                     # 89 — the interface
 ```
 
 All three run in CI on every push. The engine's suite is the definition of
@@ -125,7 +170,7 @@ Scientific scope and validation materials:
 - [`docs/SCIENTIFIC_REFERENCES.md`](docs/SCIENTIFIC_REFERENCES.md) — sources behind the assumptions.
 - [`docs/USABILITY_STUDY.md`](docs/USABILITY_STUDY.md) — the human-validation protocol and release criteria.
 - [`docs/WET_LAB_VALIDATION.md`](docs/WET_LAB_VALIDATION.md) — physical construct-to-sequencing evidence and acceptance criteria.
-- [`docs/ACCESSIBILITY_MOBILE_AUDIT_2026-08-27.md`](docs/ACCESSIBILITY_MOBILE_AUDIT_2026-08-27.md) — responsive and WCAG-oriented engineering audit.
+- [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md) — current accessibility and responsive-design guarantees and validation limits.
 - [`docs/AI_USE_DISCLOSURE.md`](docs/AI_USE_DISCLOSURE.md) — final, auditable declaration of generative-AI assistance and human responsibility.
 
 ## What is in here
@@ -135,7 +180,6 @@ Scientific scope and validation materials:
 | `gsynth_engine/` | The biology. Dependency-free Python, no Django, no HTTP. Every design decision and every check lives here, with its tests. |
 | `django_app/` | A thin HTTP layer over the engine, plus accounts and per-user projects. It validates requests and serialises results; it computes nothing. |
 | `frontend/` | React + TypeScript workspace. Draws what the engine returns. |
-| `app.py`, `modules/`, `utils/` | **The original Streamlit application**, kept as it was. Superseded by the above, not deleted. |
 
 The separation is deliberate: the engine can be imported, tested and trusted
 without a web server, and a bug in the biology has one place to be.
@@ -145,9 +189,9 @@ without a web server, and a bug in the biology has one place to be.
 A few decisions that are easy to reverse by accident:
 
 - **Restriction enzymes are stored as cut positions**, not as the bases each
-  oligo should carry. Storing the latter — as earlier versions did — is
-  correct only for the pair it was checked against, and silently produces
-  mismatched duplexes for every other enzyme.
+  oligo should carry. A pair-specific oligo remainder is correct only for the
+  enzyme pair it was derived from and silently produces mismatched duplexes
+  when reused for a different enzyme.
 - **Melting temperatures come from the nearest-neighbour model** (SantaLucia
   1998) under the conditions of the annealing reaction the protocol
   prescribes, not from base composition and not at a generic primer dilution.

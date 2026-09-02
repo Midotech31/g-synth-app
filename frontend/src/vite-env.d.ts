@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
+/** Injected from frontend/package.json by Vite. */
+declare const __APP_VERSION__: string;
+
 /**
  * Build-time configuration.
  *

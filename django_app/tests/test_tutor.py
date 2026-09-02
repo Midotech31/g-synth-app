@@ -24,6 +24,42 @@ class TestAuthIsRequired:
         )
         assert r.status_code == 401
 
+    def test_status_is_also_private(self, api_client):
+        r = api_client.get(reverse("tutor-status"))
+        assert r.status_code == 401
+
+
+@pytest.mark.django_db
+class TestAvailability:
+    def test_enabled_deployment_discloses_ai_limit_before_data_entry(self, auth_client, settings):
+        settings.TUTOR_ENABLED = True
+        r = auth_client.get(reverse("tutor-status"))
+        assert r.status_code == 200
+        assert r.data["enabled"] is True
+        assert "not a validated scientific result" in r.data["notice"]
+        assert r.data["disabled_reason"] == ""
+
+    def test_disabled_deployment_never_calls_ollama(self, auth_client, settings):
+        settings.TUTOR_ENABLED = False
+        with patch("apps.tutor.views.ask") as mocked:
+            r = auth_client.post(
+                reverse("tutor-ask"),
+                {"question": "What is a sticky end?"},
+                format="json",
+            )
+        assert r.status_code == 503
+        assert r.data["code"] == "tutor_disabled"
+        mocked.assert_not_called()
+
+    def test_disabled_status_keeps_deterministic_tools_explicitly_available(
+        self, auth_client, settings
+    ):
+        settings.TUTOR_ENABLED = False
+        r = auth_client.get(reverse("tutor-status"))
+        assert r.status_code == 200
+        assert r.data["enabled"] is False
+        assert "deterministic" in r.data["disabled_reason"]
+
 
 @pytest.mark.django_db
 class TestRequestIsBounded:

@@ -21,7 +21,7 @@ import environ
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # gsynth_engine lives at the repository root, one level above django_app, so
-# the design logic is shared with the Streamlit app rather than duplicated.
+# the API imports the single tested implementation of the design logic.
 REPO_ROOT = BASE_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -189,15 +189,15 @@ CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CORS_ALLOW_CREDENTIALS = True
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Study assistant — a local Ollama model, not a hosted API. Best-effort: if
-# nothing is listening at OLLAMA_BASE_URL the endpoint answers with a clear
-# 503 rather than the app failing to boot, because this is the one feature
-# that depends on a process outside Django's own control, and the rest of
-# G-Synth has no reason to be unusable because a chat model is not running.
+# Optional private tutor API. The current Learn UI is a deterministic bundled
+# library and does not call this endpoint. Keep the adapter opt-in so a local
+# development server cannot transmit a question merely because Ollama happens
+# to be running on the default port.
 # ─────────────────────────────────────────────────────────────────────────────
 OLLAMA_BASE_URL = env("OLLAMA_BASE_URL", default="http://localhost:11434")
 OLLAMA_MODEL = env("OLLAMA_MODEL", default="llama3.1")
 OLLAMA_TIMEOUT_SECONDS = env.int("OLLAMA_TIMEOUT_SECONDS", default=60)
+TUTOR_ENABLED = env.bool("TUTOR_ENABLED", default=False)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Static files

@@ -423,8 +423,8 @@ def design_pcr(
     warnings: list[str] = []
 
     # NdeI's CATATG is the common case: the recognition site already contains
-    # the translation start. The legacy G-Synth primer therefore annealed
-    # after a template-leading ATG. Keeping that codon as well changes the
+    # the translation start. The recommended primer therefore anneals after
+    # a template-leading ATG. Keeping that codon as well changes the
     # expressed protein to Met-Met, so it is an explicit opt-in rather than
     # the default.
     effective_start = target_start

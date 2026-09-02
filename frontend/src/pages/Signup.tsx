@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { Logo } from "../components/Logo";
+import AuthShell from "../components/AuthShell";
+import PasswordInput from "../components/PasswordInput";
 
 export default function Signup() {
   const { signUp } = useAuth();
@@ -32,17 +33,13 @@ export default function Signup() {
   }
 
   return (
-    <div className="auth">
-      <div className="panel">
-        <div className="lockup">
-          <Logo size={56} />
-          <h1>Create your account</h1>
-          <p>Free — your sequences stay private to you.</p>
-        </div>
-
-        <div className="card">
-          <div className="card-body">
-            <form onSubmit={onSubmit}>
+    <AuthShell
+      eyebrow="Private scientific workspace"
+      title="Create your account"
+      description="Start a private workspace for synthesis-ready designs and their validation evidence."
+      footer={<>Already registered? <Link to="/login">Sign in</Link></>}
+    >
+      <form onSubmit={onSubmit}>
               <div className="field">
                 <label htmlFor="name">Full name</label>
                 <input
@@ -69,25 +66,23 @@ export default function Signup() {
               </div>
               <div className="field">
                 <label htmlFor="password">Password</label>
-                <input
+                <PasswordInput
                   id="password"
-                  type="password"
+                  label="Password"
                   autoComplete="new-password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={setPassword}
                   placeholder="At least 8 characters, letters and numbers"
-                  required
                 />
               </div>
               <div className="field">
                 <label htmlFor="password2">Confirm password</label>
-                <input
+                <PasswordInput
                   id="password2"
-                  type="password"
+                  label="Confirm password"
                   autoComplete="new-password"
                   value={password2}
-                  onChange={(e) => setPassword2(e.target.value)}
-                  required
+                  onChange={setPassword2}
                 />
               </div>
 
@@ -99,14 +94,7 @@ export default function Signup() {
                 {busy && <span className="spinner" />}
                 {busy ? "Creating…" : "Create account"}
               </button>
-            </form>
-          </div>
-        </div>
-
-        <p className="alt">
-          Already registered? <Link to="/login">Sign in</Link>
-        </p>
-      </div>
-    </div>
+      </form>
+    </AuthShell>
   );
 }

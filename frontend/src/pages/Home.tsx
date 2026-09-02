@@ -18,25 +18,38 @@ const STAGES: { to: string; name: string; icon: IconName; blurb: string }[] = [
   },
   {
     to: "/design", name: "Design", icon: "helix",
-    blurb: "Cassette, sticky ends, and oligo pairs for Merzoug assembly — no PCR at any step.",
+    blurb: "SSD for one synthesis pair; ESD for tiled oligo pairs — exact sticky ends, no PCR.",
   },
   {
-    to: "/clone", name: "Clone", icon: "plate",
-    blurb: "Cut a vector and put the construct in. Every seam drawn as the two ends that made it.",
+    to: "/hybridize", name: "Hybridize", icon: "check",
+    blurb: "Verify the intended antiparallel duplex and inspect every exposed cohesive end.",
   },
   {
-    to: "/verify", name: "Check", icon: "microscope",
-    blurb: "Ligation amounts, sequencing primers, and what the .ab1 traces say when they come back.",
+    to: "/clone", name: "Restriction clone", icon: "plate",
+    blurb: "Digest vector and insert, verify both junctions, then ligate the compatible product.",
   },
   {
-    to: "/align", name: "Compare", icon: "scales",
-    blurb: "Align two sequences that are not assumed to be the same thing.",
+    to: "/verify", name: "Validate", icon: "microscope",
+    blurb: "Ligation amounts, sequencing primers, and what ABIF/SCF traces say when they come back.",
   },
 ];
 
-/** What is actually different here, not a features list — each of these is
- *  a specific defect this method guards against, the way CLAUDE.md records
- *  them, said in one sentence a person can act on. */
+const SUPPORTING_TOOLS: { to: string; name: string; icon: IconName; blurb: string }[] = [
+  {
+    to: "/pcr", name: "Primer design & PCR", icon: "microscope",
+    blurb: "Design conventional or cloning primers, inspect annealing, and predict an amplicon gel.",
+  },
+  {
+    to: "/align", name: "Sequence alignment", icon: "scales",
+    blurb: "Compare nucleotide or protein sequences by identity, similarity and gaps.",
+  },
+  {
+    to: "/learn", name: "Learn", icon: "book",
+    blurb: "Review concise molecular-biology references behind the workflows.",
+  },
+];
+
+/** Concrete safeguards expressed in language a bench scientist can act on. */
 const GUARANTEES = [
   {
     title: "Nothing ships unverified",
@@ -46,7 +59,7 @@ const GUARANTEES = [
   },
   {
     title: "A trace is read, not just displayed",
-    body: "Upload the .ab1 the facility sends back. Differences below Q20 are "
+    body: "Upload the ABIF or SCF trace the facility sends back. Differences below Q20 are "
         + "marked as unconfident rather than reported as mutations — the same "
         + "letters can mean a real change or a bad peak, and only the trace "
         + "tells them apart.",
@@ -100,11 +113,22 @@ export default function Home() {
         <div className="card home-hero">
           <div className="card-body home-hero-body">
             <Logo size={64} />
-            <p>
-              Not a general sequence editor. Every part of it exists because a step of this
-              lab&rsquo;s gene synthesis and cloning workflow was being done by hand, and the
-              checks it performs are the ones that, when skipped, cost a fortnight.
-            </p>
+            <div className="home-hero-copy">
+              <span className="label">Design → hybridize → restriction clone → validate</span>
+              <h2>One auditable record from sequence intent to verified construct.</h2>
+              <p>
+                Create synthesis-ready oligos, simulate the cloning geometry and bring the
+                resulting sequencing evidence back to the exact design that produced it.
+              </p>
+              <div className="home-hero-actions">
+                <Link to="/design" className="btn btn-primary">
+                  <Icon name="helix" size={17} /> Design a construct
+                </Link>
+                <Link to="/verify" className="btn btn-outline">
+                  <Icon name="microscope" size={17} /> Validate sequencing
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -124,6 +148,24 @@ export default function Home() {
                   </div>
                 )}
               </Fragment>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-head">
+            <div>
+              <h2>Supporting tools</h2>
+              <span className="label">Useful after or alongside the core design-to-cloning path</span>
+            </div>
+          </div>
+          <div className="supporting-tools-grid">
+            {SUPPORTING_TOOLS.map((tool) => (
+              <Link to={tool.to} className="pipeline-stage" key={tool.to}>
+                <Icon name={tool.icon} size={24} />
+                <strong>{tool.name}</strong>
+                <span>{tool.blurb}</span>
+              </Link>
             ))}
           </div>
         </div>

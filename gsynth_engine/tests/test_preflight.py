@@ -1,7 +1,7 @@
 from gsynth_engine import vectors
 from gsynth_engine.cloning import clone
 from gsynth_engine.codon import optimise
-from gsynth_engine.merzoug import design_merzoug_assembly
+from gsynth_engine.esd import design_extended_sequence
 from gsynth_engine.pcr import design_pcr
 from gsynth_engine.preflight import (
     assembly_preflight,
@@ -22,7 +22,7 @@ GENE = (
 
 def test_every_workflow_uses_the_same_preflight_shape():
     pcr = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI", keep_frame=True)
-    assembly = design_merzoug_assembly(GENE, is_coding=True)
+    assembly = design_extended_sequence(GENE, is_coding=True)
     plasmid = clone(
         vectors.sequence_of("pET-21a")["sequence"], assembly.construct_forward,
         insert_reverse=assembly.construct_reverse,

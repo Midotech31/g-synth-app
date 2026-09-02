@@ -1,61 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
-import { ApiError, api } from "../api/client";
 import Icon from "../components/Icon";
-import { useWorkspaceState } from "../state/WorkspaceStateContext";
+import {
+  KNOWLEDGE_CATEGORIES,
+  searchKnowledge,
+  type KnowledgeCategory,
+} from "../data/knowledge";
 
-type Message = { role: "user" | "assistant"; content: string };
+type CategoryFilter = "All" | KnowledgeCategory;
 
 export default function Learn() {
-  const [messages, setMessages, clearMessages] = useWorkspaceState<Message[]>("learn.messages", []);
-  const [input, setInput, clearInput] = useWorkspaceState("learn.input", "");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
-
-  const send = useCallback(async () => {
-    const question = input.trim();
-    if (!question || loading) return;
-
-    setInput("");
-    setError("");
-    const userMsg: Message = { role: "user", content: question };
-    setMessages((prev) => [...prev, userMsg]);
-    setLoading(true);
-
-    try {
-      const history = messages.map((m) => ({ role: m.role, content: m.content }));
-      const { answer } = await api.askTutor(question, history);
-      setMessages((prev) => [...prev, { role: "assistant", content: answer }]);
-    } catch (err) {
-      const detail =
-        err instanceof ApiError
-          ? err.message
-          : "Something went wrong. Please try again.";
-      setError(detail);
-    } finally {
-      setLoading(false);
-      inputRef.current?.focus();
-    }
-  }, [input, loading, messages]);
-
-  const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      void send();
-    }
-  };
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<CategoryFilter>("All");
+  const topics = useMemo(() => searchKnowledge(query, category), [category, query]);
 
   const clear = () => {
-    clearMessages();
-    clearInput();
-    setError("");
-    inputRef.current?.focus();
+    setQuery("");
+    setCategory("All");
   };
 
   return (
@@ -63,109 +25,105 @@ export default function Learn() {
       <div className="topbar">
         <div className="grow">
           <h1>Learn</h1>
-          <p className="sub">
-            Ask about gene synthesis, cloning, molecular biology, or genetic
-            engineering.
-          </p>
+          <p className="sub">Curated molecular biology and genetic engineering knowledge, available offline.</p>
         </div>
-        {messages.length > 0 && (
-          <button className="btn btn-outline" onClick={clear}>
-            New conversation
-          </button>
-        )}
       </div>
 
-      <div className="chat-area">
-        {/* A transcript that grows at the bottom is what `log` describes, and
-            it is announced without interrupting whatever is being read. */}
-        <div
-          className="chat-messages"
-          role="log"
-          aria-live="polite"
-          aria-relevant="additions"
-          aria-busy={loading}
-          aria-label="Conversation"
-        >
-          {messages.length === 0 && !loading && (
-            <div className="chat-empty">
-              <Icon name="book" size={40} />
-              <h2>Study assistant</h2>
-              <p className="note">
-                Ask a question about gene synthesis, cloning, codon optimisation,
-                restriction enzymes, or anything else in molecular biology and
-                genetic engineering. The assistant is scoped to these topics and
-                will point you to the right part of G-Synth when relevant.
+      <div className="content learn-library">
+        <section className="card learn-intro" aria-labelledby="learn-title">
+          <div className="card-body">
+            <div className="learn-intro-copy">
+              <span className="label">Deterministic reference</span>
+              <h2 id="learn-title">Ask the library, not a black box</h2>
+              <p>
+                Search practical explanations used by G-Synth. The content is fixed, reviewable and
+                restricted to molecular biology and genetic engineering; no sequence or question is
+                sent to an external AI service.
               </p>
-              <div className="chat-suggestions">
-                {[
-                  "What is a sticky end and why does it matter for cloning?",
-                  "Explain codon optimisation in simple terms.",
-                  "How does Merzoug assembly differ from Gibson assembly?",
-                ].map((q) => (
-                  <button
-                    key={q}
-                    className="btn btn-outline chat-suggestion"
-                    onClick={() => {
-                      setInput(q);
-                      inputRef.current?.focus();
-                    }}
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
             </div>
-          )}
-
-          {messages.map((msg, i) => (
-            <div key={i} className={`chat-bubble chat-${msg.role}`}>
-              <div className="chat-role label">
-                {msg.role === "user" ? "You" : "Assistant"}
-              </div>
-              <div className="chat-text">{msg.content}</div>
+            <div className="learn-scope" aria-label="Knowledge scope">
+              <span><Icon name="check" size={15} /> 10 reviewed topics</span>
+              <span><Icon name="check" size={15} /> Experimental limits stated</span>
+              <span><Icon name="check" size={15} /> Module links included</span>
             </div>
-          ))}
+          </div>
+        </section>
 
-          {loading && (
-            <div className="chat-bubble chat-assistant">
-              <div className="chat-role label">Assistant</div>
-              <div className="chat-text chat-thinking">
-                <span className="spinner" /> Thinking&hellip;
-              </div>
+        <section className="learn-search" aria-label="Search the knowledge library">
+          <div className="field learn-query">
+            <label htmlFor="learn-query">Search by question or keyword</label>
+            <div className="learn-query-control">
+              <Icon name="search" size={18} />
+              <input
+                id="learn-query"
+                type="text"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="e.g. Why does a 5′ primer tail not hybridise in cycle 1?"
+              />
+              {query && <button className="btn btn-ghost" onClick={() => setQuery("")}>Clear search</button>}
             </div>
-          )}
+          </div>
+          <div className="learn-categories" role="group" aria-label="Filter by subject">
+            {KNOWLEDGE_CATEGORIES.map((item) => (
+              <button
+                key={item}
+                className={`btn ${category === item ? "btn-primary" : "btn-outline"}`}
+                aria-pressed={category === item}
+                onClick={() => setCategory(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        </section>
 
-          {error && (
-            <div className="notice notice-error" style={{ margin: "0.5rem 0" }} role="alert">
-              {error}
-            </div>
-          )}
-
-          <div ref={bottomRef} />
+        <div className="learn-results-head" role="status" aria-live="polite">
+          <strong>{topics.length} {topics.length === 1 ? "topic" : "topics"}</strong>
+          {(query || category !== "All") && <button className="btn btn-ghost" onClick={clear}>Reset filters</button>}
         </div>
 
-        <div className="chat-input-bar">
-          <textarea
-            ref={inputRef}
-            className="chat-input"
-            placeholder="Ask a question…"
-            aria-label="Your question"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKey}
-            rows={1}
-            maxLength={2000}
-            disabled={loading}
-          />
-          <button
-            className="btn btn-primary chat-send"
-            onClick={() => void send()}
-            disabled={!input.trim() || loading}
-            aria-label="Send question"
-          >
-            <Icon name="arrowRight" size={18} />
-          </button>
-        </div>
+        {topics.length ? (
+          <div className="learn-topic-grid">
+            {topics.map((topic, index) => (
+              <details className="card learn-topic" key={topic.id} open={Boolean(query) && index === 0}>
+                <summary>
+                  <span className="learn-topic-index">{String(index + 1).padStart(2, "0")}</span>
+                  <span className="learn-topic-copy">
+                    <span className="label">{topic.category}</span>
+                    <strong>{topic.title}</strong>
+                    <small>{topic.summary}</small>
+                  </span>
+                  <Icon name="chevronDown" size={18} />
+                </summary>
+                <div className="learn-topic-body">
+                  <h3>Essential points</h3>
+                  <ul>
+                    {topic.essentials.map((point) => <li key={point}>{point}</li>)}
+                  </ul>
+                  <div className="notice notice-info learn-caution">
+                    <strong>Interpretation limit.</strong> {topic.caution}
+                  </div>
+                  <div className="learn-topic-actions">
+                    <Link className="btn btn-primary" to={topic.route}>{topic.routeLabel}</Link>
+                    {topic.references.map((reference) => (
+                      <a key={reference.url} href={reference.url} target="_blank" rel="noreferrer">
+                        {reference.label}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              </details>
+            ))}
+          </div>
+        ) : (
+          <div className="card empty learn-empty">
+            <Icon name="search" size={34} />
+            <h2>No reviewed topic matches</h2>
+            <p>Try a shorter molecular-biology term such as “primer”, “HindIII”, “gel”, “annotation” or “sequencing”.</p>
+            <button className="btn btn-outline" onClick={clear}>Show all topics</button>
+          </div>
+        )}
       </div>
     </>
   );

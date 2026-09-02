@@ -409,6 +409,16 @@ describe("refresh on 401", () => {
 
     expect(header(calls[0].init, "Authorization")).toBeNull();
   });
+
+  it("loads codon-host reference data without attaching account tokens", async () => {
+    localStorage.setItem(ACCESS_KEY, "stale");
+    serve(() => json(200, { hosts: [], default: "ecoli" }));
+
+    await client.api.codonHosts();
+
+    expect(calls[0].url.endsWith("/api/design/codon-hosts/")).toBe(true);
+    expect(header(calls[0].init, "Authorization")).toBeNull();
+  });
 });
 
 describe("API_BASE", () => {
@@ -544,6 +554,33 @@ describe("PCR design", () => {
       left_enzyme: "NdeI",
       right_enzyme: "XhoI",
       start_codon_mode: "use_site",
+    });
+  });
+});
+
+describe("hybridization analysis", () => {
+  it("sends both strands in 5-prime order with explicit thermodynamic conditions", async () => {
+    serve(() => json(200, {}));
+
+    await client.api.hybridize({
+      first: "AATTATGCGT",
+      second: "ACGCAT",
+      analysis_temperature_c: 25,
+      oligo_nM: 50_000,
+      na_mM: 50,
+      mg_mM: 1.5,
+      dntp_mM: 0.2,
+    });
+
+    expect(calls[0].url).toContain("/api/design/hybridize/");
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      first: "AATTATGCGT",
+      second: "ACGCAT",
+      analysis_temperature_c: 25,
+      oligo_nM: 50_000,
+      na_mM: 50,
+      mg_mM: 1.5,
+      dntp_mM: 0.2,
     });
   });
 });

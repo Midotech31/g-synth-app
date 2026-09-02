@@ -3,7 +3,7 @@
 Status: final for G-Synth v1.0.0 and the associated manuscript package.
 
 OpenAI Codex (GPT-5 family, Codex desktop application, accessed during
-June–August 2026) was used under the direct supervision of Mohamed Merzoug for
+June–September 2026) was used under the direct supervision of Mohamed Merzoug for
 software review and refactoring, test scaffolding and execution, documentation
 and manuscript drafting, literature-discovery assistance, copy-editing,
 release preparation and document-layout quality control. The platform did not

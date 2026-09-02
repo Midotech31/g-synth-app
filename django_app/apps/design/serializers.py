@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from gsynth_engine.codon import DEFAULT_HOST, TABLES
 from gsynth_engine.constants import (
     ALL_ENZYMES,
     CLEAVAGE_SITES,
 )
-from gsynth_engine.merzoug import MAX_OVERHANG, MIN_OVERHANG
+from gsynth_engine.esd import MAX_OVERHANG, MIN_OVERHANG
 from gsynth_engine.pcr import DEFAULT_CLAMP
 from gsynth_engine.vectors import CATALOGUE, DEFAULT_VECTOR
 
@@ -122,11 +123,28 @@ class VectorAnnotationSerializer(serializers.Serializer):
     end = serializers.IntegerField(min_value=0)
     direction = serializers.IntegerField(required=False, default=0)
     color = serializers.CharField(max_length=32, required=False, default="")
+    translation_start = serializers.IntegerField(min_value=0, required=False)
+    translation_end = serializers.IntegerField(min_value=0, required=False)
+    truncated = serializers.BooleanField(required=False)
 
     def validate(self, attrs):
         if attrs["end"] < attrs["start"]:
             raise serializers.ValidationError(
                 {"end": "A feature cannot end before it starts."}
+            )
+        translation_start = attrs.get("translation_start")
+        translation_end = attrs.get("translation_end")
+        if (translation_start is None) != (translation_end is None):
+            raise serializers.ValidationError(
+                "Translation start and end must be supplied together."
+            )
+        if translation_start is not None and (
+            translation_start < attrs["start"]
+            or translation_end > attrs["end"]
+            or translation_end <= translation_start
+        ):
+            raise serializers.ValidationError(
+                "Translation coordinates must define a non-empty span inside the feature."
             )
         return attrs
 
@@ -153,12 +171,13 @@ class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
     )
     vector_name = serializers.CharField(max_length=200, required=False, default="")
     vector_annotations = VectorAnnotationSerializer(many=True, required=False)
+    product_annotations = VectorAnnotationSerializer(many=True, required=False)
     vector_is_circular = serializers.BooleanField(
         default=True,
         help_text="Only circular vectors can be cloned into — a linear one "
                   "cut twice leaves the backbone in two pieces.",
     )
-    #: Design the full Merzoug assembly, or just the SSD duplex.
+    #: Design the full Extended Sequence Design, or just the SSD duplex.
     fragment = serializers.BooleanField(
         default=True,
         help_text="False clones the SSD duplex directly, without fragmenting it.",
@@ -185,6 +204,11 @@ class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
                                   "cannot be measured, and an insert cut for a "
                                   "different pair would look correct."
             })
+        for annotation in attrs.get("product_annotations") or []:
+            if annotation["end"] == annotation["start"]:
+                raise serializers.ValidationError({
+                    "product_annotations": "A product feature must cover at least one base."
+                })
         return attrs
 
 
@@ -229,6 +253,7 @@ class OptimiseRequestSerializer(serializers.Serializer):
         max_length=200_000,
         help_text="A coding sequence, or a protein when is_protein is set.",
     )
+    host = serializers.ChoiceField(choices=tuple(TABLES), default=DEFAULT_HOST)
     is_protein = serializers.BooleanField(default=False)
     keep_stop = serializers.BooleanField(
         default=True,
@@ -334,12 +359,12 @@ class TraceUploadSerializer(serializers.Serializer):
     """Sanger trace files, compared against a design.
 
     A trace carries what the letters cannot: how much to believe each base.
-    Files arrive as multipart because an .ab1 is binary — base64 in JSON
+    Files arrive as multipart because ABIF and SCF traces are binary — base64 in JSON
     would inflate a 400 kB trace to 550 kB for no gain.
     """
 
     design = serializers.CharField(max_length=2_000_000)
-    #: Bounded, because an .ab1 is a fixed shape and anything far larger is
+    #: Bounded, because a chromatogram is a fixed shape and anything far larger is
     #: either the wrong file or someone probing for a memory limit.
     traces = serializers.ListField(
         child=serializers.FileField(max_length=255, allow_empty_file=False),
@@ -360,7 +385,7 @@ class TraceUploadSerializer(serializers.Serializer):
             if upload.size > self.MAX_TRACE_BYTES:
                 raise serializers.ValidationError(
                     f"{upload.name} is {upload.size / 1e6:.1f} MB. A Sanger "
-                    f"trace is normally under 0.5 MB — check it is an .ab1 "
+                    f"trace is normally under 0.5 MB — check it is an .ab1 or .scf "
                     f"and not an archive."
                 )
         return files
@@ -381,6 +406,23 @@ class AlignRequestSerializer(serializers.Serializer):
     mismatch = serializers.IntegerField(default=-4, min_value=-20, max_value=0)
     gap_open = serializers.IntegerField(default=10, min_value=0, max_value=60)
     gap_extend = serializers.IntegerField(default=1, min_value=0, max_value=20)
+
+
+class HybridizationRequestSerializer(serializers.Serializer):
+    """Two oligonucleotide strands, each entered in vendor 5′→3′ order."""
+
+    first = serializers.CharField(max_length=200_000)
+    second = serializers.CharField(max_length=200_000)
+    analysis_temperature_c = serializers.FloatField(
+        default=25.0, min_value=-100.0, max_value=150.0,
+    )
+    oligo_nM = serializers.FloatField(
+        default=50_000.0, min_value=0.001, max_value=100_000_000.0,
+        help_text="Total strand concentration used by the Tm model.",
+    )
+    na_mM = serializers.FloatField(default=50.0, min_value=0.0, max_value=5_000.0)
+    mg_mM = serializers.FloatField(default=0.0, min_value=0.0, max_value=1_000.0)
+    dntp_mM = serializers.FloatField(default=0.0, min_value=0.0, max_value=100.0)
 
 
 class PcrRequestSerializer(serializers.Serializer):

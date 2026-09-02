@@ -18,6 +18,7 @@ from apps.design.serializers import (
     CLEAVAGE_NAMES,
     AlignRequestSerializer,
     CloneRequestSerializer,
+    HybridizationRequestSerializer,
     LigationRequestSerializer,
     OptimiseRequestSerializer,
     PcrRequestSerializer,
@@ -31,7 +32,7 @@ from apps.design.serializers import (
 from apps.projects.models import Project
 from gsynth_engine import vectors as vector_catalogue
 from gsynth_engine.align import Scoring, align, blosum62
-from gsynth_engine.chromatogram import read_ab1, summarise
+from gsynth_engine.chromatogram import read_trace, summarise
 from gsynth_engine.cloning import (
     CloningResult,
     clone,
@@ -39,7 +40,8 @@ from gsynth_engine.cloning import (
     open_reading_frames,
 )
 from gsynth_engine.codon import (
-    ECOLI,
+    DEFAULT_HOST,
+    TABLES,
     Constraints,
     OptimisationResult,
     build_table,
@@ -54,9 +56,11 @@ from gsynth_engine.constants import (
     supplies_start_codon,
 )
 from gsynth_engine.duplex import DuplexView, construct_duplex, junction_view
+from gsynth_engine.esd import ESDResult, design_extended_sequence
+from gsynth_engine.gel import ladder_payload, recommended_ladder, restriction_digest_sizes
 from gsynth_engine.genbank import oligos_to_fasta, to_fasta, to_genbank
+from gsynth_engine.hybridization import hybridize
 from gsynth_engine.ligation import ligation_series, plan_ligation
-from gsynth_engine.merzoug import AssemblyPlan, design_merzoug_assembly
 from gsynth_engine.pcr import design_pcr
 from gsynth_engine.preflight import (
     assembly_preflight,
@@ -77,13 +81,28 @@ from gsynth_engine.protocol import (
 from gsynth_engine.provenance import build_provenance
 from gsynth_engine.sequence import SequenceError, gc_content
 from gsynth_engine.ssd import SSDResult, design_small_sequence
-from gsynth_engine.thermo import ANNEALING
-from gsynth_engine.verify import verify
+from gsynth_engine.thermo import ANNEALING, BufferConditions
+from gsynth_engine.verify import ConsensusReport, assemble_consensus, verify
 
 
 def _bad_request(error: SequenceError) -> Response:
     """Engine errors are already written for the user — pass them through."""
     return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+def _gel_simulation(title: str, lanes: list[dict], fragment_sizes: list[int]) -> dict:
+    """A plotting-ready prediction, explicitly not an experimental image."""
+    return {
+        "title": title,
+        "prediction_only": True,
+        "notice": (
+            "In-silico size prediction. Migration, intensity, topology effects, "
+            "partial digestion and background require experimental confirmation."
+        ),
+        "recommended_ladder": recommended_ladder(fragment_sizes),
+        "ladders": ladder_payload(),
+        "lanes": lanes,
+    }
 
 
 def _provenance(workflow: str, data: dict, output: str, *, vector: str = "") -> dict:
@@ -160,12 +179,21 @@ def _duplex_payload(view: DuplexView) -> dict:
     }
 
 
-def _assembly_payload(plan: AssemblyPlan, construct_name: str) -> dict:
+def _assembly_payload(plan: ESDResult, construct_name: str) -> dict:
+    insert = next(segment for segment in plan.ssd.segments if segment.name == "insert")
     return {
         "construct_forward": plan.construct_forward,
         "construct_reverse": plan.construct_reverse,
         "construct_length": plan.construct_length,
         "construct_gc": round(gc_content(plan.construct_forward), 1),
+        # Zero-based, end-exclusive coordinates let the saved linear design
+        # flow directly into sequencing-primer and read verification tools.
+        # There is deliberately no backbone_length here: this is an assembly
+        # cassette, not yet a cloned plasmid, so a ligation mass calculation
+        # would otherwise mistake the cassette for the vector backbone.
+        "insert_start": insert.start,
+        "insert_end": insert.end,
+        "topology": "linear",
         "fragment_count": plan.fragment_count,
         "oligo_count": plan.oligo_count,
         "overhang_length": plan.overhang_length,
@@ -222,12 +250,12 @@ def _assembly_payload(plan: AssemblyPlan, construct_name: str) -> dict:
 #: geometry, because "does anything else cut here" is the question that decides
 #: whether a diagnostic digest will work.
 def _restriction_annotations(plasmid: str, highlight: tuple[str, ...]) -> list[dict]:
-    """Every single-cutter, plus the pair used, as drawable features.
+    """Every catalogued restriction occurrence as a filterable map feature.
 
-    Single cutters only: a site that appears eleven times is noise on a map
-    and useless for a diagnostic digest. The two cloning enzymes are marked
-    even when they cut more than once, because that is exactly the case the
-    user needs to see.
+    The client defaults to single-cutters plus the cloning pair because every
+    four-base cutter at once is visual noise.  Returning the complete set is
+    still essential: an explicit “all sites” choice must actually show all
+    sites, rather than pretending a multi-cutter does not exist.
     """
     out: list[dict] = []
     for enzyme in sorted(ALL_ENZYMES):
@@ -235,8 +263,6 @@ def _restriction_annotations(plasmid: str, highlight: tuple[str, ...]) -> list[d
         if not sites:
             continue
         used = enzyme in highlight
-        if len(sites) > 1 and not used:
-            continue
         site = str(ALL_ENZYMES[enzyme]["recognition"])
         for position in sites:
             end = position + len(site)
@@ -328,16 +354,72 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan) -> dict:
     whole plasmid from a single list, rather than special-casing it.
     """
     annotations = list(result.annotations)
-    annotations.append({
+    cassette_annotation = {
         "name": result.name,
         "type": "CDS" if result.protein else "misc_feature",
         "start": result.insert_start,
         "end": result.insert_end,
         "direction": 1,
         "color": "#0E6E77",
-    })
+    }
+    if ssd is not None and result.protein:
+        cassette_annotation["translation_start"] = result.insert_start + ssd.orf_start
+        cassette_annotation["translation_end"] = result.insert_end
+    annotations.append(cassette_annotation)
+
+    # Preserve the cassette's internal biological meaning on the project map.
+    # These coordinates come from the same SSD result that built the oligo;
+    # they are not re-detected from motifs, so a repeated His or linker motif
+    # cannot make an annotation jump to the wrong occurrence.
+    segment_colours = {
+        "overhang": "#C97634",
+        "start codon": "#9E3D3D",
+        "linker": "#78889B",
+        "6×his tag": "#0E6E77",
+        "site": "#6A4C93",
+        "insert": "#3F7A52",
+    }
+    if ssd is not None:
+        for segment in ssd.segments:
+            key = next(
+                (name for name in segment_colours if name in segment.name.lower()),
+                "linker",
+            )
+            label = (
+                f"{result.name} target"
+                if segment.name.lower() == "insert"
+                else segment.name
+            )
+            annotations.append({
+                "name": label,
+                "type": "mat_peptide" if segment.name.lower() == "insert" else "misc_feature",
+                "start": result.insert_start + segment.start,
+                "end": result.insert_start + segment.end,
+                "direction": 1,
+                "color": segment_colours[key],
+            })
 
     duplex_mismatches = construct_duplex(plan).mismatches() if plan else []
+    try:
+        digest_sizes = restriction_digest_sizes(
+            result.plasmid,
+            [result.left_enzyme, result.right_enzyme],
+            circular=True,
+        )
+        digest_lane = {
+            "name": f"{result.left_enzyme} + {result.right_enzyme}",
+            "description": "Complete diagnostic double digest",
+            "bands": [{"size_bp": size, "label": f"{size:,} bp"} for size in digest_sizes],
+        }
+        gel = _gel_simulation(
+            "Predicted diagnostic digest",
+            [digest_lane],
+            digest_sizes,
+        )
+    except SequenceError as error:
+        gel = _gel_simulation("Predicted diagnostic digest", [], [])
+        gel["notice"] = f"Diagnostic digest unavailable: {error}"
+
     return {
         "plasmid": result.plasmid,
         "name": result.name,
@@ -412,6 +494,7 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan) -> dict:
         "restriction_sites": _restriction_annotations(
             result.plasmid, (result.left_enzyme, result.right_enzyme),
         ),
+        "gel": gel,
         "validation": _validation(
             result,
             duplex_mismatches,
@@ -429,6 +512,32 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan) -> dict:
         "insert": _ssd_payload(ssd) if ssd is not None else None,
         "assembly": _assembly_payload(plan, result.name) if plan else None,
     }
+
+
+def _reviewed_product_annotations(data: dict, sequence_length: int) -> list[dict] | None:
+    """Validate optional user-reviewed features against the product molecule.
+
+    The request serializer checks each feature's shape. Product length only
+    exists after cloning, so coordinate bounds are enforced here before the
+    list can enter a saved project or GenBank export. Circular origin-crossing
+    features may extend once beyond ``sequence_length``.
+    """
+    annotations = data.get("product_annotations")
+    if annotations is None:
+        return None
+    reviewed = [dict(annotation) for annotation in annotations]
+    for annotation in reviewed:
+        start = annotation["start"]
+        end = annotation["end"]
+        if start >= sequence_length or end > sequence_length * 2 or end - start > sequence_length:
+            raise SequenceError(
+                f"Feature ‘{annotation['name']}’ lies outside the {sequence_length:,} bp product."
+            )
+        if end > sequence_length and end - sequence_length >= start:
+            raise SequenceError(
+                f"Feature ‘{annotation['name']}’ does not cross the circular origin correctly."
+            )
+    return reviewed
 
 
 def _spec_payload(spec) -> dict:
@@ -536,6 +645,25 @@ def _optimisation_payload(result: OptimisationResult) -> dict:
     }
 
 
+class CodonHostCatalogueView(APIView):
+    """GET /api/design/codon-hosts/ — reproducible bundled host profiles."""
+
+    permission_classes = (AllowAny,)
+
+    def get(self, request):
+        return Response({
+            "default": DEFAULT_HOST,
+            "hosts": [
+                {
+                    "key": key,
+                    "name": table.name,
+                    "source": table.source,
+                }
+                for key, table in TABLES.items()
+            ],
+        })
+
+
 class OptimiseView(APIView):
     """POST /api/design/optimise/ — rewrite a gene for the expression host.
 
@@ -551,7 +679,7 @@ class OptimiseView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        table = ECOLI
+        table = TABLES[data["host"]]
         if data["reference_genes"]:
             try:
                 table = build_table(
@@ -584,6 +712,7 @@ class OptimiseView(APIView):
             return _bad_request(error)
 
         payload = _optimisation_payload(result)
+        payload["host"] = data["host"] if not data["reference_genes"] else "custom"
         payload["table_source"] = table.source
         payload["preflight"] = optimisation_preflight(result).to_dict()
         payload["provenance"] = _provenance(
@@ -644,6 +773,71 @@ class AlignView(APIView):
             "end_b": result.end_b,
             "reverse_complemented": result.reverse_complemented,
             "is_protein": result.is_protein,
+            "warnings": result.warnings,
+        })
+
+
+class HybridizationView(APIView):
+    """POST /api/design/hybridize/ — physical antiparallel strand pairing."""
+
+    throttle_scope = "design"
+
+    def post(self, request):
+        serializer = HybridizationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        conditions = BufferConditions(
+            name="hybridization analysis",
+            oligo_nM=data["oligo_nM"],
+            na_mM=data["na_mM"],
+            mg_mM=data["mg_mM"],
+            dntp_mM=data["dntp_mM"],
+        )
+        try:
+            result = hybridize(
+                data["first"],
+                data["second"],
+                conditions=conditions,
+                analysis_temperature_c=data["analysis_temperature_c"],
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+
+        return Response({
+            "first": result.first,
+            "second": result.second,
+            "top": result.top,
+            "marks": result.marks,
+            "bottom": result.bottom,
+            "rows": result.rows(60),
+            "width": result.width,
+            "offset": result.offset,
+            "overlap_start": result.overlap_start,
+            "overlap_end": result.overlap_end,
+            "overlap_length": result.overlap_length,
+            "paired_bases": result.paired_bases,
+            "paired_percent": result.paired_percent,
+            "mismatches": result.mismatches,
+            "longest_perfect_run": result.longest_perfect_run,
+            "complementarity": result.complementarity,
+            "predicted_state": result.predicted_state,
+            "overhangs": [item.payload() for item in result.overhangs],
+            "left_end": result.left_end,
+            "right_end": result.right_end,
+            "alternative_placements": result.alternative_placements,
+            "tm_c": result.tm_c,
+            "tm_margin_c": result.tm_margin_c,
+            "delta_h_kcal_mol": result.delta_h_kcal_mol,
+            "delta_s_cal_mol_k": result.delta_s_cal_mol_k,
+            "analysis_temperature_c": result.analysis_temperature_c,
+            "conditions": {
+                "name": result.conditions.name,
+                "oligo_nM": result.conditions.oligo_nM,
+                "na_mM": result.conditions.na_mM,
+                "mg_mM": result.conditions.mg_mM,
+                "dntp_mM": result.conditions.dntp_mM,
+                "summary": result.conditions.summary,
+            },
             "warnings": result.warnings,
         })
 
@@ -824,10 +1018,25 @@ def _read_payload(r) -> dict:
     }
 
 
+def _consensus_payload(report: ConsensusReport) -> dict:
+    return {
+        "sequence": report.sequence,
+        "coverage": report.coverage,
+        "identity": report.identity,
+        "fully_covered": report.fully_covered,
+        "bidirectional_overlap": report.bidirectional_overlap,
+        "bidirectional_agreement": report.bidirectional_agreement,
+        "gaps": report.gaps,
+        "difference_count": len(report.differences),
+        "warnings": report.warnings,
+    }
+
+
 class TraceVerifyView(APIView):
     """POST /api/design/verify/traces/ — the reads, with their peaks.
 
-    The same comparison as `/verify/`, except the reads arrive as .ab1 files.
+    The same comparison as `/verify/`, except the reads arrive as ABIF or SCF
+    chromatogram files.
     That buys two things the letters cannot give: the ends are trimmed by
     quality rather than by a fixed count, and every difference is returned
     with the confidence of the base that produced it — plus the slice of
@@ -846,7 +1055,7 @@ class TraceVerifyView(APIView):
         for upload in data["traces"]:
             name = upload.name or f"trace {len(traces) + 1}"
             try:
-                trace = read_ab1(upload.read(), name=name)
+                trace = read_trace(upload.read(), name=name)
             except SequenceError as error:
                 return _bad_request(error)
             traces[name] = trace
@@ -871,6 +1080,17 @@ class TraceVerifyView(APIView):
                 coding_start=data.get("coding_start"),
                 coding_end=data.get("coding_end"),
                 region=region, traces=traces,
+                trim_quality=data["trim_quality"],
+            )
+            consensus = assemble_consensus(
+                data["design"], traces,
+                circular=data["circular"], region=region,
+                trim_quality=data["trim_quality"],
+            )
+            raw_consensus = assemble_consensus(
+                data["design"], traces,
+                circular=data["circular"], region=region,
+                trim_quality=0,
             )
         except SequenceError as error:
             return _bad_request(error)
@@ -910,6 +1130,9 @@ class TraceVerifyView(APIView):
             "region_start": region[0] if region else 0,
             "region_end": region[1] if region else report.design_length,
             "coverage": report.coverage,
+            "quality_cutoff": data["trim_quality"],
+            "consensus": _consensus_payload(consensus),
+            "raw_consensus": _consensus_payload(raw_consensus),
             "gaps": report.gaps,
             "fully_covered": report.fully_covered,
             "is_verified": report.is_verified,
@@ -1053,7 +1276,7 @@ class SSDDesignView(APIView):
         return Response(payload)
 
 
-class MerzougAssemblyView(APIView):
+class ExtendedSequenceDesignView(APIView):
     """POST /api/design/assembly/ — one insert, an ordered set of oligo pairs."""
 
     throttle_scope = "design"
@@ -1063,7 +1286,7 @@ class MerzougAssemblyView(APIView):
         serializer.is_valid(raise_exception=True)
         name = serializer.validated_data["name"]
         try:
-            plan = design_merzoug_assembly(
+            plan = design_extended_sequence(
                 serializer.validated_data["sequence"], **serializer.engine_kwargs
             )
         except SequenceError as error:
@@ -1071,14 +1294,14 @@ class MerzougAssemblyView(APIView):
 
         payload = _assembly_payload(plan, name)
         payload["provenance"] = _provenance(
-            "merzoug_assembly", serializer.validated_data, plan.construct_forward,
+            "extended_sequence_design", serializer.validated_data, plan.construct_forward,
         )
 
         if serializer.validated_data["save_as_project"]:
             project = Project.objects.create(
                 user=request.user,
                 name=name,
-                module="merzoug_assembly",
+                module="extended_sequence_design",
                 sequence=plan.construct_forward,
                 notes=f"{plan.fragment_count} fragments · "
                       f"{plan.oligo_count} oligos · "
@@ -1098,7 +1321,7 @@ def _run_clone(data: dict, engine_kwargs: dict):
         insert_forward = data["sequence"]
         insert_reverse = data["insert_reverse"]
     elif data["fragment"]:
-        plan = design_merzoug_assembly(data["sequence"], **engine_kwargs)
+        plan = design_extended_sequence(data["sequence"], **engine_kwargs)
         ssd = plan.ssd
         insert_forward = plan.construct_forward
         insert_reverse = plan.construct_reverse
@@ -1153,6 +1376,12 @@ class CloneView(APIView):
             return _bad_request(error)
 
         payload = _clone_payload(result, ssd, plan)
+        try:
+            reviewed_annotations = _reviewed_product_annotations(data, result.length)
+        except SequenceError as error:
+            return _bad_request(error)
+        if reviewed_annotations is not None:
+            payload["annotations"] = reviewed_annotations
         payload["vector_name"] = vector_name
         payload["vector"] = _vector_payload(spec, vector_sequence)
         payload["provenance"] = _provenance(
@@ -1191,9 +1420,8 @@ def _today() -> str:
 class CloneExportView(APIView):
     """POST /api/design/clone/export/?filetype=genbank|fasta — as a file.
 
-    GenBank by default, because that is what carries the features across to
-    SnapGene, Benchling or ApE. A design that only exists inside G-Synth is
-    not finished.
+    GenBank is the default because it preserves feature annotations across
+    standards-compliant sequence editors.
     """
 
     throttle_scope = "design"
@@ -1222,6 +1450,12 @@ class CloneExportView(APIView):
             )
 
         payload = _clone_payload(result, ssd, plan)
+        try:
+            reviewed_annotations = _reviewed_product_annotations(data, result.length)
+        except SequenceError as error:
+            return _bad_request(error)
+        if reviewed_annotations is not None:
+            payload["annotations"] = reviewed_annotations
         return _attachment(
             to_genbank(
                 result.plasmid,
@@ -1301,7 +1535,7 @@ class ConstructExportView(APIView):
         serializer.is_valid(raise_exception=True)
         name = serializer.validated_data["name"]
         try:
-            plan = design_merzoug_assembly(
+            plan = design_extended_sequence(
                 serializer.validated_data["sequence"], **serializer.engine_kwargs
             )
         except SequenceError as error:
@@ -1353,7 +1587,7 @@ class OrderSheetView(APIView):
         serializer.is_valid(raise_exception=True)
         name = serializer.validated_data["name"]
         try:
-            plan = design_merzoug_assembly(
+            plan = design_extended_sequence(
                 serializer.validated_data["sequence"], **serializer.engine_kwargs
             )
         except SequenceError as error:
@@ -1376,7 +1610,7 @@ class ProtocolView(APIView):
         serializer.is_valid(raise_exception=True)
         name = serializer.validated_data["name"]
         try:
-            plan = design_merzoug_assembly(
+            plan = design_extended_sequence(
                 serializer.validated_data["sequence"], **serializer.engine_kwargs
             )
         except SequenceError as error:
@@ -1466,6 +1700,25 @@ class PcrView(APIView):
             "warnings": result.warnings,
             "is_clean": result.is_clean,
             "digest": None,
+            "gel": _gel_simulation(
+                "Predicted PCR product",
+                [
+                    {
+                        "name": "PCR",
+                        "description": "Expected specific amplicon",
+                        "bands": [{
+                            "size_bp": result.product_length,
+                            "label": f"{result.product_length:,} bp amplicon",
+                        }],
+                    },
+                    {
+                        "name": "NTC",
+                        "description": "Expected no-template control",
+                        "bands": [],
+                    },
+                ],
+                [result.product_length],
+            ),
             "preflight": pcr_preflight(
                 result, keep_frame=data["keep_frame"],
             ).to_dict(),

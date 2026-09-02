@@ -23,7 +23,7 @@ single-process deployment has.
 | Vector sequence | `GET /api/design/vectors/<key>/` | Public. 404 when the entry ships metadata only |
 | Codon optimisation | `POST /api/design/optimise/` | Protein invariant; cloning sites are an input |
 | Small Sequence Design | `POST /api/design/ssd/` | One insert, two oligos |
-| Merzoug assembly | `POST /api/design/assembly/` | Oligo pairs, hybridisation view, verification |
+| Extended Sequence Design | `POST /api/design/assembly/` | Oligo pairs, hybridisation view, verification |
 | Order sheet | `POST /api/design/assembly/order-sheet/` | CSV |
 | Bench protocol | `POST /api/design/assembly/protocol/` | Text, with the duplex in it |
 | Construct export | `POST /api/design/assembly/export/` | `filetype=genbank\|fasta\|oligos` |
@@ -107,7 +107,7 @@ ACCESS=$(curl -s -X POST http://localhost:8000/api/auth/login/ \
 # Create a project
 curl -X POST http://localhost:8000/api/projects/ \
     -H "Content-Type: application/json" -H "Authorization: Bearer $ACCESS" \
-    -d '{"name":"Insulin v1","module":"merzoug_assembly","sequence":"ATGAAACGT"}'
+    -d '{"name":"Insulin v1","module":"extended_sequence_design","sequence":"ATGAAACGT"}'
 ```
 
 ## Tests
@@ -158,9 +158,9 @@ django_app/
                                       # ignores workflow files anywhere else
 ```
 
-Same schema (`gsynth_user`, `gsynth_project`) as the Streamlit multi-user
-layer already deployed, so pointing both at the same `DATABASE_URL`
-gives you a clean migration path.
+The `gsynth_user` and `gsynth_project` tables keep accounts and scientific
+projects in the same persistent PostgreSQL database selected by
+`DATABASE_URL`.
 
 ## Configuration reference
 

@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
   ApiError,
   api,
+  type CodonHost,
   type OptimiseParams,
   type OptimiseResult,
 } from "../api/client";
@@ -18,6 +19,7 @@ const SAMPLE =
 
 const DEFAULTS: OptimiseParams = {
   sequence: SAMPLE,
+  host: "ecoli",
   is_protein: false,
   keep_stop: false,
   avoid_enzymes: ["NdeI", "XhoI"],
@@ -38,7 +40,23 @@ export default function Optimise() {
   const [result, setResult, clearResult] = useWorkspaceState<OptimiseResult | null>("optimise.result", null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hosts, setHosts] = useState<CodonHost[]>([]);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+    api.codonHosts()
+      .then((catalogue) => {
+        if (!cancelled) setHosts(catalogue.hosts);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+
+  const selectedHost = useMemo(
+    () => hosts.find((host) => host.key === (params.host ?? "ecoli")),
+    [hosts, params.host],
+  );
 
   function set<K extends keyof OptimiseParams>(key: K, value: OptimiseParams[K]) {
     setParams((current) => ({ ...current, [key]: value }));
@@ -121,6 +139,23 @@ export default function Optimise() {
           <div className="card">
             <div className="card-head"><h2>Gene</h2></div>
             <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+              <div className="field">
+                <label htmlFor="opt-host">Expression host</label>
+                <select
+                  id="opt-host"
+                  value={params.host ?? "ecoli"}
+                  onChange={(event) => set("host", event.target.value)}
+                >
+                  {hosts.length === 0 && <option value="ecoli">Escherichia coli</option>}
+                  {hosts.map((host) => (
+                    <option key={host.key} value={host.key}>{host.name}</option>
+                  ))}
+                </select>
+                <p className="note" style={{ marginTop: "0.4rem" }}>
+                  {selectedHost?.source ?? "The selected host profile determines synonymous-codon ranking and CAI."}
+                </p>
+              </div>
+
               <div className="field">
                 <label htmlFor="opt-seq">
                   {params.is_protein ? "Protein (one letter)" : "Coding sequence (A/C/G/T)"}

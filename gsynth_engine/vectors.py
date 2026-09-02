@@ -6,8 +6,8 @@ you picked cut it once, and what your protein will look like once the
 vector's own contributions are translated too.
 
 **Which entries carry a sequence.** A vector ships with one only when it came
-from an authoritative file — a supplier's or the lab's own SnapGene/GenBank
-export — and passes `validate` against its own entry. Everything else is
+from an authoritative supplier or laboratory reference file and passes
+`validate` against its own entry. Everything else is
 metadata, and the user supplies the sequence once from their own copy.
 
 That restraint is deliberate. A transcription error in 5 000 bases is
@@ -44,7 +44,7 @@ from gsynth_engine.sequence import clean_dna
 
 #: Where bundled sequences live. A vector earns a place here only when its
 #: sequence came from an authoritative file — a supplier's or a lab's own
-#: SnapGene/GenBank export — and passes `validate` against its own entry.
+#: verified sequence record — and passes `validate` against its own entry.
 DATA = Path(__file__).parent / "vector_data"
 
 #: Non-coding elements whose sequence is standard across every vector that
@@ -156,7 +156,7 @@ CATALOGUE: tuple[VectorSpec, ...] = (
         motifs=(("T7 promoter", T7_PROMOTER), ("lac operator", LAC_OPERATOR),
                 ("AmpR", AMPR)),
         aliases=("pET21a", "pET21a(+)", "pET-21a(+)"),
-        reference="Bundled from a SnapGene export.",
+        reference="Bundled from a verified laboratory reference file.",
         bundled="pET-21a.json",
         supplies_translation_start=True,
         notes=(
@@ -190,7 +190,7 @@ CATALOGUE: tuple[VectorSpec, ...] = (
         motifs=(("T7 promoter", T7_PROMOTER), ("lac operator", LAC_OPERATOR),
                 ("AmpR", AMPR)),
         aliases=("pET21", "pET21(+)", "pET-21(+)"),
-        reference="Bundled from a SnapGene export.",
+        reference="Bundled from a verified laboratory reference file.",
         bundled="pET-21.json",
         supplies_translation_start=False,
         notes=(

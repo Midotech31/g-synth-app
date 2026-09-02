@@ -565,7 +565,7 @@ def clone(
     Args:
         insert: the insert's top strand, including the bases the enzymes
             leave behind. For a G-Synth design this is `SSDResult.forward`
-            or `AssemblyPlan.construct_forward` — they are built to fit.
+            or `ESDResult.construct_forward` — they are built to fit.
         insert_reverse: the insert's reverse strand, 5'→3'. Supply it
             whenever you have it: both sticky ends can then be read off the
             actual duplex rather than assumed from the enzyme, which is the
@@ -667,7 +667,7 @@ def clone(
         if internal:
             warnings.append(
                 f"The insert contains {len(internal)} internal {enzyme} site"
-                f"{'s' if len(internal) > 1 else ''}. Merzoug assembly never "
+                f"{'s' if len(internal) > 1 else ''}. Extended Sequence Design never "
                 f"digests the insert, so the build is unaffected — but a "
                 f"diagnostic digest with {enzyme} will cut inside the gene."
             )

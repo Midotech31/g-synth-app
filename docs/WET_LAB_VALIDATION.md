@@ -2,7 +2,7 @@
 
 **Status:** protocol ready; no physical run has been claimed.
 
-The automated release gate exercises Design → Clone → sequencing-primer design
+The automated release gate exercises Design → Hybridisation → restriction cloning → sequencing-primer design
 → exact read placement against the released plasmid. It proves software
 coherence, not that digestion, ligation, transformation, expression, or Sanger
 sequencing succeeded at the bench. A physical run requires laboratory staff,
@@ -14,7 +14,7 @@ Run at least three independent constructs:
 
 | Construct | Strategy | Purpose |
 | --- | --- | --- |
-| Lab NdeI/XhoI coding insert | pET-21a(+), NdeI/XhoI | Primary legacy-compatible path |
+| Lab NdeI/XhoI coding insert | pET-21a(+), NdeI/XhoI | Primary validated expression path |
 | Lab mixed-polarity insert | Validated 5′/3′ cohesive pair | Duplex polarity and orientation |
 | Internal-site negative control | One extra selected site | Release block and failure interpretation |
 
@@ -31,7 +31,7 @@ For each construct retain:
   cleanup method;
 - uncut, single-cut, double-cut, and ligation-control gel images with ladder;
 - colony count and colony-PCR or diagnostic-digest evidence;
-- raw `.ab1` files from both directions (or additional primers until the entire
+- raw ABIF (`.ab1`) or SCF files from both directions (or additional primers until the entire
   intended insert and both junctions are covered);
 - G-Synth verification report with coverage, gaps, differences, quality, and
   final five-state verdict;

@@ -2,8 +2,8 @@
 
 A design that only exists inside one program is not finished. Everything
 this engine produces — the cassette, the recombinant plasmid, an imported
-backbone — comes out as GenBank so it opens in SnapGene, Benchling, ApE or
-Geneious with its features intact, and as FASTA when only the bases matter.
+backbone — comes out as GenBank with its features intact, and as FASTA when
+only the bases matter.
 
 **The format is stricter than it looks.** GenBank's LOCUS line is
 column-positional, and a parser that cannot read it silently falls back to

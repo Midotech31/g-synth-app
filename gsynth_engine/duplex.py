@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from gsynth_engine.merzoug import AssemblyPlan, OligoPair
+from gsynth_engine.esd import ESDResult, OligoPair
 from gsynth_engine.sequence import SequenceError, complement, reverse_complement
 
 #: A column with no strand present.
@@ -185,7 +185,7 @@ def _lay_out(top: str, bottom_sense: str, bottom_offset: int) -> tuple[str, str,
     return top_line, bottom_line, top_column
 
 
-def construct_duplex(plan: AssemblyPlan) -> DuplexView:
+def construct_duplex(plan: ESDResult) -> DuplexView:
     """Both strands of the full construct, with fragment boundaries marked.
 
     The two strands are staggered by the sticky ends the cloning enzymes

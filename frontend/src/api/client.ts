@@ -42,6 +42,12 @@ export type User = {
   date_joined: string;
 };
 
+export type TutorStatus = {
+  enabled: boolean;
+  notice: string;
+  disabled_reason: string;
+};
+
 export type Annotation = {
   name: string;
   type: string;
@@ -53,6 +59,15 @@ export type Annotation = {
    *  cloned plasmid's own features — a truncated promoter is worth seeing,
    *  not silently keeping its pre-cut length. */
   truncated?: boolean;
+  /** Optional reading-frame bounds for coordinate-level translation. */
+  translation_start?: number;
+  translation_end?: number;
+};
+
+export type DetectedFeature = {
+  annotation: Annotation;
+  matched_sequence: string;
+  basis: string;
 };
 
 export type ParsedRecord = {
@@ -191,6 +206,10 @@ export type AssemblyResult = {
   construct_reverse: string;
   construct_length: number;
   construct_gc: number;
+  /** Zero-based, end-exclusive insert span inside the linear construct. */
+  insert_start: number;
+  insert_end: number;
+  topology: "linear";
   fragment_count: number;
   oligo_count: number;
   overhang_length: number;
@@ -257,6 +276,18 @@ export type Orf = {
   protein: string;
 };
 
+export type GelBand = { size_bp: number; label: string };
+export type GelLane = { name: string; description: string; bands: GelBand[] };
+export type GelLadder = { key: string; name: string; bands: number[]; range: string };
+export type GelSimulation = {
+  title: string;
+  prediction_only: boolean;
+  notice: string;
+  recommended_ladder: string;
+  ladders: GelLadder[];
+  lanes: GelLane[];
+};
+
 /** The recombinant plasmid: what you actually end up with. */
 export type CloneResult = {
   plasmid: string;
@@ -283,6 +314,7 @@ export type CloneResult = {
   orfs: Orf[];
   junction_views: JunctionView[];
   restriction_sites: RestrictionSite[];
+  gel?: GelSimulation;
   validation: ValidationCheck[];
   warnings: string[];
   /** Empty means these two molecules really do join. */
@@ -354,6 +386,7 @@ export type PcrResult = {
   is_clean: boolean;
   /** Null for conventional PCR, and when a problem blocks the digest. */
   digest: PcrDigest | null;
+  gel?: GelSimulation;
   preflight?: PreflightReport;
   provenance?: Provenance;
 };
@@ -372,6 +405,7 @@ export type PcrParams = {
 
 export type OptimiseParams = {
   sequence: string;
+  host?: string;
   is_protein?: boolean;
   keep_stop?: boolean;
   avoid_enzymes?: string[];
@@ -387,6 +421,7 @@ export type OptimiseParams = {
 
 export type OptimiseResult = {
   sequence: string;
+  host: string;
   protein: string;
   length: number;
   table: string;
@@ -406,6 +441,12 @@ export type OptimiseResult = {
   is_clean: boolean;
   preflight?: PreflightReport;
   provenance?: Provenance;
+};
+
+export type CodonHost = {
+  key: string;
+  name: string;
+  source: string;
 };
 
 export type LigationReaction = {
@@ -457,6 +498,18 @@ export type Difference = {
   read_index?: number | null;
 };
 
+export type ConsensusReport = {
+  sequence: string;
+  coverage: number;
+  identity: number;
+  fully_covered: boolean;
+  bidirectional_overlap: number;
+  bidirectional_agreement: number;
+  gaps: [number, number][];
+  difference_count: number;
+  warnings: string[];
+};
+
 export type VerifyReport = {
   design_length: number;
   coverage: number;
@@ -497,6 +550,11 @@ export type VerifyReport = {
   traces?: TraceSummary[];
   trace_tracks?: TraceTrack[];
   trace_windows?: TraceWindow[];
+  /** Present only for chromatograms: oriented F/R assembly at the selected cutoff. */
+  consensus?: ConsensusReport;
+  /** All called bases assembled before quality gating. */
+  raw_consensus?: ConsensusReport;
+  quality_cutoff?: number;
 };
 
 export type TraceSummary = {
@@ -568,6 +626,72 @@ export type AlignResult = {
   warnings: string[];
 };
 
+export type HybridizationEnd = {
+  end: "left" | "right";
+  kind?: "blunt";
+  strand?: "first" | "second";
+  polarity?: "5′" | "3′";
+  sequence?: string;
+  length: number;
+  start?: number;
+  end_position?: number;
+};
+
+export type HybridizationRow = {
+  start: number;
+  stop: number;
+  top: string;
+  marks: string;
+  bottom: string;
+  top_start: number | null;
+  top_end: number;
+  bottom_start: number | null;
+  bottom_end: number;
+};
+
+export type HybridizationResult = {
+  first: string;
+  second: string;
+  top: string;
+  marks: string;
+  bottom: string;
+  rows: HybridizationRow[];
+  width: number;
+  offset: number;
+  overlap_start: number;
+  overlap_end: number;
+  overlap_length: number;
+  paired_bases: number;
+  paired_percent: number;
+  mismatches: number;
+  longest_perfect_run: number;
+  complementarity: "exact" | "partial" | "insufficient";
+  predicted_state:
+    | "favourable_at_temperature"
+    | "temperature_above_tm"
+    | "mismatches_not_thermodynamically_scored"
+    | "insufficient_complementarity"
+    | "not_scored";
+  overhangs: HybridizationEnd[];
+  left_end: HybridizationEnd;
+  right_end: HybridizationEnd;
+  alternative_placements: number;
+  tm_c: number | null;
+  tm_margin_c: number | null;
+  delta_h_kcal_mol: number | null;
+  delta_s_cal_mol_k: number | null;
+  analysis_temperature_c: number;
+  conditions: {
+    name: string;
+    oligo_nM: number;
+    na_mM: number;
+    mg_mM: number;
+    dntp_mM: number;
+    summary: string;
+  };
+  warnings: string[];
+};
+
 export type VectorTag = { name: string; end: string; note: string };
 
 /** A backbone G-Synth knows about. `has_sequence` means it ships with one. */
@@ -620,6 +744,10 @@ export type CloneParams = DesignParams & {
   vector?: string;
   vector_name?: string;
   vector_annotations?: Annotation[];
+  /** User-reviewed annotations on the final recombinant product. These do
+   * not alter any DNA bases; they replace the generated annotation list only
+   * when a ligated construct is saved or exported. */
+  product_annotations?: Annotation[];
   vector_is_circular?: boolean;
   fragment?: boolean;
 };
@@ -670,6 +798,9 @@ export type Project = ProjectSummary & {
   data: {
     annotations?: Annotation[];
     topology?: string;
+    insert_start?: number;
+    insert_end?: number;
+    backbone_length?: number;
     gc_content?: number;
     construct_gc?: number;
     gc?: number;
@@ -869,10 +1000,26 @@ export const api = {
   createProject: (payload: Partial<Project>) =>
     request<Project>("/api/projects/", { method: "POST", body: payload }),
 
+  updateProjectAnnotations: (id: number, annotations: Annotation[]) =>
+    request<Project>(`/api/projects/${id}/annotations/`, {
+      method: "PATCH",
+      body: { annotations },
+    }),
+
+  detectCommonFeatures: (id: number) =>
+    request<{ matches: DetectedFeature[]; method: string }>(
+      `/api/projects/${id}/detect-common-features/`,
+    ),
+
   deleteProject: (id: number) =>
     request<void>(`/api/projects/${id}/`, { method: "DELETE" }),
 
   catalogue: () => request<Catalogue>("/api/design/enzymes/", { auth: false }),
+
+  codonHosts: () =>
+    request<{ hosts: CodonHost[]; default: string }>(
+      "/api/design/codon-hosts/", { auth: false },
+    ),
 
   designSSD: (params: DesignParams) =>
     request<SSDResult>("/api/design/ssd/", { method: "POST", body: params }),
@@ -914,7 +1061,7 @@ export const api = {
   }) => request<VerifyReport>("/api/design/verify/", { method: "POST", body: params }),
 
   /**
-   * The same comparison, from .ab1 files rather than pasted letters.
+   * The same comparison, from ABIF or SCF traces rather than pasted letters.
    *
    * Multipart because a trace is binary — base64 in JSON would inflate a
    * 400 kB file by a third for nothing. What comes back carries the quality
@@ -950,6 +1097,18 @@ export const api = {
     is_protein?: boolean;
     try_reverse?: boolean;
   }) => request<AlignResult>("/api/design/align/", { method: "POST", body: params }),
+
+  hybridize: (params: {
+    first: string;
+    second: string;
+    analysis_temperature_c?: number;
+    oligo_nM?: number;
+    na_mM?: number;
+    mg_mM?: number;
+    dntp_mM?: number;
+  }) => request<HybridizationResult>(
+    "/api/design/hybridize/", { method: "POST", body: params },
+  ),
 
   pcr: (params: PcrParams) =>
     request<PcrResult>("/api/design/pcr/", { method: "POST", body: params }),
@@ -996,4 +1155,6 @@ export const api = {
       method: "POST",
       body: { question, history },
     }),
+
+  tutorStatus: () => request<TutorStatus>("/api/tutor/status/"),
 };
