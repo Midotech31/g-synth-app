@@ -843,6 +843,14 @@ table.data td.num { font-variant-numeric: tabular-nums; }
   align-items: start;
 }
 .design-layout > * { min-width: 0; }
+.design-layout.clone-layout { grid-template-columns: minmax(0, 1fr); gap: 1.1rem; }
+.clone-inputs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+  gap: 1.1rem;
+  align-items: start;
+}
+.clone-results { min-width: 0; display: flex; flex-direction: column; gap: 1.1rem; }
 .design-input-card { position: sticky; top: 1.15rem; }
 .design-input-card > .card-head { padding: 1rem 1.15rem; }
 .design-form-actions {
@@ -1523,10 +1531,10 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ligation-joined-duplex code { overflow-x: auto; color: var(--ink); white-space: nowrap; }
 .ligation-joined-duplex mark { padding: 0.08rem 0.12rem; border-radius: 2px; background: #d8eadf; color: #174c32; font-weight: 800; }
 
-/* A single evidence surface for vector, insert and recombinant product. The
-   layout keeps the molecule and its inspector visible together so a map click
-   never loses its coordinates when the scientist changes analytical lens. */
-.construct-workbench { overflow: hidden; }
+.construct-workbench {
+  overflow: hidden;
+  container: construct-workbench / inline-size;
+}
 .workbench-head {
   display: flex;
   align-items: flex-start;
@@ -1730,11 +1738,19 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 1180px) {
   .hybrid-stats .stat-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .hybrid-simple-flow, .design-hybrid-simple { grid-template-columns: 1fr; }
+}
+
+@container construct-workbench (max-width: 900px) {
   .workbench-head { align-items: stretch; flex-direction: column; }
   .workbench-actions { justify-content: flex-start; }
   .workbench-layout { grid-template-columns: minmax(0, 1fr); }
   .workbench-canvas { border-right: 0; border-bottom: 1px solid var(--line); }
-  .workbench-inspector { min-height: 260px; display: grid; grid-template-columns: minmax(220px, 0.45fr) minmax(0, 1fr); align-items: start; }
+  .workbench-inspector {
+    min-height: 260px;
+    display: grid;
+    grid-template-columns: minmax(220px, 0.45fr) minmax(0, 1fr);
+    align-items: start;
+  }
   .workbench-inspector-empty { margin: 0; }
   .workbench-lock-note { grid-column: 1 / -1; margin: 0.8rem; }
 }

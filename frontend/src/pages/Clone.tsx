@@ -382,9 +382,8 @@ export default function Clone() {
         {error && <div className="notice notice-error" role="alert">{error}</div>}
         {saved && <div className="notice notice-info" role="status">{saved}</div>}
 
-        <div className="design-layout">
-          {/* ── Inputs ─────────────────────────────────────────────────── */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+        <div className="design-layout clone-layout">
+          <div className="clone-inputs">
             <div className="card">
               <div className="card-head">
                 <h2 style={{ flex: 1 }}>Vector</h2>
@@ -585,8 +584,7 @@ export default function Clone() {
             </div>
           </div>
 
-          {/* ── Results ────────────────────────────────────────────────── */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+          <div className="clone-results">
             {!result ? (
               <div className="card">
                 <div className="empty">
