@@ -69,12 +69,21 @@ test("every scientific workspace uses the available width without page overflow"
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  for (const route of workspaces) {
-    await page.goto(route);
-    await expect(page.locator(".design-layout").first()).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const route of workspaces) {
+      await page.goto(route);
+      await expect(page.locator(".design-layout").first()).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    }
   }
+
+  await page.goto("/hybridize");
+  const stageLabels = page.locator(".core-workflow-stage strong");
+  await expect(stageLabels).toHaveCount(3);
+  expect(await stageLabels.evaluateAll((labels) => labels.every(
+    (label) => label.scrollWidth <= label.clientWidth && label.scrollHeight <= label.clientHeight,
+  ))).toBe(true);
 });
 
 test("edited cloning primers are revalidated before cloning", async ({ page }) => {

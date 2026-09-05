@@ -1780,8 +1780,20 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     overflow: visible;
   }
   .core-workflow-stage { min-width: 0; }
-  .core-workflow-stage > a { width: 100%; min-width: 0; }
-  .core-workflow-stage strong { white-space: normal; }
+  .core-workflow-stage > a {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: 0.35rem;
+  }
+  .core-workflow-stage > a > .icon { display: none; }
+  .core-workflow-stage > a > span { align-items: center; text-align: center; }
+  .core-workflow-stage strong {
+    white-space: normal;
+    font-size: 0.68rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
   .core-workflow-stage small, .core-workflow-arrow { display: none; }
   .hybrid-thermo-list div { grid-template-columns: 1fr; gap: 0.15rem; }
   .clone-molecule-flow { grid-template-columns: 1fr; }
@@ -2309,6 +2321,14 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .grid-projects { grid-template-columns: 1fr; }
   .card > .card-head > h2 { flex-basis: 100%; }
   .modal-actions > .btn { flex: 1 1 8rem; }
+  .design-topbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .design-topbar > .design-heading,
+  .design-topbar > .btn-primary { grid-column: 1 / -1; width: 100%; }
+  .design-topbar > .design-export,
+  .design-topbar > .btn-outline { width: 100%; }
 }
 
 /* ── PCR ───────────────────────────────────────────────────────────────
