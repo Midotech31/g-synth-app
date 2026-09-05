@@ -5,22 +5,10 @@ import { ApiError, api, type Catalogue, type PcrResult } from "../api/client";
 import Icon from "../components/Icon";
 import GelSimulation from "../components/GelSimulation";
 import EnzymePicker from "../components/EnzymePicker";
-import PrimerAnnealingView from "../components/PrimerAnnealingView";
+import PrimerAnnealingView, { PrimerTail } from "../components/PrimerAnnealingView";
 import PreflightPanel from "../components/PreflightPanel";
 import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
-/**
- * PCR, and what cutting the product leaves.
- *
- * The page is deliberately one column of stages rather than a form and a
- * result: the whole point is that each step feeds the next, and a reader who
- * cannot see the tail becoming a site, and the site becoming an overhang, has
- * to take the insert on trust.
- */
-
-/** A primer drawn so the tail and the annealing part are visibly different
- *  things — they are ordered as one oligo but behave as two, and the Tm that
- *  matters belongs to only one of them. */
 function PrimerRow({ primer, label }: { primer: PcrResult["forward"]; label: string }) {
   return (
     <div className="primer-card">
@@ -32,11 +20,7 @@ function PrimerRow({ primer, label }: { primer: PcrResult["forward"]; label: str
       </div>
 
       <div className="primer-seq mono">
-        {primer.tail && (
-          <span className="seq-tail" title={`5' tail — ${primer.enzyme ?? "addition"}`}>
-            {primer.tail}
-          </span>
-        )}
+        {primer.tail && <span className="seq-tail"><PrimerTail primer={primer} /></span>}
         <span className="seq-anneal" title="Anneals to the template">
           {primer.anneals}
         </span>
@@ -66,7 +50,6 @@ function PrimerRow({ primer, label }: { primer: PcrResult["forward"]; label: str
   );
 }
 
-/** The product with its parts coloured: tail, gene, tail. */
 function ProductView({ result }: { result: PcrResult }) {
   const { product, forward, reverse } = result;
   const leftTail = forward.tail.length;
@@ -78,6 +61,79 @@ function ProductView({ result }: { result: PcrResult }) {
       {leftTail > 0 && <span className="seq-tail">{product.slice(0, leftTail)}</span>}
       <span className="seq-body">{body}</span>
       {rightTail > 0 && <span className="seq-tail">{product.slice(product.length - rightTail)}</span>}
+    </div>
+  );
+}
+
+function DigestView({ result }: { result: PcrResult }) {
+  if (!result.digest) return null;
+  const { digest } = result;
+  const leftLength = digest.left_end.sequence.length;
+  const rightLength = digest.right_end.sequence.length;
+  const top = `${digest.left_end.strand === "bottom" ? " ".repeat(leftLength) : ""}${digest.top}${digest.right_end.strand === "bottom" ? " ".repeat(rightLength) : ""}`;
+  const bottomCore = [...digest.bottom].reverse().join("");
+  const bottom = `${digest.left_end.strand === "top" ? " ".repeat(leftLength) : ""}${bottomCore}${digest.right_end.strand === "top" ? " ".repeat(rightLength) : ""}`;
+  const width = Math.max(top.length, bottom.length);
+  const columns = width <= 54
+    ? [...Array(width).keys()]
+    : [...Array(24).keys(), -1, ...Array(24).keys()].map((value, index) => (
+      value === -1 ? -1 : index < 24 ? value : width - 24 + value
+    ));
+  const line = (sequence: string) => columns.map((position, index) => {
+    if (position === -1) return <span key={`ellipsis-${index}`} className="digest-ellipsis">…</span>;
+    const base = sequence[position] ?? " ";
+    const partner = sequence === top ? bottom[position] : top[position];
+    return (
+      <span
+        key={position}
+        className={base !== " " && partner === " " ? "hybrid-overhang-base" : base === " " ? "dx-gap" : "dx-base"}
+      >
+        {base === " " ? "\u00a0" : base}
+      </span>
+    );
+  });
+  const pairs = columns.map((position, index) => (
+    <span key={position === -1 ? `ellipsis-${index}` : position}>
+      {position === -1 ? "…" : top[position] !== " " && bottom[position] !== " " ? "|" : " "}
+    </span>
+  ));
+  return (
+    <div
+      className="pcr-digest-view"
+      aria-label="Nucleotide-level digested insert and cohesive ends"
+    >
+      <div className="pcr-digest-head">
+        <div>
+          <span>Left · {result.left_enzyme}</span>
+          <strong className="mono">{digest.left_end.sequence ? `${digest.left_end.kind.replace("'", "′")}-${digest.left_end.sequence}` : "blunt"}</strong>
+        </div>
+        <span className="pill pill-ok">Digestion verified</span>
+        <div>
+          <span>Right · {result.right_enzyme}</span>
+          <strong className="mono">{digest.right_end.sequence ? `${digest.right_end.kind.replace("'", "′")}-${digest.right_end.sequence}` : "blunt"}</strong>
+        </div>
+      </div>
+      <div className="duplex-scroll pcr-digest-duplex" tabIndex={0}>
+        <div className="duplex-row">
+          <span className="dx-end">5′</span>
+          <span className="dx-seq">{line(top)}</span>
+          <span className="dx-end">3′</span>
+        </div>
+        <div className="duplex-row">
+          <span className="dx-end" />
+          <span className="dx-seq dx-ticks">{pairs}</span>
+          <span className="dx-end" />
+        </div>
+        <div className="duplex-row">
+          <span className="dx-end">3′</span>
+          <span className="dx-seq">{line(bottom)}</span>
+          <span className="dx-end">5′</span>
+        </div>
+      </div>
+      <div className="duplex keys">
+        <span className="key"><i className="hybrid-key-overhang" /> exposed cohesive end</span>
+        <span className="key"><code>|</code> Watson–Crick base pair</span>
+      </div>
     </div>
   );
 }
@@ -95,11 +151,19 @@ export default function Pcr() {
   const [startCodonMode, setStartCodonMode, clearStartCodonMode] = useWorkspaceState<"use_site" | "keep_both">("pcr.startCodonMode", "use_site");
   const [experience, setExperience] = useWorkspaceState<"guided" | "expert">("pcr.experience", "guided");
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
+  const [customPrimers, setCustomPrimers, clearCustomPrimers] = useWorkspaceState(
+    "pcr.customPrimers", false,
+  );
+  const [forwardPrimer, setForwardPrimer, clearForwardPrimer] = useWorkspaceState(
+    "pcr.forwardPrimer", "",
+  );
+  const [reversePrimer, setReversePrimer, clearReversePrimer] = useWorkspaceState(
+    "pcr.reversePrimer", "",
+  );
 
   const [result, setResult, clearResult] = useWorkspaceState<PcrResult | null>("pcr.result", null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  // Discard responses computed from superseded input state.
   const requestVersion = useRef(0);
 
   useEffect(() => {
@@ -131,6 +195,9 @@ export default function Pcr() {
     clearClamp();
     clearKeepFrame();
     clearStartCodonMode();
+    clearCustomPrimers();
+    clearForwardPrimer();
+    clearReversePrimer();
     clearResult();
     setError("");
   }
@@ -148,8 +215,16 @@ export default function Pcr() {
         clamp,
         keep_frame: mode === "cloning" && keepFrame,
         start_codon_mode: startCodonMode,
+        forward_primer: customPrimers ? forwardPrimer : null,
+        reverse_primer: customPrimers ? reversePrimer : null,
       });
-      if (requestVersion.current === version) setResult(next);
+      if (requestVersion.current === version) {
+        setResult(next);
+        if (customPrimers) {
+          setForwardPrimer(next.forward.sequence);
+          setReversePrimer(next.reverse.sequence);
+        }
+      }
     } catch (err) {
       if (requestVersion.current === version) {
         setError(err instanceof ApiError ? err.message : "The design could not be run.");
@@ -159,7 +234,6 @@ export default function Pcr() {
     }
   }
 
-  /** Transfer both strands and their measured cut geometry to Cloning. */
   function sendToClone() {
     if (!result?.digest) return;
     navigate("/clone", {
@@ -179,6 +253,25 @@ export default function Pcr() {
   const enzymes = catalogue?.enzymes ?? [];
   const leftSuppliesStart = enzymes.find((enzyme) => enzyme.name === leftEnzyme)
     ?.supplies_start_codon ?? leftEnzyme === "NdeI";
+  const customPrimerPairReady = forwardPrimer.replace(/[^A-Za-z]/g, "").length > 0
+    && reversePrimer.replace(/[^A-Za-z]/g, "").length > 0;
+
+  function editPrimers() {
+    if (result) {
+      setForwardPrimer(result.forward.sequence);
+      setReversePrimer(result.reverse.sequence);
+    }
+    setCustomPrimers(true);
+  }
+
+  function useAutomaticPrimers() {
+    requestVersion.current += 1;
+    setCustomPrimers(false);
+    setForwardPrimer("");
+    setReversePrimer("");
+    setResult(null);
+    setError("");
+  }
 
   return (
     <>
@@ -193,13 +286,17 @@ export default function Pcr() {
         <button className="btn btn-outline" onClick={clearWorkspace} disabled={busy}>
           Clear
         </button>
-        <button className="btn btn-primary" onClick={() => void run()} disabled={busy || !cleanLength}>
+        <button
+          className="btn btn-primary"
+          onClick={() => void run()}
+          disabled={busy || !cleanLength || (customPrimers && !customPrimerPairReady)}
+        >
           {busy && <span className="spinner" />}
-          {busy ? "Designing…" : "Design PCR"}
+          {busy ? "Analysing…" : customPrimers ? "Revalidate primers" : "Design PCR"}
         </button>
       </div>
 
-      <div className="content design-layout">
+      <div className="content design-layout pcr-layout">
         <div className="card">
           <div className="card-head">
             <h2 style={{ flex: 1 }}>Template</h2>
@@ -240,6 +337,7 @@ export default function Pcr() {
                   onClick={() => {
                     inputsChanged();
                     setMode("conventional");
+                    setCustomPrimers(false);
                   }}
                   aria-pressed={mode === "conventional"}
                 >
@@ -252,6 +350,7 @@ export default function Pcr() {
                   onClick={() => {
                     inputsChanged();
                     setMode("cloning");
+                    setCustomPrimers(false);
                   }}
                   aria-pressed={mode === "cloning"}
                 >
@@ -343,6 +442,52 @@ export default function Pcr() {
                 </div>}
               </>
             )}
+
+            {customPrimers && (
+              <div className="manual-primer-editor" aria-label="Edit primer sequences">
+                <div className="manual-primer-head">
+                  <div>
+                    <strong>Custom primers</strong>
+                    <span>Enter complete oligos in 5′→3′ orientation.</span>
+                  </div>
+                  <button className="btn btn-outline" type="button" onClick={useAutomaticPrimers}>
+                    Restore automatic design
+                  </button>
+                </div>
+                <div className="manual-primer-grid">
+                  <div className="field">
+                    <label htmlFor="forward-primer">Forward primer (5′→3′)</label>
+                    <textarea
+                      id="forward-primer"
+                      className="mono"
+                      rows={3}
+                      value={forwardPrimer}
+                      onChange={(event) => {
+                        inputsChanged();
+                        setForwardPrimer(event.target.value);
+                      }}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="reverse-primer">Reverse primer (5′→3′)</label>
+                    <textarea
+                      id="reverse-primer"
+                      className="mono"
+                      rows={3}
+                      value={reversePrimer}
+                      onChange={(event) => {
+                        inputsChanged();
+                        setReversePrimer(event.target.value);
+                      }}
+                    />
+                  </div>
+                </div>
+                <span className="field-hint">
+                  G-Synth will locate each 3′ annealing region, separate any 5′ addition,
+                  and recompute Tm, specificity checks, product geometry and digestion.
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -353,8 +498,8 @@ export default function Pcr() {
             <div className="card">
               <div className="empty">
                 <Icon name="helix" size={34} className="glyph" />
-                <strong>No reaction yet</strong>
-                <span>Paste a template and press Design PCR.</span>
+                <strong>{customPrimers ? "Edited primers need validation" : "No reaction yet"}</strong>
+                <span>{customPrimers ? "Press Revalidate primers before ordering or cloning." : "Paste a template and press Design PCR."}</span>
               </div>
             </div>
           )}
@@ -375,6 +520,12 @@ export default function Pcr() {
               <div className="card">
                 <div className="card-head">
                   <h2 style={{ flex: 1 }}>Primers to order</h2>
+                  <span className={`pill ${result.primer_source === "custom" ? "pill-ok" : ""}`}>
+                    {result.primer_source === "custom" ? "Edited · validated" : "G-Synth design"}
+                  </span>
+                  <button className="btn btn-outline" type="button" onClick={editPrimers}>
+                    Edit primers
+                  </button>
                   <span className="terminal-end label">
                     anneal at <strong>{result.annealing_temperature.toFixed(1)} °C</strong>
                   </span>
@@ -399,7 +550,11 @@ export default function Pcr() {
                   <span className="label">cycle 1 geometry</span>
                 </div>
                 <div className="card-body">
-                  <PrimerAnnealingView forward={result.forward} reverse={result.reverse} />
+                  <PrimerAnnealingView
+                    forward={result.forward}
+                    reverse={result.reverse}
+                    templateLength={cleanLength}
+                  />
                 </div>
               </div>
 
@@ -440,6 +595,7 @@ export default function Pcr() {
                     <span className="note nums">{result.digest.length} bp</span>
                   </div>
                   <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
+                    <DigestView result={result} />
                     <div className="stat-row">
                       <div className="stat">
                         <div className="k">left end</div>
@@ -465,9 +621,8 @@ export default function Pcr() {
                     </div>
 
                     <p className="note">
-                      These ends were read off the cut molecule, not looked up from the
-                      enzyme table &mdash; a value copied from the table agrees with the
-                      table whatever the bases actually spell.
+                      The 5′ primer additions are unpaired only in cycle 1. These cohesive
+                      ends appear later, after the completed PCR product is digested.
                     </p>
 
                     <div className="seq-block">{result.digest.top}</div>

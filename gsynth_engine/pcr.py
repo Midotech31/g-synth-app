@@ -73,6 +73,7 @@ class PcrPrimer:
     tm_full: float
     gc: float
     enzyme: str | None = None
+    restriction_site: str = ""
     warnings: tuple[str, ...] = ()
 
     @property
@@ -299,6 +300,50 @@ def _site_of(enzyme: str) -> str:
     return str(entry["recognition"])
 
 
+def _resolve_custom_primer(
+    sequence: str,
+    *,
+    template: str,
+    boundary: int,
+    direction: int,
+    allow_tail: bool,
+) -> tuple[str, str, int, int]:
+    """Split an entered oligo into its 5′ addition and 3′ template match."""
+    primer = clean_dna(sequence)
+    if not primer:
+        raise SequenceError("Enter both primer sequences before revalidating them.")
+    if len(primer) > 300:
+        raise SequenceError("A primer cannot exceed 300 nucleotides.")
+
+    available = len(template) - boundary if direction == 1 else boundary
+    longest = min(len(primer), available)
+    match: tuple[str, str, int, int] | None = None
+    for length in range(longest, MIN_ANNEAL - 1, -1):
+        if direction == 1:
+            start, end = boundary, boundary + length
+            expected = template[start:end]
+        else:
+            start, end = boundary - length, boundary
+            expected = reverse_complement(template[start:end])
+        if primer.endswith(expected):
+            match = primer[:-length], primer[-length:], start, end
+            break
+
+    label = "forward" if direction == 1 else "reverse"
+    if match is None:
+        raise SequenceError(
+            f"The {label} primer needs an exact 3′ match of at least "
+            f"{MIN_ANNEAL} bases at the requested target boundary."
+        )
+    tail, anneals, start, end = match
+    if not allow_tail and tail:
+        raise SequenceError(
+            f"The conventional {label} primer contains {len(tail)} unpaired "
+            "5′ base(s). Remove the addition or select cloning PCR."
+        )
+    return tail, anneals, start, end
+
+
 def design_pcr(
     template: str,
     *,
@@ -310,6 +355,8 @@ def design_pcr(
     keep_frame: bool = False,
     start_codon_mode: str = "use_site",
     name: str = "product",
+    forward_primer: str | None = None,
+    reverse_primer: str | None = None,
 ) -> PcrResult:
     """Design a PCR, with or without cloning tails, and simulate it.
 
@@ -372,6 +419,9 @@ def design_pcr(
             "Start-codon mode must be 'use_site' or 'keep_both'."
         )
 
+    if (forward_primer is None) != (reverse_primer is None):
+        raise SequenceError("Enter both custom primer sequences, or neither.")
+
     problems: list[str] = []
     warnings: list[str] = []
 
@@ -394,9 +444,30 @@ def design_pcr(
             "protein therefore begins with one methionine."
         )
 
-    # ── The parts that bind template ────────────────────────────────────
-    fwd_anneal, fwd_lo, fwd_hi = _pick_anneal(working, start=effective_start, direction=1)
-    rev_anneal, rev_lo, rev_hi = _pick_anneal(working, start=stop, direction=-1)
+    custom_primers = forward_primer is not None and reverse_primer is not None
+    if custom_primers:
+        fwd_tail, fwd_anneal, fwd_lo, fwd_hi = _resolve_custom_primer(
+            forward_primer,
+            template=working,
+            boundary=effective_start,
+            direction=1,
+            allow_tail=left_enzyme is not None,
+        )
+        rev_tail, rev_anneal, rev_lo, rev_hi = _resolve_custom_primer(
+            reverse_primer,
+            template=working,
+            boundary=stop,
+            direction=-1,
+            allow_tail=right_enzyme is not None,
+        )
+    else:
+        fwd_anneal, fwd_lo, fwd_hi = _pick_anneal(
+            working, start=effective_start, direction=1,
+        )
+        rev_anneal, rev_lo, rev_hi = _pick_anneal(
+            working, start=stop, direction=-1,
+        )
+        fwd_tail = rev_tail = ""
 
     if fwd_hi > rev_lo:
         raise SequenceError(
@@ -407,14 +478,35 @@ def design_pcr(
 
     region = working[effective_start:stop]
 
-    # ── The tails ───────────────────────────────────────────────────────
-    fwd_tail = rev_tail = ""
     if left_enzyme is not None and right_enzyme is not None:
         right_site = _site_of(right_enzyme)
-        clamp_bases = _clamp_of(clamp)
-
-        fwd_tail = clamp_bases + left_site
-        rev_tail = clamp_bases + reverse_complement(right_site)
+        if custom_primers:
+            reverse_site = reverse_complement(right_site)
+            if left_site not in fwd_tail:
+                raise SequenceError(
+                    f"The forward primer's 5′ addition does not contain the "
+                    f"selected {left_enzyme} site ({left_site})."
+                )
+            if reverse_site not in rev_tail:
+                raise SequenceError(
+                    f"The reverse primer's 5′ addition does not contain the "
+                    f"selected {right_enzyme} site in primer orientation "
+                    f"({reverse_site})."
+                )
+            left_site_at = fwd_tail.index(left_site)
+            reverse_site_at = rev_tail.index(reverse_site)
+            if left_site_at < DEFAULT_CLAMP or reverse_site_at < DEFAULT_CLAMP:
+                warnings.append(
+                    "One or both edited primers provide fewer than six bases "
+                    "outside the restriction site; confirm the enzyme supplier's "
+                    "end-cleavage requirement before ordering."
+                )
+        else:
+            clamp_bases = _clamp_of(clamp)
+            fwd_tail = clamp_bases + left_site
+            rev_tail = clamp_bases + reverse_complement(right_site)
+            left_site_at = clamp
+            reverse_site_at = clamp
 
         # Where the digest will cut, so frame can be measured on the insert
         # rather than on the product — they differ by the stub that falls off.
@@ -427,7 +519,7 @@ def design_pcr(
                 f"unwanted — with {left_enzyme} the site supplies the start."
             )
 
-        if keep_frame and not supplies_atg:
+        if keep_frame and not supplies_atg and not custom_primers:
             # The vector supplies the ATG upstream, so the region must sit a
             # whole number of codons from the insert's own 5' end. Anchoring
             # on the product's end instead would be out by the stub the
@@ -442,7 +534,7 @@ def design_pcr(
                     f"They are translated as part of the junction."
                 )
 
-        if clamp < DEFAULT_CLAMP:
+        if not custom_primers and clamp < DEFAULT_CLAMP:
             warnings.append(
                 f"Only {clamp} clamp base(s) sit outside each site. Enzymes cut "
                 f"poorly at a fragment's end; {DEFAULT_CLAMP} is the usual "
@@ -464,9 +556,13 @@ def design_pcr(
     # template region. Clamp/site and site/insert boundaries can create an
     # overlapping recognition sequence even when the original gene is clean.
     if left_enzyme is not None and right_enzyme is not None:
+        right_site = _site_of(right_enzyme)
         expected = {
-            left_enzyme: [clamp],
-            right_enzyme: [len(fwd_tail) + len(region)],
+            left_enzyme: [left_site_at],
+            right_enzyme: [
+                len(fwd_tail) + len(region) + len(rev_tail)
+                - reverse_site_at - len(right_site)
+            ],
         }
         for enzyme in (left_enzyme, right_enzyme):
             found = find_sites(product, enzyme, circular=False)
@@ -490,6 +586,7 @@ def design_pcr(
         direction=1, start=fwd_lo, end=fwd_hi,
         tm=_tm(fwd_anneal), tm_full=_tm(forward_seq),
         gc=round(gc_content(forward_seq), 1), enzyme=left_enzyme,
+        restriction_site=left_site,
         warnings=tuple(fwd_warnings),
     )
     reverse = PcrPrimer(
@@ -497,6 +594,7 @@ def design_pcr(
         direction=-1, start=rev_lo, end=rev_hi,
         tm=_tm(rev_anneal), tm_full=_tm(reverse_seq),
         gc=round(gc_content(reverse_seq), 1), enzyme=right_enzyme,
+        restriction_site=(reverse_complement(_site_of(right_enzyme)) if right_enzyme else ""),
         warnings=tuple(rev_warnings),
     )
 
@@ -549,6 +647,12 @@ def design_pcr(
                 result.insert_orf_start = len(retained) - 3
             else:
                 result.insert_orf_start = region_at
+                if custom_primers and region_at % 3:
+                    result.warnings.append(
+                        "The edited forward primer places the target "
+                        f"{region_at % 3} nucleotide(s) out of the requested "
+                        "reading frame after digestion."
+                    )
             _check_frame(result, region)
 
     return result

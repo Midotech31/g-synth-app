@@ -16,6 +16,26 @@ export function annealingRows(primer: PcrPrimer) {
   };
 }
 
+export function PrimerTail({ primer }: { primer: PcrPrimer }) {
+  if (!primer.tail) return null;
+  const siteAt = primer.restriction_site
+    ? primer.tail.indexOf(primer.restriction_site)
+    : -1;
+  if (siteAt < 0) {
+    return <span className="annealing-clamp">{primer.tail}</span>;
+  }
+  const siteEnd = siteAt + primer.restriction_site.length;
+  return (
+    <>
+      {siteAt > 0 && <span className="annealing-clamp">{primer.tail.slice(0, siteAt)}</span>}
+      <span className="annealing-site">{primer.tail.slice(siteAt, siteEnd)}</span>
+      {siteEnd < primer.tail.length && (
+        <span className="annealing-spacer">{primer.tail.slice(siteEnd)}</span>
+      )}
+    </>
+  );
+}
+
 function AnnealingDiagram({ primer, label }: { primer: PcrPrimer; label: string }) {
   const rows = annealingRows(primer);
   return (
@@ -28,7 +48,7 @@ function AnnealingDiagram({ primer, label }: { primer: PcrPrimer; label: string 
         <div className="annealing-row">
           <span className="strand-label">Primer</span><b>5′</b>
           <code>
-            {primer.tail && <span className="annealing-unpaired">{primer.tail}</span>}
+            {primer.tail && <span className="annealing-unpaired"><PrimerTail primer={primer} /></span>}
             <span className="annealing-paired">{primer.anneals}</span>
           </code>
           <b>3′</b>
@@ -57,13 +77,41 @@ function AnnealingDiagram({ primer, label }: { primer: PcrPrimer; label: string 
   );
 }
 
-export default function PrimerAnnealingView({ forward, reverse }: {
+export default function PrimerAnnealingView({ forward, reverse, templateLength }: {
   forward: PcrPrimer;
   reverse: PcrPrimer;
+  templateLength?: number;
 }) {
   const hasTail = Boolean(forward.tail || reverse.tail);
+  const span = Math.max(templateLength ?? reverse.end, reverse.end, forward.end, 1);
+  const forwardLeft = Math.max(0, Math.min(100, (forward.start / span) * 100));
+  const forwardWidth = Math.max(2, ((forward.end - forward.start) / span) * 100);
+  const reverseLeft = Math.max(0, Math.min(100, (reverse.start / span) * 100));
+  const reverseWidth = Math.max(2, ((reverse.end - reverse.start) / span) * 100);
   return (
     <div className="primer-annealing-view">
+      <div className="primer-target-map" aria-label={`Primer positions on ${span}-base target`}>
+        <div className="primer-target-labels">
+          <strong>Target sequence</strong>
+          <span>{span} bp · 5′→3′</span>
+        </div>
+        <div className="primer-target-track">
+          <span
+            className="primer-target-hit forward"
+            style={{ left: `${forwardLeft}%`, width: `${forwardWidth}%` }}
+            title={`Forward primer: ${forward.start + 1}–${forward.end}`}
+          >→</span>
+          <span
+            className="primer-target-hit reverse"
+            style={{ left: `${reverseLeft}%`, width: `${reverseWidth}%` }}
+            title={`Reverse primer: ${reverse.start + 1}–${reverse.end}`}
+          >←</span>
+        </div>
+        <div className="primer-target-coordinates">
+          <span>Forward {forward.start + 1}–{forward.end} →</span>
+          <span>← Reverse {reverse.start + 1}–{reverse.end}</span>
+        </div>
+      </div>
       <div className="annealing-summary">
         <div className="annealing-step current">
           <span>Cycle 1</span>
@@ -86,7 +134,8 @@ export default function PrimerAnnealingView({ forward, reverse }: {
       <AnnealingDiagram primer={forward} label="Forward" />
       <AnnealingDiagram primer={reverse} label="Reverse" />
       <div className="duplex keys annealing-key">
-        <span className="key"><i style={{ background: "var(--amber)" }} /> 5′ tail — not hybridized in cycle 1</span>
+        {hasTail && <span className="key"><i className="key-clamp" /> terminal clamp — unpaired</span>}
+        {hasTail && <span className="key"><i className="key-site" /> restriction site — unpaired</span>}
         <span className="key"><i style={{ background: "var(--accent)" }} /> 3′ annealing region — base-paired</span>
         <span className="key"><code>|</code> Watson–Crick base pair</span>
       </div>

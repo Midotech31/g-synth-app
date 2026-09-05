@@ -99,6 +99,11 @@ does not duplicate identical sites; HindIII is included with its verified
 **Primer design and PCR simulation** are supporting tools. They distinguish a primer's hybridising 3′ region
 from its deliberately unpaired 5′ cloning tail, show how that tail enters the
 product after extension, and calculate complete diagnostic-digest fragments.
+Either conventional or cloning primers can be edited as complete 5′→3′ oligos;
+edited pairs must pass the same target-match, thermodynamic, restriction-site,
+reading-frame and digest checks before they can be ordered or transferred to
+cloning. The workbench maps both primer footprints on the target and draws the
+post-digest double strand with its exposed cohesive ends.
 Predicted agarose gels offer explicit generic 100 bp, 1 kb and broad-range
 marker sizes. Every gel is permanently labelled as an in-silico size
 prediction, not an experimental image.

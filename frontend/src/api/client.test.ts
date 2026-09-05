@@ -541,6 +541,21 @@ describe("PCR design", () => {
       start_codon_mode: "use_site",
     });
   });
+
+  it("sends edited primer sequences for server-side revalidation", async () => {
+    serve(() => json(200, {}));
+
+    await client.api.pcr({
+      template: "ATGAAAGGTGAAGAATTGTTCACCGGTGTTGTTCCGATTCTG",
+      forward_primer: "AACCGGCATATGAAAGGTGAAGAATTGTT",
+      reverse_primer: "TTGGCCCTCGAGCAGAATCGGAACAACAC",
+    });
+
+    expect(JSON.parse(String(calls[0].init.body))).toMatchObject({
+      forward_primer: "AACCGGCATATGAAAGGTGAAGAATTGTT",
+      reverse_primer: "TTGGCCCTCGAGCAGAATCGGAACAACAC",
+    });
+  });
 });
 
 describe("hybridization analysis", () => {

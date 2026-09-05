@@ -382,6 +382,8 @@ export type PcrPrimer = {
   tm_full: number;
   gc: number;
   enzyme: string | null;
+  /** Recognition sequence as it appears in this primer's 5′→3′ orientation. */
+  restriction_site: string;
   has_gc_clamp: boolean;
   warnings: string[];
 };
@@ -421,6 +423,7 @@ export type PcrResult = {
   problems: string[];
   warnings: string[];
   is_clean: boolean;
+  primer_source: "automatic" | "custom";
   /** Null for conventional PCR, and when a problem blocks the digest. */
   digest: PcrDigest | null;
   gel?: GelSimulation;
@@ -438,6 +441,8 @@ export type PcrParams = {
   keep_frame?: boolean;
   start_codon_mode?: "use_site" | "keep_both";
   name?: string;
+  forward_primer?: string | null;
+  reverse_primer?: string | null;
 };
 
 export type OptimiseParams = {

@@ -1738,6 +1738,7 @@ def _primer_payload(primer) -> dict:
         "tm_full": primer.tm_full,
         "gc": primer.gc,
         "enzyme": primer.enzyme,
+        "restriction_site": primer.restriction_site,
         "has_gc_clamp": primer.has_gc_clamp,
         "warnings": list(primer.warnings),
     }
@@ -1773,6 +1774,8 @@ class PcrView(APIView):
                 keep_frame=data["keep_frame"],
                 start_codon_mode=data["start_codon_mode"],
                 name=data["name"],
+                forward_primer=data["forward_primer"],
+                reverse_primer=data["reverse_primer"],
             )
         except SequenceError as error:
             return _bad_request(error)
@@ -1792,6 +1795,7 @@ class PcrView(APIView):
             "problems": result.problems,
             "warnings": result.warnings,
             "is_clean": result.is_clean,
+            "primer_source": "custom" if data["forward_primer"] is not None else "automatic",
             "digest": None,
             "gel": _gel_simulation(
                 "Predicted PCR product",

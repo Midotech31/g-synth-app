@@ -18,6 +18,7 @@ const primer: PcrPrimer = {
   tm_full: 72,
   gc: 55,
   enzyme: "HindIII",
+  restriction_site: "AAGCTT",
   has_gc_clamp: true,
   warnings: [],
 };
@@ -35,5 +36,7 @@ describe("primer/template annealing view", () => {
     expect(screen.getAllByText(/intentionally unpaired in cycle 1/i)).toHaveLength(2);
     expect(screen.getAllByText(/only the 8-nt 3′ region hybridizes/i)).toHaveLength(2);
     expect(screen.getByText(/tail-derived restriction sites now have complements/i)).toBeInTheDocument();
+    expect(screen.getAllByText("AAGCTT")).toHaveLength(2);
+    expect(screen.getAllByText("AAGCTT")[0]).toHaveClass("annealing-site");
   });
 });

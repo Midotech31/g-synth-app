@@ -477,6 +477,12 @@ class PcrRequestSerializer(serializers.Serializer):
         ),
     )
     name = serializers.CharField(max_length=60, required=False, default="product")
+    forward_primer = serializers.CharField(
+        max_length=300, required=False, allow_null=True, default=None,
+    )
+    reverse_primer = serializers.CharField(
+        max_length=300, required=False, allow_null=True, default=None,
+    )
 
     def validate(self, attrs):
         end = attrs.get("target_end")
@@ -495,5 +501,9 @@ class PcrRequestSerializer(serializers.Serializer):
             raise serializers.ValidationError({
                 "right_enzyme": "The two enzymes must differ, otherwise the "
                                 "insert could ligate in either orientation."
+            })
+        if (attrs.get("forward_primer") is None) != (attrs.get("reverse_primer") is None):
+            raise serializers.ValidationError({
+                "reverse_primer": "Enter both custom primer sequences, or neither."
             })
         return attrs

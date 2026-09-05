@@ -229,6 +229,28 @@ class TestTheResponseMatchesTheEngine:
         assert clone.status_code == 200, clone.data
         assert clone.data["is_clonable"]
 
+    def test_edited_primers_are_reanalysed_and_identified(self, auth_client):
+        designed = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI")
+        forward_primer = "AACCGG" + designed.forward.sequence[6:]
+        reverse_primer = "TTGGCC" + designed.reverse.sequence[6:]
+        response = auth_client.post(
+            reverse("design-pcr"),
+            {
+                "template": GENE,
+                "left_enzyme": "NdeI",
+                "right_enzyme": "XhoI",
+                "forward_primer": forward_primer,
+                "reverse_primer": reverse_primer,
+            },
+            format="json",
+        )
+
+        assert response.status_code == 200
+        assert response.data["primer_source"] == "custom"
+        assert response.data["forward"]["sequence"] == forward_primer
+        assert response.data["forward"]["restriction_site"] == "CATATG"
+        assert response.data["digest"] is not None
+
 
 @pytest.mark.django_db
 class TestSitesInsideTheGene:

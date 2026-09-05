@@ -53,3 +53,29 @@ test("authentication and home have no serious accessibility violations", async (
   const homeResults = await new AxeBuilder({ page }).analyze();
   expect(homeResults.violations.filter((violation) => ["critical", "serious"].includes(violation.impact ?? ""))).toEqual([]);
 });
+
+test("edited cloning primers are revalidated before cloning", async ({ page }) => {
+  await createAccount(page, `primers-${Date.now()}`);
+  await page.getByRole("navigation", { name: "Workspace" })
+    .getByRole("link", { name: "Primers & PCR", exact: true }).click();
+  await page.getByLabel("Sequence to amplify (A/C/G/T)").fill(
+    "ATGACCACCAGCAAACTGGGCAAAGGCCTGGGCTATATTGGCAACAACGGCGCGCACATGGGCTTAAACTTAGCATTACTGGGCCTGGCGAGCCTGCTGGGCAAAGGCATTAGCAAACTGGGC",
+  );
+  await page.getByRole("button", { name: "Design PCR" }).click();
+  await expect(page.getByText("G-Synth design", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit primers" }).click();
+  await page.getByLabel("Forward primer (5′→3′)").fill(
+    "AACCGGCATATGACCACCAGCAAACTGGGC",
+  );
+  await expect(page.getByText("Edited primers need validation")).toBeVisible();
+  await page.getByRole("button", { name: "Revalidate primers" }).click();
+
+  await expect(page.getByText("Edited · validated", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Nucleotide-level digested insert and cohesive ends")).toBeVisible();
+  await expect(page.getByText("5′-TA", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations.filter((violation) => ["critical", "serious"].includes(violation.impact ?? ""))).toEqual([]);
+});

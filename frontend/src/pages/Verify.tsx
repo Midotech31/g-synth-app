@@ -291,7 +291,7 @@ export default function Verify() {
       >
         {error && <div className="notice notice-error" role="alert" id="verify-error">{error}</div>}
 
-        <div className="design-layout">
+        <div className="design-layout verify-layout">
           {/* ── Pick the construct ─────────────────────────────────────── */}
           <div className="card">
             <div className="card-head"><h2>Construct</h2></div>

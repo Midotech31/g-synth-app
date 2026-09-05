@@ -194,6 +194,66 @@ class TestCloningTails:
             )
 
 
+class TestEditedPrimers:
+    def test_an_automatic_pair_can_be_edited_and_revalidated(self):
+        designed = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI")
+        edited_forward = "AACCGG" + designed.forward.sequence[6:]
+        edited_reverse = "TTGGCC" + designed.reverse.sequence[6:]
+
+        result = design_pcr(
+            GENE,
+            left_enzyme="NdeI",
+            right_enzyme="XhoI",
+            forward_primer=edited_forward,
+            reverse_primer=edited_reverse,
+        )
+
+        assert result.forward.sequence == edited_forward
+        assert result.reverse.sequence == edited_reverse
+        assert result.forward.anneals == designed.forward.anneals
+        assert result.reverse.anneals == designed.reverse.anneals
+        assert result.digest is not None
+
+    def test_conventional_primers_can_change_annealing_length(self):
+        forward = GENE[:24]
+        reverse = reverse_complement(GENE[-25:])
+        result = design_pcr(
+            GENE, forward_primer=forward, reverse_primer=reverse,
+        )
+
+        assert result.forward.sequence == forward
+        assert result.reverse.sequence == reverse
+        assert result.forward.tail == result.reverse.tail == ""
+        assert result.product == GENE
+
+    def test_a_custom_primer_without_a_three_prime_target_match_is_refused(self):
+        designed = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI")
+        with pytest.raises(SequenceError, match="exact 3′ match"):
+            design_pcr(
+                GENE,
+                left_enzyme="NdeI",
+                right_enzyme="XhoI",
+                forward_primer="G" * len(designed.forward.sequence),
+                reverse_primer=designed.reverse.sequence,
+            )
+
+    def test_a_custom_cloning_primer_must_retain_the_selected_site(self):
+        designed = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI")
+        with pytest.raises(SequenceError, match="selected NdeI site"):
+            design_pcr(
+                GENE,
+                left_enzyme="NdeI",
+                right_enzyme="XhoI",
+                forward_primer="AACCGG" + designed.forward.anneals,
+                reverse_primer=designed.reverse.sequence,
+            )
+
+    def test_both_custom_primers_are_required(self):
+        designed = design_pcr(GENE)
+        with pytest.raises(SequenceError, match="both custom primer"):
+            design_pcr(GENE, forward_primer=designed.forward.sequence)
+
+
 class TestTheDigest:
     """What cutting the product actually leaves."""
 
