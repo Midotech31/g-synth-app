@@ -79,6 +79,9 @@ export default function AuthShell({ eyebrow, title, description, children, foote
           {children}
         </div>
         <p className="auth-alt">{footer}</p>
+        <p className="auth-signature">
+          Designed by <strong>Prof. Merzoug Mohamed</strong>
+        </p>
       </main>
     </div>
   );

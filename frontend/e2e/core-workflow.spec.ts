@@ -46,12 +46,35 @@ test("mobile navigation is complete and does not widen the viewport", async ({ p
 
 test("authentication and home have no serious accessibility violations", async ({ page }) => {
   await page.goto("/login");
+  await expect(page.getByText("Designed by Prof. Merzoug Mohamed", { exact: true })).toBeVisible();
   const loginResults = await new AxeBuilder({ page }).analyze();
   expect(loginResults.violations.filter((violation) => ["critical", "serious"].includes(violation.impact ?? ""))).toEqual([]);
 
   await createAccount(page, `a11y-${Date.now()}`);
   const homeResults = await new AxeBuilder({ page }).analyze();
   expect(homeResults.violations.filter((violation) => ["critical", "serious"].includes(violation.impact ?? ""))).toEqual([]);
+});
+
+test("every scientific workspace uses the available width without page overflow", async ({ page }) => {
+  await createAccount(page, `layouts-${Date.now()}`);
+  const workspaces = [
+    "/optimise", "/design", "/pcr", "/hybridize", "/clone", "/verify", "/align",
+  ];
+
+  for (const route of workspaces) {
+    await page.goto(route);
+    const layout = page.locator(".design-layout").first();
+    await expect(layout).toBeVisible();
+    expect(await layout.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const route of workspaces) {
+    await page.goto(route);
+    await expect(page.locator(".design-layout").first()).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
 });
 
 test("edited cloning primers are revalidated before cloning", async ({ page }) => {
