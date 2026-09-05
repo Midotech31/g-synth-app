@@ -140,9 +140,11 @@ export default function Design() {
   }
 
   const verified = result !== null && result.verification.length === 0;
-  const assemblyComplete = verified
-    && assembledToken !== ""
-    && assembledToken === assemblyTokenFor(result);
+  const requiresFragmentAssembly = (result?.fragment_count ?? 0) >= 2;
+  const assemblyComplete = verified && (
+    !requiresFragmentAssembly
+    || (assembledToken !== "" && assembledToken === assemblyTokenFor(result))
+  );
   const preflightPassed = verified && (result?.preflight?.can_export ?? true);
   const canExport = preflightPassed && assemblyComplete;
 
@@ -181,7 +183,7 @@ export default function Design() {
   }
 
   function simulateAssembly() {
-    if (!result || !verified) return;
+    if (!result || !verified || !requiresFragmentAssembly) return;
     setAssembledToken(assemblyTokenFor(result));
   }
 
@@ -189,7 +191,9 @@ export default function Design() {
     ? "Designing…"
     : result === null
       ? ""
-      : assemblyComplete
+      : verified && !requiresFragmentAssembly
+        ? `Single-fragment design ready: one ${result.construct_length} bp duplex; no fragment assembly is required.`
+        : assemblyComplete
         ? `ESD assembly complete: ${result.fragment_count} fragments reconstruct one ${result.construct_length} bp duplex.`
         : verified
           ? `ESD plan ready: ${result.fragment_count} fragments, ${result.oligo_count} oligos to order.`
@@ -307,8 +311,14 @@ export default function Design() {
                   </div>
                   {verified ? (
                     <div className="design-verdict-copy">
-                      <strong>ESD plan verified</strong>
-                      <span>The fragment set is internally consistent and ready for assembly simulation.</span>
+                      <strong>
+                        {requiresFragmentAssembly ? "ESD plan verified" : "Single-fragment design verified"}
+                      </strong>
+                      <span>
+                        {requiresFragmentAssembly
+                          ? "The fragment set is internally consistent and ready for assembly simulation."
+                          : "No inter-fragment assembly is required; proceed to duplex hybridization."}
+                      </span>
                     </div>
                   ) : (
                     <div className="design-verdict-copy">
@@ -371,63 +381,65 @@ export default function Design() {
                   </div>
                 </div>
 
-                <div className={`card esd-assembly-card ${assemblyComplete ? "complete" : ""}`}>
-                  <div className="card-head">
-                    <div className="grow">
-                      <h2>ESD fragment assembly</h2>
-                      <span className="label">1. Assemble the designed fragments</span>
+                {requiresFragmentAssembly && (
+                  <div className={`card esd-assembly-card ${assemblyComplete ? "complete" : ""}`}>
+                    <div className="card-head">
+                      <div className="grow">
+                        <h2>ESD fragment assembly</h2>
+                        <span className="label">1. Assemble the designed fragments</span>
+                      </div>
+                      <span className={`pill ${assemblyComplete ? "pill-ok" : "pill-warn"}`}>
+                        {assemblyComplete ? "Assembled" : "Pending"}
+                      </span>
                     </div>
-                    <span className={`pill ${assemblyComplete ? "pill-ok" : "pill-warn"}`}>
-                      {assemblyComplete ? "Assembled" : "Pending"}
-                    </span>
-                  </div>
-                  <div className="card-body">
-                    <div className="esd-assembly-scroll" aria-label="ESD fragment assembly order">
-                      <div className="esd-fragment-chain">
-                        {result.fragments.map((fragment, index) => (
-                          <div className="esd-fragment-step" key={fragment.index}>
-                            <div className="esd-fragment-node">
-                              <strong>{fragment.name}</strong>
-                              <small>{fragment.forward_length} / {fragment.reverse_length} nt</small>
-                            </div>
-                            {index < result.fragments.length - 1 && (
-                              <div className="esd-junction-node">
-                                <span>{result.junction_overhangs[index]}</span>
-                                <Icon name="arrowRight" size={16} />
+                    <div className="card-body">
+                      <div className="esd-assembly-scroll" aria-label="ESD fragment assembly order">
+                        <div className="esd-fragment-chain">
+                          {result.fragments.map((fragment, index) => (
+                            <div className="esd-fragment-step" key={fragment.index}>
+                              <div className="esd-fragment-node">
+                                <strong>{fragment.name}</strong>
+                                <small>{fragment.forward_length} / {fragment.reverse_length} nt</small>
                               </div>
-                            )}
-                          </div>
-                        ))}
-                        <div className={`esd-product-node ${assemblyComplete ? "complete" : ""}`}>
-                          <Icon name={assemblyComplete ? "check" : "helix"} size={20} />
-                          <div>
-                            <strong>Assembled duplex</strong>
-                            <small>{result.construct_length} bp</small>
+                              {index < result.fragments.length - 1 && (
+                                <div className="esd-junction-node">
+                                  <span>{result.junction_overhangs[index]}</span>
+                                  <Icon name="arrowRight" size={16} />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          <div className={`esd-product-node ${assemblyComplete ? "complete" : ""}`}>
+                            <Icon name={assemblyComplete ? "check" : "helix"} size={20} />
+                            <div>
+                              <strong>Assembled duplex</strong>
+                              <small>{result.construct_length} bp</small>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="esd-assembly-action">
-                      <div>
-                        <strong>{assemblyComplete ? "Exact reconstruction confirmed" : "Assembly simulation required"}</strong>
-                        <span>
-                          {assemblyComplete
-                            ? "The assembled forward and reverse strands are now fixed for hybridization."
-                            : "G-Synth will ligate the fragments in order and verify both reconstructed strands."}
-                        </span>
+                      <div className="esd-assembly-action">
+                        <div>
+                          <strong>{assemblyComplete ? "Exact reconstruction confirmed" : "Assembly simulation required"}</strong>
+                          <span>
+                            {assemblyComplete
+                              ? "The assembled forward and reverse strands are now fixed for hybridization."
+                              : "G-Synth will ligate the fragments in order and verify both reconstructed strands."}
+                          </span>
+                        </div>
+                        <button
+                          className="btn btn-primary"
+                          type="button"
+                          onClick={simulateAssembly}
+                          disabled={!preflightPassed || assemblyComplete}
+                        >
+                          <Icon name={assemblyComplete ? "check" : "plate"} size={17} />
+                          {assemblyComplete ? "Assembly complete" : "Assemble fragments"}
+                        </button>
                       </div>
-                      <button
-                        className="btn btn-primary"
-                        type="button"
-                        onClick={simulateAssembly}
-                        disabled={!preflightPassed || assemblyComplete}
-                      >
-                        <Icon name={assemblyComplete ? "check" : "plate"} size={17} />
-                        {assemblyComplete ? "Assembly complete" : "Assemble fragments"}
-                      </button>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div className="card">
                   <div className="card-head">
@@ -485,7 +497,11 @@ export default function Design() {
                   <div className="card-head">
                     <div style={{ flex: 1 }}>
                       <h2>Hybridization</h2>
-                      <span className="label">2. Verify the assembled duplex before cloning</span>
+                      <span className="label">
+                        {requiresFragmentAssembly
+                          ? "2. Verify the assembled duplex before cloning"
+                          : "Verify the designed duplex before cloning"}
+                      </span>
                     </div>
                     <div className="seg-toggle" role="group" aria-label="Hybridization detail level">
                       {(["simple", "detailed"] as const).map((level) => (
@@ -502,7 +518,7 @@ export default function Design() {
                     </div>
                   </div>
                   <div className="card-body">
-                    {!assemblyComplete && (
+                    {requiresFragmentAssembly && !assemblyComplete && (
                       <div className="notice notice-info compact">
                         Complete the ESD fragment assembly above to fix the duplex used here and in cloning.
                       </div>

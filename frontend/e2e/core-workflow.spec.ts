@@ -1,6 +1,10 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+const MULTI_FRAGMENT_INSERT = (
+  "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGC"
+).repeat(4) + "TAA";
+
 async function createAccount(page, suffix: string) {
   await page.goto("/signup");
   await page.getByLabel("Full name").fill("Dr G Synth");
@@ -16,6 +20,7 @@ test("design proceeds through hybridization to restriction cloning", async ({ pa
   await page.getByRole("navigation", { name: "Workspace" }).getByRole("link", { name: "Design", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Design a construct" })).toBeVisible();
 
+  await page.getByLabel("Sequence (A/C/G/T)").fill(MULTI_FRAGMENT_INSERT);
   await page.getByRole("button", { name: "Design", exact: true }).click();
   await expect(page.getByText("ESD plan verified", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Verify hybridization/ })).toBeDisabled();
@@ -40,6 +45,20 @@ test("design proceeds through hybridization to restriction cloning", async ({ pa
   await expect(page.getByRole("heading", { name: "Expression reading frame" })).toBeVisible();
   await expect(page.locator(".frame-assessment").getByText("Confirmed", { exact: true })).toBeVisible();
   await expect(page.locator(".frame-assessment").getByText("8 nt to ATG", { exact: true })).toBeVisible();
+});
+
+test("a single-fragment design bypasses inter-fragment assembly", async ({ page }) => {
+  await createAccount(page, `single-fragment-${Date.now()}`);
+  await page.getByRole("navigation", { name: "Workspace" })
+    .getByRole("link", { name: "Design", exact: true }).click();
+
+  await page.getByRole("button", { name: "Design", exact: true }).click();
+
+  await expect(page.getByText("Single-fragment design verified", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "ESD fragment assembly" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Assemble fragments" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Export all sequences" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /Verify hybridization/ })).toBeEnabled();
 });
 
 test("mobile navigation is complete and does not widen the viewport", async ({ page }) => {
