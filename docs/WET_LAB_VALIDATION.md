@@ -2,7 +2,7 @@
 
 **Status:** protocol ready; no physical run has been claimed.
 
-The automated release gate exercises Design → Hybridisation → restriction cloning → sequencing-primer design
+The automated release gate exercises Design → fragment assembly → Hybridisation → restriction cloning → sequencing-primer design
 → exact read placement against the released plasmid. It proves software
 coherence, not that digestion, ligation, transformation, expression, or Sanger
 sequencing succeeded at the bench. A physical run requires laboratory staff,

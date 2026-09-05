@@ -1380,6 +1380,39 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .design-hybrid-core small { color: var(--ink-soft); line-height: 1.45; }
 .design-hybrid-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 0.55rem; margin-top: 0.9rem; padding-top: 0.85rem; border-top: 1px solid var(--line); }
 .design-hybrid-next-copy { flex: 1 1 280px; color: var(--ink-soft); font-size: 0.76rem; line-height: 1.45; }
+.btn-small { min-height: 36px; padding: 0.45rem 0.7rem; font-size: 0.78rem; }
+.esd-assembly-card.complete { border-color: #9bc6ab; }
+.esd-assembly-scroll { max-width: 100%; overflow-x: auto; padding-bottom: 0.3rem; }
+.esd-fragment-chain { width: max-content; min-width: 100%; display: flex; align-items: center; gap: 0.55rem; }
+.esd-fragment-step { display: flex; align-items: center; gap: 0.55rem; }
+.esd-fragment-node,
+.esd-product-node {
+  min-width: 112px;
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--paper);
+}
+.esd-fragment-node { flex-direction: column; align-items: flex-start; gap: 0.12rem; }
+.esd-fragment-node small,
+.esd-product-node small { display: block; color: var(--muted); font-size: 0.7rem; }
+.esd-junction-node { display: flex; align-items: center; gap: 0.25rem; color: var(--amber); }
+.esd-junction-node span { font-family: var(--mono); font-size: 0.68rem; font-weight: 700; }
+.esd-product-node { min-width: 170px; border-style: dashed; }
+.esd-product-node.complete { border-style: solid; border-color: #9bc6ab; background: #eef7f1; color: #286442; }
+.esd-assembly-action {
+  margin-top: 0.9rem;
+  padding-top: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-top: 1px solid var(--line);
+}
+.esd-assembly-action > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.esd-assembly-action span { color: var(--ink-soft); font-size: 0.76rem; line-height: 1.45; }
 .transferred-enzyme-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1772,6 +1805,8 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .hybrid-stats .stat-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workflow-next-card { align-items: stretch; flex-direction: column; }
   .workflow-next-card .btn, .design-hybrid-actions .btn { width: 100%; }
+  .esd-assembly-action { align-items: stretch; flex-direction: column; }
+  .esd-assembly-action .btn { width: 100%; }
   .core-workflow-trail {
     width: 100%;
     max-width: none;

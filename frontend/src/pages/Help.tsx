@@ -27,7 +27,8 @@ const SECTIONS: Section[] = [
     summary: "Use Small Sequence Design (SSD) for one oligo pair or Extended Sequence Design (ESD) for tiled pairs.",
     points: [
       "Choose the tag, linker, protease site, and the enzyme pair the cassette will carry at each end.",
-      "The page hands back the oligos to order, a bench protocol, and the hybridisation view — both strands drawn aligned, with the overhangs showing.",
+      "Assemble the designed fragments first; G-Synth fixes the exact reconstructed duplex before hybridization and carries that same sequence into cloning.",
+      "Export all sequences writes the assembled forward and reverse strands and every order oligo into one multi-FASTA file.",
       "Nothing can be downloaded until re-ligating the fragments in silico reproduces the construct base for base, on both strands, with the sticky ends the chosen enzymes actually leave.",
     ],
   },
@@ -37,7 +38,7 @@ const SECTIONS: Section[] = [
     points: [
       "Both ordered molecules remain entered 5′→3′; G-Synth reverses the partner only in the physical drawing so the duplex is antiparallel.",
       "The result always includes both the compact pairing overview and a nucleotide-level double-strand view, with mismatches and exposed 5′/3′ cohesive ends distinguished.",
-      "A design transfer runs the hybridization automatically and carries its verified strands and enzyme pair into restriction cloning in one click.",
+      "An assembled-design transfer runs the hybridization automatically and carries those same verified strands and enzyme pair into restriction cloning in one click.",
     ],
   },
   {

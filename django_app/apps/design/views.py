@@ -1602,7 +1602,7 @@ class CloneWorksheetView(APIView):
 
 
 class ConstructExportView(APIView):
-    """POST /api/design/assembly/export/ — the construct, or its oligos.
+    """POST /api/design/assembly/export/ — construct and oligo sequences.
 
     `filetype=oligos` gives one FASTA entry per oligo, which is what a supplier
     accepts as an upload. Retyping thirty oligo names into a web form is
@@ -1631,6 +1631,26 @@ class ConstructExportView(APIView):
                     [o.as_row for o in order_sheet(plan, construct_name=name)]
                 ),
                 f"{safe}_oligos.fasta", "text/plain; charset=utf-8",
+            )
+        if wanted == "all-sequences":
+            sequence_set = "".join([
+                to_fasta(
+                    plan.construct_forward,
+                    name=f"{safe}_assembled_forward",
+                    description="assembled construct, forward strand, 5-prime to 3-prime",
+                ),
+                to_fasta(
+                    plan.construct_reverse,
+                    name=f"{safe}_assembled_reverse",
+                    description="assembled construct, reverse strand, 5-prime to 3-prime",
+                ),
+                oligos_to_fasta(
+                    [o.as_row for o in order_sheet(plan, construct_name=name)]
+                ),
+            ])
+            return _attachment(
+                sequence_set,
+                f"{safe}_all_sequences.fasta", "text/plain; charset=utf-8",
             )
         if wanted == "fasta":
             return _attachment(

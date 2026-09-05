@@ -35,10 +35,19 @@ const DEFAULTS: DesignParams = {
   overhang_length: 4,
 };
 
+function assemblyTokenFor(result: AssemblyResult | null) {
+  if (!result) return "";
+  return result.provenance?.output_sha256
+    ?? `${result.construct_length}:${result.construct_forward}:${result.construct_reverse}`;
+}
+
 export default function Design() {
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [params, setParams, clearParams] = useWorkspaceState<DesignParams>("design.params", DEFAULTS);
   const [result, setResult, clearResult] = useWorkspaceState<AssemblyResult | null>("design.result", null);
+  const [assembledToken, setAssembledToken, clearAssembledToken] = useWorkspaceState(
+    "design.assembledToken", "",
+  );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved, clearSaved] = useWorkspaceState("design.saved", "");
@@ -63,6 +72,7 @@ export default function Design() {
         ...(typeof handed.isCoding === "boolean" ? { is_coding: handed.isCoding } : {}),
       }));
       setResult(null);
+      setAssembledToken("");
     }
   }, [location.state]);
 
@@ -76,6 +86,7 @@ export default function Design() {
     <K extends keyof DesignParams>(key: K, value: DesignParams[K]) => {
       setParams((current) => ({ ...current, [key]: value }));
       setResult(null);
+      setAssembledToken("");
       setSaved("");
     },
     [],
@@ -88,6 +99,7 @@ export default function Design() {
     try {
       const data = await api.designAssembly({ ...params, save_as_project: saveAsProject });
       setResult(data);
+      setAssembledToken((current) => current === assemblyTokenFor(data) ? current : "");
       if (data.project_id) setSaved(`Saved to your projects (#${data.project_id}).`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "The design failed.");
@@ -110,11 +122,14 @@ export default function Design() {
     }
   }
 
-  /** Take the construct out: GenBank for a viewer, FASTA for a supplier. */
-  async function exportConstruct(filetype: "genbank" | "fasta" | "oligos" | "sbol3") {
+  async function exportConstruct(
+    filetype: "genbank" | "fasta" | "oligos" | "all-sequences" | "sbol3",
+  ) {
     const safe = (params.name || "construct").replace(/\s+/g, "_");
     const names = { genbank: `${safe}.gb`, fasta: `${safe}.fasta`,
-                    oligos: `${safe}_oligos.fasta`, sbol3: `${safe}.sbol.json` };
+                    oligos: `${safe}_oligos.fasta`,
+                    "all-sequences": `${safe}_all_sequences.fasta`,
+                    sbol3: `${safe}.sbol.json` };
     try {
       await api.download(
         `/api/design/assembly/export/?filetype=${filetype}`, params, names[filetype],
@@ -125,12 +140,17 @@ export default function Design() {
   }
 
   const verified = result !== null && result.verification.length === 0;
-  const canExport = verified && (result?.preflight?.can_export ?? true);
+  const assemblyComplete = verified
+    && assembledToken !== ""
+    && assembledToken === assemblyTokenFor(result);
+  const preflightPassed = verified && (result?.preflight?.can_export ?? true);
+  const canExport = preflightPassed && assemblyComplete;
 
   function clearWorkspace() {
     clearParams();
     clearResult();
     clearSaved();
+    clearAssembledToken();
     setError("");
     setExportOpen(false);
     setCopied(false);
@@ -138,7 +158,7 @@ export default function Design() {
   }
 
   function inspectHybridization() {
-    if (!result) return;
+    if (!result || !assemblyComplete) return;
     navigate("/hybridize", {
       state: {
         tool: "hybridization",
@@ -160,14 +180,19 @@ export default function Design() {
     window.setTimeout(() => setCopied(false), 1800);
   }
 
-  // The verdict is the reason for the wait, so it is what gets said. The
-  // error has its own alert; repeating it here would announce it twice.
+  function simulateAssembly() {
+    if (!result || !verified) return;
+    setAssembledToken(assemblyTokenFor(result));
+  }
+
   const status = busy
     ? "Designing…"
     : result === null
       ? ""
-      : verified
-        ? `Assembly reconstruction verified: ${result.fragment_count} fragments, ${result.oligo_count} oligos to order.`
+      : assemblyComplete
+        ? `ESD assembly complete: ${result.fragment_count} fragments reconstruct one ${result.construct_length} bp duplex.`
+        : verified
+          ? `ESD plan ready: ${result.fragment_count} fragments, ${result.oligo_count} oligos to order.`
         : "Design failed verification. Do not order these oligos.";
 
   return (
@@ -205,6 +230,9 @@ export default function Design() {
               role="menu"
               aria-label="Export formats"
             >
+              <button role="menuitem" onClick={() => void exportConstruct("all-sequences")}>
+                All sequences FASTA
+              </button>
               <button role="menuitem" onClick={() => void download("order-sheet")}>Oligo CSV</button>
               <button role="menuitem" onClick={() => void exportConstruct("oligos")}>Oligo FASTA</button>
               <button role="menuitem" onClick={() => void download("protocol")}>Protocol</button>
@@ -237,6 +265,7 @@ export default function Design() {
                   setExperience("guided");
                   setParams((current) => ({ ...current, cleavage_site: "Thrombin", include_his_tag: true, include_linkers: true, remove_stop: false, target_oligo_length: 90, overhang_length: 4 }));
                   setResult(null);
+                  setAssembledToken("");
                 }}>Guided</button>
                 <button className={experience === "expert" ? "active" : ""} onClick={() => setExperience("expert")}>Expert</button>
               </div>
@@ -278,8 +307,8 @@ export default function Design() {
                   </div>
                   {verified ? (
                     <div className="design-verdict-copy">
-                      <strong>Assembly verified</strong>
-                      <span>Annealing these oligo pairs and ligating them in order reproduces the construct exactly, on both strands.</span>
+                      <strong>ESD plan verified</strong>
+                      <span>The fragment set is internally consistent and ready for assembly simulation.</span>
                     </div>
                   ) : (
                     <div className="design-verdict-copy">
@@ -289,7 +318,7 @@ export default function Design() {
                   )}
                   {verified && (
                     <div className="design-verdict-date">
-                      <span>Assembly checked on</span>
+                      <span>Design checked on</span>
                       <strong>{new Intl.DateTimeFormat("en-GB", {
                         day: "2-digit", month: "short", year: "numeric",
                       }).format(new Date())}</strong>
@@ -338,6 +367,64 @@ export default function Design() {
                           <small className="widened">widened</small>
                         )}
                       </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`card esd-assembly-card ${assemblyComplete ? "complete" : ""}`}>
+                  <div className="card-head">
+                    <div className="grow">
+                      <h2>ESD fragment assembly</h2>
+                      <span className="label">1. Assemble the designed fragments</span>
+                    </div>
+                    <span className={`pill ${assemblyComplete ? "pill-ok" : "pill-warn"}`}>
+                      {assemblyComplete ? "Assembled" : "Pending"}
+                    </span>
+                  </div>
+                  <div className="card-body">
+                    <div className="esd-assembly-scroll" aria-label="ESD fragment assembly order">
+                      <div className="esd-fragment-chain">
+                        {result.fragments.map((fragment, index) => (
+                          <div className="esd-fragment-step" key={fragment.index}>
+                            <div className="esd-fragment-node">
+                              <strong>{fragment.name}</strong>
+                              <small>{fragment.forward_length} / {fragment.reverse_length} nt</small>
+                            </div>
+                            {index < result.fragments.length - 1 && (
+                              <div className="esd-junction-node">
+                                <span>{result.junction_overhangs[index]}</span>
+                                <Icon name="arrowRight" size={16} />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        <div className={`esd-product-node ${assemblyComplete ? "complete" : ""}`}>
+                          <Icon name={assemblyComplete ? "check" : "helix"} size={20} />
+                          <div>
+                            <strong>Assembled duplex</strong>
+                            <small>{result.construct_length} bp</small>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="esd-assembly-action">
+                      <div>
+                        <strong>{assemblyComplete ? "Exact reconstruction confirmed" : "Assembly simulation required"}</strong>
+                        <span>
+                          {assemblyComplete
+                            ? "The assembled forward and reverse strands are now fixed for hybridization."
+                            : "G-Synth will ligate the fragments in order and verify both reconstructed strands."}
+                        </span>
+                      </div>
+                      <button
+                        className="btn btn-primary"
+                        type="button"
+                        onClick={simulateAssembly}
+                        disabled={!preflightPassed || assemblyComplete}
+                      >
+                        <Icon name={assemblyComplete ? "check" : "plate"} size={17} />
+                        {assemblyComplete ? "Assembly complete" : "Assemble fragments"}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -398,7 +485,7 @@ export default function Design() {
                   <div className="card-head">
                     <div style={{ flex: 1 }}>
                       <h2>Hybridization</h2>
-                      <span className="label">Required before cloning simulation</span>
+                      <span className="label">2. Verify the assembled duplex before cloning</span>
                     </div>
                     <div className="seg-toggle" role="group" aria-label="Hybridization detail level">
                       {(["simple", "detailed"] as const).map((level) => (
@@ -415,6 +502,11 @@ export default function Design() {
                     </div>
                   </div>
                   <div className="card-body">
+                    {!assemblyComplete && (
+                      <div className="notice notice-info compact">
+                        Complete the ESD fragment assembly above to fix the duplex used here and in cloning.
+                      </div>
+                    )}
                     <div className="design-hybrid-enzyme-row">
                       <EnzymePicker
                         id="hybrid-left-enzyme"
@@ -472,7 +564,15 @@ export default function Design() {
                 <div className="card">
                   <div className="card-head">
                     <h2 style={{ flex: 1 }}>Oligos to order</h2>
-                    <span className="label">Use Export for supplier files and protocol</span>
+                    <button
+                      className="btn btn-outline btn-small"
+                      type="button"
+                      onClick={() => void exportConstruct("all-sequences")}
+                      disabled={!canExport}
+                    >
+                      <Icon name="arrowRight" size={16} />
+                      Export all sequences
+                    </button>
                   </div>
                   <div className="table-scroll">
                     <table className="data">

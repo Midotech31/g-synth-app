@@ -17,13 +17,24 @@ test("design proceeds through hybridization to restriction cloning", async ({ pa
   await expect(page.getByRole("heading", { name: "Design a construct" })).toBeVisible();
 
   await page.getByRole("button", { name: "Design", exact: true }).click();
-  await expect(page.getByText("Assembly verified", { exact: true })).toBeVisible();
+  await expect(page.getByText("ESD plan verified", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Verify hybridization/ })).toBeDisabled();
+  await page.getByRole("button", { name: "Assemble fragments" }).click();
+  await expect(page.getByText("Exact reconstruction confirmed", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export all sequences" })).toBeEnabled();
+  const sequenceDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export all sequences" }).click();
+  expect((await sequenceDownload).suggestedFilename()).toBe("construct_all_sequences.fasta");
+  await page.setViewportSize({ width: 320, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole("button", { name: /Verify hybridization/ }).click();
 
   await expect(page.getByRole("heading", { name: "Hybridization evidence" })).toBeVisible();
+  const assembledTop = (await page.locator("#a").inputValue()).replace(/[^A-Za-z]/g, "");
   await page.getByRole("button", { name: /Simulate restriction cloning/ }).click();
   await expect(page).toHaveURL(/\/clone$/);
   await expect(page.getByRole("heading", { name: /Restriction enzyme cloning/ })).toBeVisible();
+  await expect(page.getByText(new RegExp(`${assembledTop.length} bp with`))).toBeVisible();
   await expect(page.evaluate(() => window.scrollY)).resolves.toBe(0);
   await page.getByRole("button", { name: "Simulate digestion" }).click();
   await expect(page.getByRole("heading", { name: "Expression reading frame" })).toBeVisible();

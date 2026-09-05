@@ -39,10 +39,12 @@ however favourable its host codons are.
 emits one forward/reverse synthesis pair for a compact construct.
 **Extended Sequence Design (ESD)** tiles a longer construct into F/R pairs
 with complementary 4–8 nt overhangs that ligate in one order, with no PCR.
-Both hand back the exact oligos to order, a bench protocol, and
-the hybridisation view: both strands drawn aligned, with the overhangs
-showing. Nothing can be downloaded until re-ligating the fragments in silico
-reproduces the construct base for base, on both strands — and until the two
+Both hand back the exact oligos to order, a bench protocol, and a single
+multi-FASTA export containing both assembled strands and every order oligo.
+The ESD workflow explicitly assembles the designed fragments before passing
+that fixed duplex to hybridisation and then restriction cloning. Nothing can
+be downloaded until re-ligating the fragments in silico reproduces the
+construct base for base, on both strands — and until the two
 outer ends, read off that molecule, are the sticky ends the chosen enzymes
 leave, on the right strands.
 
@@ -52,11 +54,11 @@ molecules must reconstruct both intended strands exactly before release. This
 specific claim does not imply priority over general gene-design, DNA-assembly
 or end-to-end construction software.
 
-**Hybridise** is the mandatory molecular gate between SSD/ESD and cloning.
+**Hybridise** is the mandatory molecular gate between assembled SSD/ESD and cloning.
 Both order molecules remain entered 5′→3′; G-Synth draws them antiparallel,
 distinguishes paired bases, mismatches and exposed 5′/3′ ends, and always shows
-both a compact end/core summary and a nucleotide-level double-strand view. A
-Design handoff runs this check automatically and transfers only an exact duplex
+both a compact end/core summary and a nucleotide-level double-strand view. An
+assembled Design handoff runs this check automatically and transfers only that exact duplex
 and its enzyme assignments to cloning. Alignment remains available as a separate
 mode for similarity comparison and may introduce gaps; hybridisation never
 hides a bulge or cohesive end behind a gap.

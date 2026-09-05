@@ -114,7 +114,7 @@ export default function Home() {
           <div className="card-body home-hero-body">
             <Logo size={64} />
             <div className="home-hero-copy">
-              <span className="label">Design → hybridize → restriction clone → validate</span>
+              <span className="label">Design → assemble → hybridize → restriction clone → validate</span>
               <h2>One auditable record from sequence intent to verified construct.</h2>
               <p>
                 Create synthesis-ready oligos, simulate the cloning geometry and bring the

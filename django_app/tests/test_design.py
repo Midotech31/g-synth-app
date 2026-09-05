@@ -1062,6 +1062,33 @@ class TestExport:
         assert records[0].id.startswith("EntA_")
         assert str(records[0].seq) == designed["oligos"][0]["Sequence (5'->3')"]
 
+    def test_all_sequences_export_contains_the_assembled_duplex_and_every_oligo(
+        self, auth_client,
+    ):
+        import io
+
+        from Bio import SeqIO
+
+        designed = auth_client.post(reverse("design-assembly"), {
+            "sequence": LONG_INSERT, "name": "EntA",
+        }).data
+        response = auth_client.post(
+            reverse("design-construct-export") + "?filetype=all-sequences",
+            {"sequence": LONG_INSERT, "name": "EntA"},
+        )
+        records = list(SeqIO.parse(io.StringIO(response.content.decode()), "fasta"))
+
+        assert response.status_code == 200
+        assert "EntA_all_sequences.fasta" in response["Content-Disposition"]
+        assert len(records) == designed["oligo_count"] + 2
+        assert records[0].id == "EntA_assembled_forward"
+        assert records[1].id == "EntA_assembled_reverse"
+        assert str(records[0].seq) == designed["construct_forward"]
+        assert str(records[1].seq) == designed["construct_reverse"]
+        assert [record.id for record in records[2:]] == [
+            row["Name"] for row in designed["oligos"]
+        ]
+
     def test_export_requires_authentication(self, api_client):
         for name in ("design-clone-export", "design-construct-export"):
             assert api_client.post(

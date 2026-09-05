@@ -26,7 +26,7 @@ single-process deployment has.
 | Extended Sequence Design | `POST /api/design/assembly/` | Oligo pairs, hybridisation view, verification |
 | Order sheet | `POST /api/design/assembly/order-sheet/` | CSV |
 | Bench protocol | `POST /api/design/assembly/protocol/` | Text, with the duplex in it |
-| Construct export | `POST /api/design/assembly/export/` | `filetype=genbank\|fasta\|oligos` |
+| Construct export | `POST /api/design/assembly/export/` | `filetype=genbank\|fasta\|oligos\|all-sequences\|sbol3` |
 | Cloning | `POST /api/design/clone/` | Recombinant plasmid, junctions, checks |
 | Plasmid export | `POST /api/design/clone/export/` | `filetype=genbank\|fasta` |
 | Sequencing primers | `POST /api/design/primers/` | Unique across both strands |
