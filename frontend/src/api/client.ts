@@ -62,6 +62,8 @@ export type Annotation = {
   /** Optional reading-frame bounds for coordinate-level translation. */
   translation_start?: number;
   translation_end?: number;
+  inferred?: boolean;
+  basis?: string;
 };
 
 export type DetectedFeature = {
@@ -265,7 +267,12 @@ export type RestrictionSite = Annotation & {
   wraps: boolean;
 };
 
-export type ValidationCheck = { check: string; passed: boolean; detail: string };
+export type ValidationCheck = {
+  check: string;
+  passed: boolean;
+  status?: "pass" | "review" | "block";
+  detail: string;
+};
 
 export type Orf = {
   start: number;
@@ -288,6 +295,35 @@ export type GelSimulation = {
   lanes: GelLane[];
 };
 
+export type ReadingFrameAssessment = {
+  status: "pass" | "review" | "block" | "not_applicable";
+  confirmed: boolean;
+  summary: string;
+  translation_start: number | null;
+  start_codon: string | null;
+  start_source: "declared" | "sequence_candidate" | null;
+  rbs_name: string | null;
+  rbs_start: number | null;
+  rbs_end: number | null;
+  rbs_spacing_nt: number | null;
+  rbs_source: "annotation" | "sequence_motif" | null;
+  promoter_name: string | null;
+  promoter_start: number | null;
+  promoter_source: "annotation" | "sequence_motif" | null;
+  stop_codon: string | null;
+  stop_position: number | null;
+  stop_context: string | null;
+  left_junction_offset: number | null;
+  right_junction_phase: number | null;
+  protein_length: number;
+  checks: {
+    code: string;
+    label: string;
+    status: "pass" | "review" | "block";
+    detail: string;
+  }[];
+};
+
 /** The recombinant plasmid: what you actually end up with. */
 export type CloneResult = {
   plasmid: string;
@@ -305,6 +341,7 @@ export type CloneResult = {
   right_enzyme: string;
   protein: string;
   protein_length: number;
+  reading_frame: ReadingFrameAssessment;
   /** True when the insert reads on the minus strand of the vector's numbering. */
   reversed_insert: boolean;
   tags: { name: string; end: string; present: boolean; position: number | null; note: string }[];
@@ -739,6 +776,7 @@ export type VectorSpec = {
   reference: string;
   has_sequence: boolean;
   supplies_translation_start: boolean;
+  expression_capable: boolean;
   tag_summary: string;
 };
 
@@ -768,6 +806,7 @@ export type CloneParams = DesignParams & {
    *  the overhang, so one strand alone cannot show both ends. */
   pre_digested?: boolean;
   insert_reverse?: string;
+  orf_start?: number | null;
   vector_key?: string;
   vector?: string;
   vector_name?: string;

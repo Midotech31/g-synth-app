@@ -49,6 +49,20 @@ COMMON_MOTIFS: tuple[CommonMotif, ...] = (
         "Exact match to the canonical lac operator core.",
     ),
     CommonMotif(
+        "Shine-Dalgarno RBS",
+        "AAGGAG",
+        "RBS",
+        "#B8860B",
+        "Exact match to a commonly used bacterial Shine-Dalgarno motif; positional review is required.",
+    ),
+    CommonMotif(
+        "Shine-Dalgarno RBS",
+        "AGGAGG",
+        "RBS",
+        "#B8860B",
+        "Exact match to a commonly used bacterial Shine-Dalgarno motif; positional review is required.",
+    ),
+    CommonMotif(
         "T7 terminator",
         "CAAAAAACCCCTCAAGACCCGTTTAGAGGCCCCAAGGGGTTATGCTAG",
         "terminator",

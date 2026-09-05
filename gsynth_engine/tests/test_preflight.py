@@ -52,6 +52,25 @@ def test_a_broken_pcr_is_blocked_with_a_stable_code():
     }
 
 
+def test_cloning_without_a_reading_frame_requires_review():
+    assembly = design_extended_sequence(GENE, is_coding=False)
+    plasmid = clone(
+        vectors.sequence_of("pET-21a")["sequence"],
+        assembly.construct_forward,
+        insert_reverse=assembly.construct_reverse,
+        left_enzyme="NdeI",
+        right_enzyme="XhoI",
+    )
+
+    reading_frame = next(
+        check for check in cloning_preflight(plasmid).checks
+        if check.code == "CLONE_READING_FRAME"
+    )
+
+    assert reading_frame.status == "review"
+    assert reading_frame.passed is False
+
+
 def test_optimisation_uses_the_same_release_contract():
     result = optimise(GENE)
     report = optimisation_preflight(result)

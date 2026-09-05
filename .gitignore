@@ -33,6 +33,8 @@ gsynth.db
 node_modules/
 frontend/dist/
 frontend/*.tsbuildinfo
+frontend/test-results/
+frontend/playwright-report/
 db.sqlite3
 django_app/staticfiles/*
 !django_app/staticfiles/.gitkeep

@@ -103,6 +103,10 @@ class VectorSpec:
     #: Whether the vector puts a ribosome binding site and a start codon
     #: upstream of the cloning region. False means the insert must.
     supplies_translation_start: bool = True
+    #: False for propagation/sequencing backbones that are not intended to
+    #: express the cloned insert. Their insert frame is reported as not
+    #: applicable rather than incorrectly confirmed or rejected.
+    expression_capable: bool = True
 
     @property
     def has_sequence(self) -> bool:
@@ -329,6 +333,7 @@ CATALOGUE: tuple[VectorSpec, ...] = (
         motifs=(),
         aliases=("pUC-19",),
         reference="https://www.addgene.org/vector-database/2871/",
+        expression_capable=False,
         notes=(
             (
                 "No T7 promoter and no tags — a construct cloned here is stored, "

@@ -63,10 +63,6 @@ class TestAvailability:
 
 @pytest.mark.django_db
 class TestRequestIsBounded:
-    """A field with no maximum is a denial of service waiting to happen —
-    the same reasoning as every engine-facing serializer, applied here even
-    though what is behind it is a chat call rather than an algorithm."""
-
     def test_blank_question_is_rejected(self, auth_client):
         r = auth_client.post(reverse("tutor-ask"), {"question": ""}, format="json")
         assert r.status_code == 400

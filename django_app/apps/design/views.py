@@ -30,6 +30,7 @@ from apps.design.serializers import (
     resolve_vector,
 )
 from apps.projects.models import Project
+from apps.sequences.sbol import to_sbol3
 from gsynth_engine import vectors as vector_catalogue
 from gsynth_engine.align import Scoring, align, blosum62
 from gsynth_engine.chromatogram import read_trace, summarise
@@ -297,56 +298,62 @@ def _validation(result: CloningResult, duplex_mismatches: list[int]) -> list[dic
     junctions_ok = all(j.site_regenerated for j in result.junctions)
     ends_ok = not any("does not match" in p for p in result.problems)
     duplex_problems = [problem for problem in result.problems if "do not pair" in problem]
-    frame_ok = not any("truncated" in p for p in result.problems)
+    frame = result.reading_frame
+
+    def check(label: str, status: str, detail: str) -> dict:
+        return {
+            "check": label,
+            "status": status,
+            "passed": status == "pass",
+            "detail": detail,
+        }
 
     return [
-        {
-            "check": "Overhangs are compatible",
-            "passed": ends_ok,
-            "detail": " ".join(p for p in result.problems if "does not match" in p)
+        check(
+            "Overhangs are compatible",
+            "pass" if ends_ok else "block",
+            " ".join(p for p in result.problems if "does not match" in p)
             or f"{result.left_enzyme} and {result.right_enzyme} ends match the vector.",
-        },
-        {
-            "check": "Both strands pair everywhere",
-            "passed": not duplex_mismatches and not duplex_problems,
-            "detail": (
+        ),
+        check(
+            "Both strands pair everywhere",
+            "pass" if not duplex_mismatches and not duplex_problems else "block",
+            (
                 f"{len(duplex_mismatches)} positions do not pair."
                 if duplex_mismatches else " ".join(duplex_problems)
                 if duplex_problems else "No mismatch in the insert duplex."
             ),
-        },
-        {
-            "check": "Each enzyme cuts the vector once",
-            "passed": True,          # a second site raises before we get here
-            "detail": "Checked when the vector was cut; a second site is refused.",
-        },
-        {
-            "check": "Orientation is forced",
-            "passed": result.left_enzyme != result.right_enzyme,
-            "detail": (
+        ),
+        check(
+            "Each enzyme cuts the vector once",
+            "pass",
+            "Checked when the vector was cut; a second site is refused.",
+        ),
+        check(
+            "Orientation is forced",
+            "pass" if result.left_enzyme != result.right_enzyme else "block",
+            (
                 "The insert reads on the minus strand of the vector's own "
                 "numbering, as every pET cassette does."
                 if result.reversed_insert
                 else "The insert reads with the vector's numbering."
             ),
-        },
-        {
-            "check": "Sites are regenerated at both seams",
-            "passed": junctions_ok,
-            "detail": (
+        ),
+        check(
+            "Sites are regenerated at both seams",
+            "pass" if junctions_ok else "review",
+            (
                 "The insert can be cut back out — which is how the clone gets "
                 "verified on a gel."
                 if junctions_ok else
                 "At least one site is lost, so the insert cannot be excised."
             ),
-        },
-        {
-            "check": "Reading frame survives the junction",
-            "passed": frame_ok,
-            "detail": " ".join(p for p in result.problems if "truncated" in p)
-            or (f"{len(result.protein)} residues translated."
-                if result.protein else "No reading frame was given."),
-        },
+        ),
+        check(
+            "Expression reading frame",
+            "pass" if frame.status == "not_applicable" else frame.status,
+            frame.summary,
+        ),
     ]
 
 
@@ -438,6 +445,37 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan) -> dict:
         "right_enzyme": result.right_enzyme,
         "protein": result.protein,
         "protein_length": len(result.protein),
+        "reading_frame": {
+            "status": result.reading_frame.status,
+            "confirmed": result.reading_frame.confirmed,
+            "summary": result.reading_frame.summary,
+            "translation_start": result.reading_frame.translation_start,
+            "start_codon": result.reading_frame.start_codon,
+            "start_source": result.reading_frame.start_source,
+            "rbs_name": result.reading_frame.rbs_name,
+            "rbs_start": result.reading_frame.rbs_start,
+            "rbs_end": result.reading_frame.rbs_end,
+            "rbs_spacing_nt": result.reading_frame.rbs_spacing_nt,
+            "rbs_source": result.reading_frame.rbs_source,
+            "promoter_name": result.reading_frame.promoter_name,
+            "promoter_start": result.reading_frame.promoter_start,
+            "promoter_source": result.reading_frame.promoter_source,
+            "stop_codon": result.reading_frame.stop_codon,
+            "stop_position": result.reading_frame.stop_position,
+            "stop_context": result.reading_frame.stop_context,
+            "left_junction_offset": result.reading_frame.left_junction_offset,
+            "right_junction_phase": result.reading_frame.right_junction_phase,
+            "protein_length": result.reading_frame.protein_length,
+            "checks": [
+                {
+                    "code": frame_check.code,
+                    "label": frame_check.label,
+                    "status": frame_check.status,
+                    "detail": frame_check.detail,
+                }
+                for frame_check in result.reading_frame.checks
+            ],
+        },
         # Every pET cassette reads on the minus strand of the supplier's
         # numbering, so this is the normal case rather than a warning.
         "reversed_insert": result.reversed_insert,
@@ -563,6 +601,7 @@ def _spec_payload(spec) -> dict:
         # Without a sequence the user has to import their own copy first.
         "has_sequence": spec.has_sequence,
         "supplies_translation_start": spec.supplies_translation_start,
+        "expression_capable": spec.expression_capable,
         "tag_summary": spec.tag_summary,
     }
 
@@ -1375,7 +1414,12 @@ def _run_clone(data: dict, engine_kwargs: dict):
         name=data["name"],
         vector_annotations=annotations,
         vector_spec=spec,
-        orf_start=ssd.orf_start if ssd is not None else None,
+        orf_start=(
+            data.get("orf_start")
+            if data.get("pre_digested")
+            else ssd.orf_start if ssd is not None else None
+        ),
+        auto_detect_frame=bool(data.get("pre_digested")),
     )
     return result, ssd, plan, vector_sequence, vector_name, spec
 
@@ -1447,11 +1491,7 @@ def _today() -> str:
 
 
 class CloneExportView(APIView):
-    """POST /api/design/clone/export/?filetype=genbank|fasta — as a file.
-
-    GenBank is the default because it preserves feature annotations across
-    standards-compliant sequence editors.
-    """
+    """POST /api/design/clone/export/?filetype=genbank|fasta|sbol3."""
 
     throttle_scope = "design"
 
@@ -1485,6 +1525,18 @@ class CloneExportView(APIView):
             return _bad_request(error)
         if reviewed_annotations is not None:
             payload["annotations"] = reviewed_annotations
+        if request.query_params.get("filetype") == "sbol3":
+            return _attachment(
+                to_sbol3(
+                    result.plasmid,
+                    name=name,
+                    description=f"{name} cloned into {vector_name} "
+                                f"({result.left_enzyme}/{result.right_enzyme})",
+                    features=payload["annotations"],
+                    circular=True,
+                ),
+                f"{safe}.sbol.json", "application/ld+json; charset=utf-8",
+            )
         return _attachment(
             to_genbank(
                 result.plasmid,
@@ -1595,6 +1647,18 @@ class ConstructExportView(APIView):
              "end": f.top_end, "direction": 1}
             for f in plan.fragments
         ]
+        if wanted == "sbol3":
+            return _attachment(
+                to_sbol3(
+                    plan.construct_forward,
+                    name=name,
+                    description=f"{name}: {plan.fragment_count} fragments, "
+                                f"{plan.oligo_count} oligos",
+                    features=features,
+                    circular=False,
+                ),
+                f"{safe}.sbol.json", "application/ld+json; charset=utf-8",
+            )
         return _attachment(
             to_genbank(
                 plan.construct_forward, name=safe,

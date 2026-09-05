@@ -44,11 +44,12 @@ const SECTIONS: Section[] = [
     to: "/clone", name: "Restriction cloning", icon: "plate",
     summary: "Simulate restriction digestion, end compatibility and ligation into a vector.",
     points: [
-      "pET-21a(+) and pET-21(+) ship with their sequences; any other backbone is imported — SnapGene .dna, GenBank or FASTA — and checked against the catalogue entry, so pasting the wrong one is caught rather than cloned into.",
+      "pET-21a(+) and pET-21(+) ship with their sequences; any other backbone is imported from SnapGene, GenBank, SBOL 3 or FASTA and checked against the catalogue entry.",
       "Click a feature or a restriction site on the plasmid map to see exactly what it is and the bases it spans.",
       "Restriction sites default to useful single-cutters plus the cloning pair. Enable multi-cutters to display every occurrence in the full catalogue; origin-crossing sites are split across both map ends rather than hidden.",
       "Each seam is drawn as the two ends that made it, so “the overhangs match” can be checked instead of believed.",
       "The diagnostic-gel simulation digests the final recombinant sequence with the cloning pair and plots every calculated fragment beside a selectable ladder.",
+      "Expression-frame validation checks the promoter/RBS context, initiating ATG, both junction phases, stop position and any C-terminal vector fusion. Imported annotations are used automatically; sequence-detected motifs remain marked for review.",
     ],
   },
   {
@@ -58,7 +59,7 @@ const SECTIONS: Section[] = [
       "Ligation is worked out in fmol, not nanograms — at equal mass a 5.4 kb vector outnumbers a 150 bp insert thirty-six to one.",
       "Sequencing primers sit back from the insert rather than at it.",
       "Upload the ABIF (.ab1) or SCF traces the facility sends back and compare them to the design directly — differences below Q20 confidence are marked unconfident rather than reported as mutations.",
-      "In Projects, the Annotated view expands a locus into coordinates, overlapping feature tracks and translation. Add, rename, edit or delete any feature; an exact-motif scan proposes common elements for review before saving them to GenBank.",
+      "In Projects, the Annotated view expands a locus into coordinates, overlapping feature tracks and translation. Add, rename, edit or delete any feature; reviewed annotations are retained in GenBank and SBOL 3 exports.",
     ],
   },
   {
@@ -182,7 +183,7 @@ export default function Help() {
             </p>
             <p className="note">
               Saved projects carry the engine version and SHA-256 checksums of the parameters, output sequence,
-              vector and enzyme table. GenBank and FASTA exports include the output identity, allowing a later file
+              vector and enzyme table. GenBank, SBOL 3 and FASTA exports include the output identity, allowing a later file
               to be traced back to the exact calculated molecule without duplicating raw sequences in the manifest.
             </p>
           </div>

@@ -10,11 +10,13 @@ import {
   type CloneResult,
   type DesignParams,
   type JunctionView,
+  type ValidationCheck,
   type VectorSpec,
 } from "../api/client";
 import InsertForm from "../components/InsertForm";
 import ConstructWorkbench from "../components/ConstructWorkbench";
 import CoreWorkflowTrail from "../components/CoreWorkflowTrail";
+import EnzymePicker from "../components/EnzymePicker";
 import JunctionDuplex from "../components/JunctionDuplex";
 import LigationOutcome from "../components/LigationOutcome";
 import Icon from "../components/Icon";
@@ -66,6 +68,7 @@ type PreDigested = {
   bottom: string;
   leftEnzyme: string | null;
   rightEnzyme: string | null;
+  orfStart?: number | null;
   name?: string;
   origin?: "design" | "hybridization" | "pcr";
 };
@@ -259,6 +262,7 @@ export default function Clone() {
             pre_digested: true,
             left_enzyme: preDigested.leftEnzyme ?? params.left_enzyme,
             right_enzyme: preDigested.rightEnzyme ?? params.right_enzyme,
+            orf_start: preDigested.orfStart ?? null,
           }
         : {}),
       vector_key: vector.key,
@@ -277,13 +281,13 @@ export default function Clone() {
   }
 
   /** Take the plasmid out of G-Synth: GenBank keeps the features. */
-  async function exportPlasmid(filetype: "genbank" | "fasta") {
+  async function exportPlasmid(filetype: "genbank" | "fasta" | "sbol3") {
     const safe = (params.name || "construct").replace(/\s+/g, "_");
     try {
       await api.download(
         `/api/design/clone/export/?filetype=${filetype}`,
         clonePayload(false, true),
-        `${safe}.${filetype === "fasta" ? "fasta" : "gb"}`,
+        `${safe}.${filetype === "fasta" ? "fasta" : filetype === "sbol3" ? "sbol.json" : "gb"}`,
       );
     } catch {
       setError("The download failed. Try cloning again first.");
@@ -296,6 +300,15 @@ export default function Clone() {
     : params.sequence.trim().length > 0;
   const ready = vectorLength > 0 && insertReady;
   const spec = vectors.find((v) => v.key === vector.key) ?? null;
+  const validationStatus = (check: ValidationCheck) =>
+    check.status ?? (check.passed ? "pass" : "block");
+  const validationCounts = result?.validation.reduce(
+    (counts, check) => {
+      counts[validationStatus(check)] += 1;
+      return counts;
+    },
+    { pass: 0, review: 0, block: 0 },
+  ) ?? { pass: 0, review: 0, block: 0 };
 
   const status = busy
     ? "Checking insert and vector ends…"
@@ -304,7 +317,9 @@ export default function Clone() {
       : result.is_clonable
         ? ligationCommitted
           ? `Ligation simulated: ${result.length.toLocaleString()} bp plasmid assembled.`
-          : `Ends compatible: ${result.validation.filter((c) => c.passed).length} of ${result.validation.length} checks passed; ready for simulated ligation.`
+          : result.preflight?.can_export === false
+            ? "The ends are compatible, but expression validation is blocked. Correct the failed check before ligation."
+            : `Ends compatible: ${validationCounts.pass} passed${validationCounts.review ? `, ${validationCounts.review} to review` : ""}; ready for simulated ligation.`
         : "This will not clone. Read the reasons above the result.";
 
   function clearWorkspace() {
@@ -436,7 +451,7 @@ export default function Clone() {
                   <input
                     ref={fileInput}
                     type="file"
-                    accept=".dna,.gb,.gbk,.genbank,.fa,.fasta,.fna,.txt"
+                    accept=".dna,.gb,.gbk,.genbank,.fa,.fasta,.fna,.jsonld,.sbol,.ttl,.rdf,.xml,.txt"
                     style={{ display: "none" }}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
@@ -447,7 +462,7 @@ export default function Clone() {
                   <p className="note" style={{ marginTop: "0.4rem" }}>
                     {vector.bundled
                       ? "Using the sequence that ships with G-Synth. Import your lab's own copy if it differs — it will be checked against this entry."
-                      : "SnapGene .dna and GenBank both keep the vector's features, so they carry over onto the recombinant map. FASTA gives sequence only."}
+                      : "SnapGene, GenBank and SBOL 3 preserve features; FASTA supplies sequence only."}
                   </p>
                 </div>
 
@@ -520,40 +535,22 @@ export default function Clone() {
                     Change insert or enzymes
                   </button>
                   <div className="transferred-enzyme-grid">
-                    <div className="field">
-                      <label htmlFor="transferred-left-enzyme">Left restriction enzyme</label>
-                      <select
-                        id="transferred-left-enzyme"
-                        value={preDigested.leftEnzyme ?? params.left_enzyme}
-                        disabled={!catalogue}
-                        onChange={(event) => setTransferredEnzyme("leftEnzyme", event.target.value)}
-                      >
-                        {catalogue
-                          ? catalogue.enzymes.map((enzyme) => (
-                              <option key={enzyme.name} value={enzyme.name}>
-                                {enzyme.name} · {enzyme.overhang || "blunt"} {enzyme.overhang_type}
-                              </option>
-                            ))
-                          : <option>{preDigested.leftEnzyme ?? params.left_enzyme}</option>}
-                      </select>
-                    </div>
-                    <div className="field">
-                      <label htmlFor="transferred-right-enzyme">Right restriction enzyme</label>
-                      <select
-                        id="transferred-right-enzyme"
-                        value={preDigested.rightEnzyme ?? params.right_enzyme}
-                        disabled={!catalogue}
-                        onChange={(event) => setTransferredEnzyme("rightEnzyme", event.target.value)}
-                      >
-                        {catalogue
-                          ? catalogue.enzymes.map((enzyme) => (
-                              <option key={enzyme.name} value={enzyme.name}>
-                                {enzyme.name} · {enzyme.overhang || "blunt"} {enzyme.overhang_type}
-                              </option>
-                            ))
-                          : <option>{preDigested.rightEnzyme ?? params.right_enzyme}</option>}
-                      </select>
-                    </div>
+                    <EnzymePicker
+                      id="transferred-left-enzyme"
+                      label="Left restriction enzyme"
+                      enzymes={catalogue?.enzymes ?? []}
+                      value={preDigested.leftEnzyme ?? params.left_enzyme}
+                      onChange={(value) => setTransferredEnzyme("leftEnzyme", value)}
+                      disabled={!catalogue}
+                    />
+                    <EnzymePicker
+                      id="transferred-right-enzyme"
+                      label="Right restriction enzyme"
+                      enzymes={catalogue?.enzymes ?? []}
+                      value={preDigested.rightEnzyme ?? params.right_enzyme}
+                      onChange={(value) => setTransferredEnzyme("rightEnzyme", value)}
+                      disabled={!catalogue}
+                    />
                     <p className="field-hint">
                       Changing an assignment never changes the transferred bases;
                       the simulation must prove that the new cut geometry is compatible.
@@ -616,13 +613,18 @@ export default function Clone() {
                   </div>
                 ) : null}
 
-                <div className={`notice ${result.is_clonable ? "notice-ok" : "notice-error"}`}>
-                  {result.is_clonable ? (
+                <div className={`notice ${result.is_clonable && result.preflight?.can_export !== false ? "notice-ok" : "notice-error"}`}>
+                  {result.is_clonable && result.preflight?.can_export !== false ? (
                     <>
                       <strong>{ligationCommitted ? "Ligation simulated." : "Ready to ligate."}</strong>{" "}
                       {result.left_enzyme} and {result.right_enzyme} each cut{" "}
                       {result.vector_name} once, the ends match, and the insert goes
                       in one orientation{ligationCommitted ? "." : "; inspect the ends below before joining them."}
+                    </>
+                  ) : result.is_clonable ? (
+                    <>
+                      <strong>Expression validation blocked.</strong>{" "}
+                      The DNA ends can ligate, but the construct is not confirmed for expression.
                     </>
                   ) : (
                     <>
@@ -658,29 +660,104 @@ export default function Clone() {
                   </div>
                 </div>
 
+                <section className={`card frame-assessment frame-${result.reading_frame.status}`} aria-labelledby="frame-assessment-title">
+                  <div className="card-head">
+                    <div style={{ flex: 1 }}>
+                      <h2 id="frame-assessment-title">Expression reading frame</h2>
+                      <span className="label">RBS → start codon → junctions → terminus</span>
+                    </div>
+                    <span className="frame-verdict">
+                      {result.reading_frame.status === "pass"
+                        ? "Confirmed"
+                        : result.reading_frame.status === "block"
+                          ? "Invalid"
+                          : result.reading_frame.status === "not_applicable"
+                            ? "Not applicable"
+                            : "Review required"}
+                    </span>
+                  </div>
+                  <div className="card-body frame-assessment-body">
+                    <p className="frame-summary">{result.reading_frame.summary}</p>
+                    {result.reading_frame.status !== "not_applicable" && (
+                      <div className="frame-path" aria-label="Expression cassette frame evidence">
+                        <div className={result.reading_frame.promoter_name ? "verified" : "unknown"}>
+                          <span>Promoter</span>
+                          <strong>{result.reading_frame.promoter_name ?? "Unconfirmed"}</strong>
+                          {result.reading_frame.promoter_source === "sequence_motif" && <small>detected motif · review</small>}
+                        </div>
+                        <Icon name="arrowRight" size={16} />
+                        <div className={result.reading_frame.rbs_name ? "verified" : "unknown"}>
+                          <span>RBS</span>
+                          <strong>{result.reading_frame.rbs_name ?? "Unconfirmed"}</strong>
+                          {result.reading_frame.rbs_spacing_nt !== null && (
+                            <small>
+                              {result.reading_frame.rbs_spacing_nt} nt to ATG
+                              {result.reading_frame.rbs_source === "sequence_motif" ? " · detected" : ""}
+                            </small>
+                          )}
+                        </div>
+                        <Icon name="arrowRight" size={16} />
+                        <div className={result.reading_frame.start_codon === "ATG" ? "verified" : "invalid"}>
+                          <span>Start</span>
+                          <strong>{result.reading_frame.start_codon ?? "—"}</strong>
+                          {result.reading_frame.translation_start !== null && (
+                            <small>
+                              base {result.reading_frame.translation_start + 1}
+                              {result.reading_frame.start_source === "sequence_candidate" ? " · candidate" : ""}
+                            </small>
+                          )}
+                        </div>
+                        <Icon name="arrowRight" size={16} />
+                        <div className={result.reading_frame.status === "block" ? "invalid" : "verified"}>
+                          <span>ORF</span>
+                          <strong>{result.reading_frame.protein_length || "—"} aa</strong>
+                          {result.reading_frame.right_junction_phase !== null && <small>junction offset {result.reading_frame.right_junction_phase}/3</small>}
+                        </div>
+                        <Icon name="arrowRight" size={16} />
+                        <div className={result.reading_frame.stop_codon ? "verified" : "invalid"}>
+                          <span>Stop</span>
+                          <strong>{result.reading_frame.stop_codon ?? "Missing"}</strong>
+                          {result.reading_frame.stop_context && <small>{result.reading_frame.stop_context.replace("_", " ")}</small>}
+                        </div>
+                      </div>
+                    )}
+                    <div className="frame-checks">
+                      {result.reading_frame.checks.map((check) => (
+                        <div key={check.code} className={check.status}>
+                          <Icon name={check.status === "pass" ? "check" : check.status === "review" ? "target" : "cross"} size={15} />
+                          <span><strong>{check.label}</strong><small>{check.detail}</small></span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
                 <div className="card">
                   <div className="card-head">
                     <h2 style={{ flex: 1 }}>Compatibility checks</h2>
                     <span className="label">
-                      {result.validation.filter((check) => check.passed).length}
-                      {" of "}{result.validation.length} passed
+                      {validationCounts.pass} passed
+                      {validationCounts.review > 0 && ` · ${validationCounts.review} review`}
                     </span>
                   </div>
                   <div className="card-body">
                     <ul className="check-list">
-                      {result.validation.map((check) => (
-                        <li key={check.check} className={check.passed ? "ok" : "bad"}>
-                          <Icon
-                            name={check.passed ? "check" : "cross"}
-                            size={16}
-                            className="mark"
-                          />
-                          <span>
-                            <strong>{check.check}</strong>
-                            <span className="detail">{check.detail}</span>
-                          </span>
-                        </li>
-                      ))}
+                      {result.validation.map((check) => {
+                        const state = validationStatus(check);
+                        return (
+                          <li key={check.check} className={state === "pass" ? "ok" : state}>
+                            <Icon
+                              name={state === "pass" ? "check" : state === "review" ? "target" : "cross"}
+                              size={16}
+                              className="mark"
+                            />
+                            <span>
+                              <strong>{check.check}</strong>
+                              <span className="detail">{check.detail}</span>
+                            </span>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 </div>

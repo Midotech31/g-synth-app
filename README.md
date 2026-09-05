@@ -65,7 +65,7 @@ hides a bulge or cohesive end behind a gap.
 assignments can be changed without altering the transferred bases; digestion
 must then prove the new end geometry compatible before ligation. pET-21a(+) and pET-21(+)
 ship with their sequences; any other backbone is imported — SnapGene `.dna`,
-GenBank or FASTA — and checked against the catalogue entry, so pasting
+GenBank, SBOL 3 or FASTA — and checked against the catalogue entry, so pasting
 pET-28a while pET-21a is selected is caught rather than cloned into. Each seam
 is drawn as the two ends that made it, so "the overhangs match" can be checked
 instead of believed. A synchronized Vector / Insert / Product workbench keeps
@@ -78,7 +78,18 @@ features, cassette parts, strand direction and codon-aligned translation,
 including expression loci that cross the circular origin. Every feature can
 be created, named, edited or deleted; exact matches to a curated library of
 common promoters, operators, tags, linkers and cleavage motifs are proposed
-for review rather than silently asserted. Saved edits survive into GenBank.
+for review rather than silently asserted. Saved edits survive into GenBank and
+validated SBOL 3 JSON-LD exports.
+
+Expression-frame validation follows the recombinant sequence itself. G-Synth
+separately checks the upstream promoter and bacterial RBS, the initiating ATG,
+the codon phase at both cloning junctions, premature and terminal stop codons,
+and continuity into any declared C-terminal vector tag. A frame is labelled
+confirmed only when the required annotations and sequence evidence agree.
+Design and PCR handoffs preserve the known translation coordinate. For an
+uploaded vector, GenBank, SnapGene and SBOL annotations are used automatically;
+exact promoter or RBS motifs detected in an unannotated sequence remain marked
+as reviewable evidence rather than being presented as curated annotations.
 
 The cloning selectors cover 109 non-redundant cut geometries representing 289
 commercial enzyme names. Isoschizomers remain searchable aliases, so the map

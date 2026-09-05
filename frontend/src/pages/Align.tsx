@@ -32,6 +32,7 @@ type Handoff = {
   name?: string;
   leftEnzyme?: string;
   rightEnzyme?: string;
+  orfStart?: number;
   autoRun?: boolean;
 };
 
@@ -100,6 +101,7 @@ export default function Align({ initialTool = "alignment" }: { initialTool?: Too
       name: handed.name,
       leftEnzyme: handed.leftEnzyme,
       rightEnzyme: handed.rightEnzyme,
+      orfStart: handed.orfStart,
     });
     setAlignment(null);
     setHybridization(null);
@@ -228,6 +230,7 @@ export default function Align({ initialTool = "alignment" }: { initialTool?: Too
           bottom: hybridization.second,
           leftEnzyme: source?.leftEnzyme ?? null,
           rightEnzyme: source?.rightEnzyme ?? null,
+          orfStart: source?.orfStart ?? null,
           name: source?.name,
           origin: "hybridization",
         },

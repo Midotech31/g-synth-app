@@ -174,9 +174,9 @@ def cloning_preflight(result, *, duplex_mismatches: list[int] | None = None) -> 
     mismatches = duplex_mismatches or []
     end_problems = [problem for problem in result.problems if "does not match" in problem]
     duplex_problems = [problem for problem in result.problems if "do not pair" in problem]
-    frame_problems = [problem for problem in result.problems if "truncated" in problem]
     regenerated = all(junction.site_regenerated for junction in result.junctions)
-    start_ok = not result.protein or result.protein.startswith("M")
+    frame = result.reading_frame
+    frame_status = "pass" if frame.status == "not_applicable" else frame.status
     checks = [
         PreflightCheck(
             "CLONE_END_COMPATIBILITY",
@@ -219,13 +219,24 @@ def cloning_preflight(result, *, duplex_mismatches: list[int] | None = None) -> 
         ),
         PreflightCheck(
             "CLONE_READING_FRAME",
-            "Translation starts correctly and reaches the intended terminus",
-            "block" if frame_problems else "review" if not start_ok else "pass",
-            " ".join(frame_problems) if frame_problems else (
-                f"{len(result.protein)} residues translate from an initiating methionine."
-                if result.protein else "No reading frame was supplied for translation."
-            ),
-            "Inspect the ATG, retained junction bases and stop-codon placement.",
+            "Expression reading frame is supported by the vector context",
+            frame_status,
+            frame.summary,
+            "Inspect the promoter/RBS annotation, initiating ATG, junction phase and stop-codon placement.",
+            {
+                "translation_start": frame.translation_start,
+                "start_codon": frame.start_codon,
+                "start_source": frame.start_source,
+                "rbs": frame.rbs_name,
+                "rbs_spacing_nt": frame.rbs_spacing_nt,
+                "rbs_source": frame.rbs_source,
+                "promoter": frame.promoter_name,
+                "promoter_source": frame.promoter_source,
+                "right_junction_phase": frame.right_junction_phase,
+                "stop_codon": frame.stop_codon,
+                "stop_position": frame.stop_position,
+                "stop_context": frame.stop_context,
+            },
         ),
         PreflightCheck(
             "CLONE_REVIEW_NOTES",

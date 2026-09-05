@@ -126,6 +126,8 @@ class VectorAnnotationSerializer(serializers.Serializer):
     translation_start = serializers.IntegerField(min_value=0, required=False)
     translation_end = serializers.IntegerField(min_value=0, required=False)
     truncated = serializers.BooleanField(required=False)
+    inferred = serializers.BooleanField(required=False)
+    basis = serializers.CharField(max_length=300, required=False)
 
     def validate(self, attrs):
         if attrs["end"] < attrs["start"]:
@@ -184,6 +186,13 @@ class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
     )
     #: Ligate a supplied pre-digested duplex without adding new terminal sites.
     pre_digested = serializers.BooleanField(default=False)
+    orf_start = serializers.IntegerField(
+        min_value=0,
+        required=False,
+        allow_null=True,
+        default=None,
+        help_text="Known zero-based translation start in a supplied digested insert.",
+    )
     insert_reverse = serializers.CharField(
         max_length=200_000, required=False, allow_blank=True, default="",
     )
@@ -196,6 +205,14 @@ class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
                                   "well. With only one strand the overhangs "
                                   "cannot be measured, and an insert cut for a "
                                   "different pair would look correct."
+            })
+        if (
+            attrs.get("pre_digested")
+            and attrs.get("orf_start") is not None
+            and attrs["orf_start"] + 3 > len(attrs["sequence"])
+        ):
+            raise serializers.ValidationError({
+                "orf_start": "The translation start must identify a complete codon inside the insert."
             })
         for annotation in attrs.get("product_annotations") or []:
             if annotation["end"] == annotation["start"]:
@@ -214,6 +231,7 @@ def resolve_vector(data: dict) -> tuple[str, str, list[dict], object]:
     substitution is caught rather than silently cloned into.
     """
     from gsynth_engine import vectors as catalogue
+    from gsynth_engine.annotations import detect_common_features
 
     key = data.get("vector_key") or ""
     supplied = (data.get("vector") or "").strip()
@@ -236,6 +254,15 @@ def resolve_vector(data: dict) -> tuple[str, str, list[dict], object]:
 
     name = data.get("vector_name") or (spec.name if spec else "vector")
     annotations = [dict(f) for f in (data.get("vector_annotations") or [])]
+    detected = detect_common_features(sequence, circular=True, existing=annotations)
+    for match in detected:
+        annotation = dict(match["annotation"])
+        if annotation["type"] not in {"promoter", "RBS", "terminator", "protein_bind"}:
+            continue
+        annotation["inferred"] = True
+        annotation["basis"] = match["basis"]
+        annotations.append(annotation)
+    annotations.sort(key=lambda feature: (feature["start"], feature["end"], feature["name"]))
     return sequence, name, annotations, spec
 
 

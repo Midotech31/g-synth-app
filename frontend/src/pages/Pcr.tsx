@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { ApiError, api, type Catalogue, type PcrResult } from "../api/client";
 import Icon from "../components/Icon";
 import GelSimulation from "../components/GelSimulation";
+import EnzymePicker from "../components/EnzymePicker";
 import PrimerAnnealingView from "../components/PrimerAnnealingView";
 import PreflightPanel from "../components/PreflightPanel";
 import { useWorkspaceState } from "../state/WorkspaceStateContext";
@@ -168,6 +169,7 @@ export default function Pcr() {
           bottom: result.digest.bottom,
           leftEnzyme: result.left_enzyme,
           rightEnzyme: result.right_enzyme,
+          orfStart: result.insert_orf_start,
           origin: "pcr",
         },
       },
@@ -267,36 +269,26 @@ export default function Pcr() {
                   </div>
                 )}
                 <div className="row-2">
-                  <div className="field">
-                    <label htmlFor="left-enzyme">5&prime; enzyme</label>
-                    <select
-                      id="left-enzyme"
-                      value={leftEnzyme}
-                      onChange={(e) => {
-                        inputsChanged();
-                        setLeftEnzyme(e.target.value);
-                      }}
-                    >
-                      {enzymes.map((e) => (
-                        <option key={e.name} value={e.name}>{e.name} &middot; {e.recognition}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label htmlFor="right-enzyme">3&prime; enzyme</label>
-                    <select
-                      id="right-enzyme"
-                      value={rightEnzyme}
-                      onChange={(e) => {
-                        inputsChanged();
-                        setRightEnzyme(e.target.value);
-                      }}
-                    >
-                      {enzymes.map((e) => (
-                        <option key={e.name} value={e.name}>{e.name} &middot; {e.recognition}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <EnzymePicker
+                    id="left-enzyme"
+                    label="5′ enzyme"
+                    enzymes={enzymes}
+                    value={leftEnzyme}
+                    onChange={(value) => {
+                      inputsChanged();
+                      setLeftEnzyme(value);
+                    }}
+                  />
+                  <EnzymePicker
+                    id="right-enzyme"
+                    label="3′ enzyme"
+                    enzymes={enzymes}
+                    value={rightEnzyme}
+                    onChange={(value) => {
+                      inputsChanged();
+                      setRightEnzyme(value);
+                    }}
+                  />
                 </div>
 
                 {experience === "expert" && <div className="field">

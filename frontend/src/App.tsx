@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import {
   BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useLocation,
 } from "react-router-dom";
@@ -34,6 +34,9 @@ const Viewer = lazy(() => import("./pages/Viewer"));
 
 function Rail() {
   const { user, signOut } = useAuth();
+  const { pathname } = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => setMobileOpen(false), [pathname]);
   const initials = (user?.name || user?.email || "GS")
     .split(/\s+|@/)
     .filter(Boolean)
@@ -76,7 +79,18 @@ function Rail() {
         <span className="ver">v{__APP_VERSION__}</span>
       </NavLink>
 
-      <nav aria-label="Workspace">
+      <button
+        type="button"
+        className="rail-menu-toggle"
+        aria-expanded={mobileOpen}
+        aria-controls="workspace-navigation"
+        onClick={() => setMobileOpen((open) => !open)}
+      >
+        <span aria-hidden="true" className="rail-menu-lines"><i /><i /><i /></span>
+        <span>{mobileOpen ? "Close" : "Menu"}</span>
+      </button>
+
+      <nav id="workspace-navigation" aria-label="Workspace" className={mobileOpen ? "open" : ""}>
         {groups.map((group) => (
           <div className="rail-group" key={group.label}>
             <div className="rail-group-label">{group.label}</div>
@@ -128,6 +142,12 @@ function Protected() {
   // return runs on some renders and not others, which is exactly the
   // ordering React forbids.
   const { pathname } = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    mainRef.current?.focus({ preventScroll: true });
+  }, [pathname]);
 
   if (loading) {
     return (
@@ -147,7 +167,7 @@ function Protected() {
         Skip to main content
       </a>
       <Rail />
-      <main className="canvas" id="main" role="main" tabIndex={-1}>
+      <main ref={mainRef} className="canvas" id="main" role="main" tabIndex={-1}>
         {/* Reset page-level error state after navigation. */}
         <ErrorBoundary key={pathname}>
           <Suspense

@@ -447,6 +447,54 @@ class TagOutcome:
     note: str = ""
 
 
+@dataclass(frozen=True)
+class ReadingFrameCheck:
+    """One independently testable part of an expression-frame assessment."""
+
+    code: str
+    label: str
+    status: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class ReadingFrameAssessment:
+    """Evidence that the recombinant expression cassette has one valid ORF.
+
+    An RBS recruits the bacterial ribosome; the selected start codon fixes
+    the triplet phase. They are therefore reported separately. ``pass`` is
+    reserved for constructs whose annotated upstream context, initiating
+    ATG, translated junctions and terminus can all be checked on the actual
+    recombinant sequence. Missing annotations produce ``review``, never a
+    false confirmation.
+    """
+
+    status: str
+    summary: str
+    translation_start: int | None = None
+    start_codon: str | None = None
+    start_source: str | None = None
+    rbs_name: str | None = None
+    rbs_start: int | None = None
+    rbs_end: int | None = None
+    rbs_spacing_nt: int | None = None
+    rbs_source: str | None = None
+    promoter_name: str | None = None
+    promoter_start: int | None = None
+    promoter_source: str | None = None
+    stop_codon: str | None = None
+    stop_position: int | None = None
+    stop_context: str | None = None
+    left_junction_offset: int | None = None
+    right_junction_phase: int | None = None
+    protein_length: int = 0
+    checks: tuple[ReadingFrameCheck, ...] = ()
+
+    @property
+    def confirmed(self) -> bool:
+        return self.status == "pass"
+
+
 @dataclass
 class CloningResult:
     """The plasmid you get, and why you should believe it."""
@@ -466,6 +514,12 @@ class CloningResult:
     #: numbering, which is how every pET expression cassette is arranged.
     reversed_insert: bool = False
     tags: list[TagOutcome] = field(default_factory=list)
+    reading_frame: ReadingFrameAssessment = field(
+        default_factory=lambda: ReadingFrameAssessment(
+            status="review",
+            summary="The reading frame has not been assessed.",
+        )
+    )
     warnings: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
 
@@ -545,6 +599,26 @@ def _remap_annotations(
     return moved
 
 
+def _infer_insert_orf_start(insert: str, *, search_limit: int = 30) -> int | None:
+    """Find one plausible ATG near a supplied insert's left end.
+
+    Automatic inference is intentionally conservative. A candidate is usable
+    only when it is the sole ATG in the leader window whose frame has no stop
+    before the final two codons of the insert. The caller still labels it as
+    sequence-derived evidence requiring review.
+    """
+    candidates: list[int] = []
+    limit = min(max(0, search_limit), max(0, len(insert) - 2))
+    for position in range(limit):
+        if insert[position : position + 3] != "ATG":
+            continue
+        translated = translate(insert[position:])
+        first_stop = translated.find("*")
+        if first_stop == -1 or first_stop >= max(0, len(translated) - 2):
+            candidates.append(position)
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def clone(
     vector: str,
     insert: str,
@@ -559,6 +633,7 @@ def clone(
     insert_left_end: End | None = None,
     insert_right_end: End | None = None,
     orf_start: int | None = None,
+    auto_detect_frame: bool = False,
 ) -> CloningResult:
     """Ligate an insert into a digested vector.
 
@@ -578,6 +653,9 @@ def clone(
             His-tag actually appears on this particular construct.
         orf_start: where the reading frame starts inside the insert, so the
             protein can be translated and the junction frame checked.
+        auto_detect_frame: when a pre-digested insert has no declared start,
+            use a single unambiguous ATG candidate near its left end. Such a
+            candidate is reported for review rather than confirmed.
 
     Returns:
         A :class:`CloningResult`. Check `is_clonable` before believing the
@@ -585,6 +663,11 @@ def clone(
         so the caller can show the user what does not fit.
     """
     insert_top = validate_dna(insert, field="insert")
+    start_source = "declared" if orf_start is not None else None
+    if orf_start is None and auto_detect_frame:
+        orf_start = _infer_insert_orf_start(insert_top)
+        if orf_start is not None:
+            start_source = "sequence_candidate"
     backbone = linearise(
         vector, left_enzyme=left_enzyme, right_enzyme=right_enzyme, circular=circular
     )
@@ -645,6 +728,9 @@ def clone(
     plasmid = backbone.top + insert_top
     insert_start = backbone.length
     insert_end = insert_start + len(insert_top)
+    remapped_annotations = _remap_annotations(
+        vector_annotations or [], backbone, len(plasmid)
+    )
 
     # The backbone runs from the right-hand enzyme's cut round to the
     # left-hand one's, so the seam where the insert begins is the *left*
@@ -673,6 +759,7 @@ def clone(
             )
 
     protein = ""
+    stop_at: int | None = None
     if orf_start is not None and 0 <= orf_start < len(insert_top):
         # Translate through the plasmid to retain downstream vector fusions.
         protein, stop_at = _translate_in_plasmid(plasmid, insert_start + orf_start)
@@ -737,6 +824,20 @@ def clone(
     )
     warnings.extend(_tag_warnings(tags, vector_spec, protein))
 
+    reading_frame = _assess_reading_frame(
+        plasmid,
+        insert_start=insert_start,
+        insert_end=insert_end,
+        orf_start=orf_start,
+        protein=protein,
+        stop_at=stop_at,
+        annotations=remapped_annotations,
+        vector_spec=vector_spec,
+        tags=tags,
+        existing_problems=problems,
+        start_source=start_source,
+    )
+
     return CloningResult(
         plasmid=plasmid,
         name=name,
@@ -747,14 +848,271 @@ def clone(
         left_enzyme=left_enzyme,
         right_enzyme=right_enzyme,
         junctions=junctions,
-        annotations=_remap_annotations(
-            vector_annotations or [], backbone, len(plasmid)
-        ),
+        annotations=remapped_annotations,
         protein=protein,
         reversed_insert=backbone.reversed_insert,
         tags=tags,
+        reading_frame=reading_frame,
         warnings=warnings,
         problems=problems,
+    )
+
+
+def _nearest_upstream_feature(
+    annotations: list[dict],
+    position: int,
+    plasmid_length: int,
+    *,
+    feature_types: set[str],
+    name_terms: tuple[str, ...],
+    max_distance: int,
+) -> tuple[dict | None, int | None]:
+    """Return the closest matching feature upstream on a circular molecule."""
+    candidates: list[tuple[int, dict]] = []
+    for feature in annotations:
+        feature_type = str(feature.get("type", "")).lower().replace("-", "_")
+        name = str(feature.get("name", "")).lower()
+        if feature_type not in feature_types and not any(term in name for term in name_terms):
+            continue
+        if int(feature.get("direction", 0) or 0) == -1:
+            continue
+        end = int(feature.get("end", 0)) % plasmid_length
+        distance = (position - end) % plasmid_length
+        if distance <= max_distance:
+            candidates.append((distance, feature))
+    if not candidates:
+        return None, None
+    distance, feature = min(candidates, key=lambda candidate: candidate[0])
+    return feature, distance
+
+
+def _assess_reading_frame(
+    plasmid: str,
+    *,
+    insert_start: int,
+    insert_end: int,
+    orf_start: int | None,
+    protein: str,
+    stop_at: int | None,
+    annotations: list[dict],
+    vector_spec: VectorSpec | None,
+    tags: list[TagOutcome],
+    existing_problems: list[str],
+    start_source: str | None,
+) -> ReadingFrameAssessment:
+    """Verify initiation context, triplet phase and translated terminus.
+
+    The check uses the recombinant molecule, not a catalogue promise. An
+    annotated bacterial RBS must be upstream of the declared start; the ATG
+    fixes the reading frame; translation then has to cross the intended
+    junctions without a premature stop and reach a defined terminus. Missing
+    feature annotation is explicitly indeterminate.
+    """
+    if vector_spec is not None and not vector_spec.expression_capable:
+        check = ReadingFrameCheck(
+            "FRAME_NOT_APPLICABLE",
+            "Expression context",
+            "pass",
+            f"{vector_spec.name} is a cloning backbone; insert expression is not claimed.",
+        )
+        return ReadingFrameAssessment(
+            status="not_applicable",
+            summary="Reading-frame validation is not applicable to this cloning backbone.",
+            checks=(check,),
+        )
+
+    if orf_start is None or not 0 <= orf_start < insert_end - insert_start:
+        check = ReadingFrameCheck(
+            "FRAME_START_UNDECLARED",
+            "Translation start",
+            "review",
+            "No coding start was declared, so G-Synth cannot assign a reading frame.",
+        )
+        return ReadingFrameAssessment(
+            status="review",
+            summary="Reading frame not confirmed: a coding start must be supplied.",
+            checks=(check,),
+        )
+
+    length = len(plasmid)
+    start = insert_start + orf_start
+    start_codon = "".join(plasmid[(start + offset) % length] for offset in range(3))
+    checks: list[ReadingFrameCheck] = []
+
+    start_ok = start_codon == "ATG"
+    start_status = "pass" if start_ok and start_source == "declared" else (
+        "review" if start_ok else "block"
+    )
+    checks.append(ReadingFrameCheck(
+        "FRAME_START_CODON",
+        "Initiating codon",
+        start_status,
+        (
+            f"ATG at recombinant base {start + 1} fixes the downstream triplet phase."
+            if start_ok and start_source == "declared" else
+            f"A single ATG candidate was detected at recombinant base {start + 1}; confirm it as the intended start."
+            if start_ok else
+            f"{start_codon or 'No complete codon'} occurs at the declared start; ATG is required by this design."
+        ),
+    ))
+
+    rbs, rbs_spacing = _nearest_upstream_feature(
+        annotations,
+        start,
+        length,
+        feature_types={"rbs", "ribosome_binding_site"},
+        name_terms=("rbs", "shine-dalgarno", "shine dalgarno"),
+        max_distance=40,
+    )
+    rbs_status = "review"
+    if rbs is not None and rbs_spacing is not None:
+        if 4 <= rbs_spacing <= 14:
+            rbs_status = (
+                "review"
+                if rbs.get("inferred") or int(rbs.get("direction", 0) or 0) == 0
+                else "pass"
+            )
+            rbs_detail = (
+                f"{rbs.get('name', 'RBS')} ends {rbs_spacing} nt before the initiating ATG."
+                + (" It was detected by exact sequence matching and requires confirmation." if rbs.get("inferred") else "")
+            )
+        elif 1 <= rbs_spacing <= 25:
+            rbs_status = "review"
+            rbs_detail = (
+                f"The nearest annotated RBS ends {rbs_spacing} nt before the ATG; "
+                "confirm this host- and RBS-specific spacing experimentally."
+            )
+        else:
+            rbs_status = "block"
+            rbs_detail = (
+                f"The nearest annotated RBS is {rbs_spacing} nt from the initiating ATG; "
+                "it is outside the accepted initiation-context window."
+            )
+    else:
+        if vector_spec is not None and not vector_spec.supplies_translation_start:
+            rbs_status = "block"
+            rbs_detail = (
+                f"{vector_spec.name} does not supply an RBS/start module, and the generated insert "
+                "contains an ATG but no annotated RBS. Add a validated translation-initiation module."
+            )
+        else:
+            rbs_detail = (
+                "No RBS is annotated in the 40 nt upstream of the initiating ATG; "
+                "translation initiation cannot be confirmed from this vector record."
+            )
+    checks.append(ReadingFrameCheck(
+        "FRAME_RBS_CONTEXT",
+        "Ribosome-binding site",
+        rbs_status,
+        rbs_detail,
+    ))
+
+    promoter, promoter_distance = _nearest_upstream_feature(
+        annotations,
+        start,
+        length,
+        feature_types={"promoter"},
+        name_terms=("promoter",),
+        max_distance=500,
+    )
+    checks.append(ReadingFrameCheck(
+        "FRAME_PROMOTER_CONTEXT",
+        "Upstream promoter",
+        (
+            "review"
+            if promoter is not None and (
+                promoter.get("inferred") or int(promoter.get("direction", 0) or 0) == 0
+            )
+            else "pass" if promoter is not None else "review"
+        ),
+        (
+            f"{promoter.get('name', 'Promoter')} is annotated {promoter_distance} nt upstream of the start."
+            + (" The feature was detected by exact sequence matching and requires confirmation." if promoter.get("inferred") else "")
+            if promoter is not None else
+            "No promoter is annotated within 500 nt upstream; transcriptional context is unconfirmed."
+        ),
+    ))
+
+    left_offset = orf_start
+    right_phase = (insert_end - start) % 3
+    checks.append(ReadingFrameCheck(
+        "FRAME_JUNCTION_PHASE",
+        "Cloning-junction phase",
+        start_status,
+        (
+            f"The ATG begins {left_offset} nt after the left junction; the right junction "
+            f"occurs {right_phase} nt into its codon relative to that ATG."
+        ),
+    ))
+
+    stop_context: str | None = None
+    stop_codon: str | None = None
+    terminus_status = "pass"
+    if stop_at is None:
+        terminus_status = "block"
+        terminus_detail = "No in-frame stop codon occurs before translation would traverse the circular plasmid."
+    else:
+        stop_codon = "".join(plasmid[(stop_at + offset) % length] for offset in range(3))
+        reached = (stop_at - start) % length
+        to_insert_end = insert_end - start
+        if reached < max(0, to_insert_end - 6):
+            stop_context = "premature_insert"
+            terminus_status = "block"
+            terminus_detail = f"{stop_codon} terminates translation prematurely at residue {reached // 3 + 1}."
+        elif reached < to_insert_end:
+            stop_context = "insert"
+            terminus_detail = f"The insert terminates with {stop_codon} after {len(protein)} residues."
+        else:
+            stop_context = "vector"
+            c_terminal_tags = [tag for tag in tags if tag.end == "C"]
+            missing_expected_tag = c_terminal_tags and not any(tag.present for tag in c_terminal_tags)
+            if missing_expected_tag:
+                terminus_status = "block"
+                terminus_detail = (
+                    "Translation reaches vector sequence, but no declared C-terminal vector tag is in frame."
+                )
+            else:
+                terminus_detail = (
+                    f"Translation crosses the right junction and terminates at vector base {stop_at + 1}"
+                    f" after {len(protein)} residues."
+                )
+    if any("truncated" in problem.lower() for problem in existing_problems):
+        terminus_status = "block"
+    checks.append(ReadingFrameCheck(
+        "FRAME_TRANSLATED_TERMINUS",
+        "Translated terminus",
+        terminus_status,
+        terminus_detail,
+    ))
+
+    statuses = {check.status for check in checks}
+    status = "block" if "block" in statuses else "review" if "review" in statuses else "pass"
+    summary = {
+        "pass": "Expression reading frame confirmed from the annotated RBS and ATG through the translated terminus.",
+        "review": "Reading frame is plausible but not confirmed because expression-context evidence is incomplete.",
+        "block": "Expression reading frame is invalid; correct the flagged initiation or translation evidence before use.",
+    }[status]
+    return ReadingFrameAssessment(
+        status=status,
+        summary=summary,
+        translation_start=start,
+        start_codon=start_codon,
+        start_source=start_source,
+        rbs_name=str(rbs.get("name")) if rbs is not None else None,
+        rbs_start=int(rbs.get("start", 0)) if rbs is not None else None,
+        rbs_end=int(rbs.get("end", 0)) if rbs is not None else None,
+        rbs_spacing_nt=rbs_spacing,
+        rbs_source="sequence_motif" if rbs is not None and rbs.get("inferred") else "annotation" if rbs is not None else None,
+        promoter_name=str(promoter.get("name")) if promoter is not None else None,
+        promoter_start=int(promoter.get("start", 0)) if promoter is not None else None,
+        promoter_source="sequence_motif" if promoter is not None and promoter.get("inferred") else "annotation" if promoter is not None else None,
+        stop_codon=stop_codon,
+        stop_position=stop_at,
+        stop_context=stop_context,
+        left_junction_offset=left_offset,
+        right_junction_phase=right_phase,
+        protein_length=len(protein),
+        checks=tuple(checks),
     )
 
 

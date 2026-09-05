@@ -11,6 +11,7 @@ import random
 
 import pytest
 
+from gsynth_engine import vectors
 from gsynth_engine.cloning import (
     End,
     clone,
@@ -402,6 +403,98 @@ class TestReadingFrame:
     def test_no_frame_check_without_an_orf_start(self, vector, ssd):
         result = clone(vector, ssd.forward, left_enzyme="NdeI", right_enzyme="XhoI")
         assert result.protein == ""
+        assert result.reading_frame.status == "review"
+
+    def test_pre_digested_insert_can_expose_one_start_candidate(self):
+        vector_record = vectors.sequence_of("pET-21a")
+        design = design_small_sequence(INSERT, enzyme_pair="NdeI / XhoI")
+        result = clone(
+            vector_record["sequence"],
+            design.forward,
+            insert_reverse=design.reverse,
+            left_enzyme="NdeI",
+            right_enzyme="XhoI",
+            vector_annotations=vector_record["annotations"],
+            vector_spec=vectors.get("pET-21a"),
+            auto_detect_frame=True,
+        )
+
+        assert result.protein
+        assert result.reading_frame.start_source == "sequence_candidate"
+        assert result.reading_frame.status == "review"
+
+    def test_real_pet21a_expression_context_is_confirmed(self):
+        vector_record = vectors.sequence_of("pET-21a")
+        design = design_small_sequence(INSERT, enzyme_pair="NdeI / XhoI")
+        result = clone(
+            vector_record["sequence"],
+            design.forward,
+            insert_reverse=design.reverse,
+            left_enzyme="NdeI",
+            right_enzyme="XhoI",
+            orf_start=design.orf_start,
+            vector_annotations=vector_record["annotations"],
+            vector_spec=vectors.get("pET-21a"),
+        )
+
+        assert result.reading_frame.confirmed
+        assert result.reading_frame.start_codon == "ATG"
+        assert result.reading_frame.rbs_name == "RBS"
+        assert result.reading_frame.rbs_spacing_nt == 8
+        assert result.reading_frame.promoter_name == "T7 promoter"
+        assert result.reading_frame.stop_context == "vector"
+        assert all(check.status == "pass" for check in result.reading_frame.checks)
+
+    def test_wrong_declared_start_blocks_expression_frame(self):
+        vector_record = vectors.sequence_of("pET-21a")
+        design = design_small_sequence(INSERT, enzyme_pair="NdeI / XhoI")
+        result = clone(
+            vector_record["sequence"],
+            design.forward,
+            insert_reverse=design.reverse,
+            left_enzyme="NdeI",
+            right_enzyme="XhoI",
+            orf_start=design.orf_start + 1,
+            vector_annotations=vector_record["annotations"],
+            vector_spec=vectors.get("pET-21a"),
+        )
+
+        assert result.reading_frame.status == "block"
+        start = next(check for check in result.reading_frame.checks if check.code == "FRAME_START_CODON")
+        assert start.status == "block"
+
+    def test_storage_vector_does_not_claim_expression_validation(self):
+        design = design_small_sequence(INSERT, enzyme_pair="EcoRI / HindIII")
+        result = clone(
+            build_vector("EcoRI", "HindIII"),
+            design.forward,
+            insert_reverse=design.reverse,
+            left_enzyme="EcoRI",
+            right_enzyme="HindIII",
+            orf_start=design.orf_start,
+            vector_spec=vectors.get("pUC19"),
+        )
+
+        assert result.reading_frame.status == "not_applicable"
+        assert not result.reading_frame.confirmed
+
+    def test_expression_vector_without_rbs_is_blocked(self):
+        vector_record = vectors.sequence_of("pET-21")
+        design = design_small_sequence(INSERT, enzyme_pair="BamHI / XhoI")
+        result = clone(
+            vector_record["sequence"],
+            design.forward,
+            insert_reverse=design.reverse,
+            left_enzyme="BamHI",
+            right_enzyme="XhoI",
+            orf_start=design.orf_start,
+            vector_annotations=vector_record["annotations"],
+            vector_spec=vectors.get("pET-21"),
+        )
+
+        assert result.reading_frame.status == "block"
+        rbs = next(check for check in result.reading_frame.checks if check.code == "FRAME_RBS_CONTEXT")
+        assert rbs.status == "block"
 
     def test_translate_handles_a_partial_final_codon(self):
         assert translate("ATGAAA") == "MK"

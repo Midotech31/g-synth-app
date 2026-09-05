@@ -10,6 +10,7 @@ import {
   type TerminalEnd,
 } from "../api/client";
 import CoreWorkflowTrail from "../components/CoreWorkflowTrail";
+import EnzymePicker from "../components/EnzymePicker";
 import DuplexView from "../components/DuplexView";
 import InsertForm from "../components/InsertForm";
 import { segmentColour } from "../components/segmentColour";
@@ -110,10 +111,10 @@ export default function Design() {
   }
 
   /** Take the construct out: GenBank for a viewer, FASTA for a supplier. */
-  async function exportConstruct(filetype: "genbank" | "fasta" | "oligos") {
+  async function exportConstruct(filetype: "genbank" | "fasta" | "oligos" | "sbol3") {
     const safe = (params.name || "construct").replace(/\s+/g, "_");
     const names = { genbank: `${safe}.gb`, fasta: `${safe}.fasta`,
-                    oligos: `${safe}_oligos.fasta` };
+                    oligos: `${safe}_oligos.fasta`, sbol3: `${safe}.sbol.json` };
     try {
       await api.download(
         `/api/design/assembly/export/?filetype=${filetype}`, params, names[filetype],
@@ -146,6 +147,7 @@ export default function Design() {
         name: params.name || "designed construct",
         leftEnzyme: params.left_enzyme,
         rightEnzyme: params.right_enzyme,
+        orfStart: result.ssd.orf_start,
         autoRun: true,
       },
     });
@@ -207,6 +209,7 @@ export default function Design() {
               <button role="menuitem" onClick={() => void exportConstruct("oligos")}>Oligo FASTA</button>
               <button role="menuitem" onClick={() => void download("protocol")}>Protocol</button>
               <button role="menuitem" onClick={() => void exportConstruct("genbank")}>GenBank</button>
+              <button role="menuitem" onClick={() => void exportConstruct("sbol3")}>SBOL 3</button>
             </div>
           )}
         </div>
@@ -413,34 +416,22 @@ export default function Design() {
                   </div>
                   <div className="card-body">
                     <div className="design-hybrid-enzyme-row">
-                      <div className="field">
-                        <label htmlFor="hybrid-left-enzyme">Left cloning enzyme</label>
-                        <select
-                          id="hybrid-left-enzyme"
-                          value={params.left_enzyme}
-                          onChange={(event) => set("left_enzyme", event.target.value)}
-                        >
-                          {catalogue?.enzymes.map((enzyme) => (
-                            <option key={enzyme.name} value={enzyme.name}>
-                              {enzyme.name} · {enzyme.overhang || "blunt"} {enzyme.overhang_type}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="field">
-                        <label htmlFor="hybrid-right-enzyme">Right cloning enzyme</label>
-                        <select
-                          id="hybrid-right-enzyme"
-                          value={params.right_enzyme}
-                          onChange={(event) => set("right_enzyme", event.target.value)}
-                        >
-                          {catalogue?.enzymes.map((enzyme) => (
-                            <option key={enzyme.name} value={enzyme.name}>
-                              {enzyme.name} · {enzyme.overhang || "blunt"} {enzyme.overhang_type}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <EnzymePicker
+                        id="hybrid-left-enzyme"
+                        label="Left cloning enzyme"
+                        enzymes={catalogue?.enzymes ?? []}
+                        value={params.left_enzyme}
+                        onChange={(value) => set("left_enzyme", value)}
+                        disabled={!catalogue}
+                      />
+                      <EnzymePicker
+                        id="hybrid-right-enzyme"
+                        label="Right cloning enzyme"
+                        enzymes={catalogue?.enzymes ?? []}
+                        value={params.right_enzyme}
+                        onChange={(value) => set("right_enzyme", value)}
+                        disabled={!catalogue}
+                      />
                       <p className="field-hint">
                         Inherited from this design. Changing either enzyme invalidates the
                         current molecules and returns you to Update design; G-Synth never

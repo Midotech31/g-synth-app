@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
   ApiError,
@@ -310,9 +311,13 @@ export default function Verify() {
                   ))}
                 </select>
                 {projects.length === 0 && (
-                  <span className="label">
-                    Save a design or a plasmid first
-                  </span>
+                  <div className="empty-inline">
+                    <span className="label">Save a design or cloned plasmid first.</span>
+                    <div className="actions">
+                      <Link className="btn btn-primary" to="/design">Start a design</Link>
+                      <Link className="btn btn-outline" to="/projects">Open projects</Link>
+                    </div>
+                  </div>
                 )}
               </div>
 

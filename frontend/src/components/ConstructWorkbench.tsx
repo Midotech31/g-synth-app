@@ -46,7 +46,7 @@ type Props = {
   ligated: boolean;
   annotations: Annotation[];
   onAnnotationsChange: (annotations: Annotation[]) => void;
-  onExport: (filetype: "genbank" | "fasta") => void;
+  onExport: (filetype: "genbank" | "fasta" | "sbol3") => void;
   onWorksheet: () => void;
   onSave: () => void;
   busy: boolean;
@@ -363,6 +363,9 @@ export default function ConstructWorkbench({
           <button type="button" className="btn btn-outline" onClick={() => onExport("fasta")} disabled={!canExport}>
             FASTA
           </button>
+          <button type="button" className="btn btn-outline" onClick={() => onExport("sbol3")} disabled={!canExport}>
+            SBOL 3
+          </button>
           <button type="button" className="btn btn-outline" onClick={onWorksheet} disabled={!canExport}>
             Bench worksheet
           </button>
@@ -538,7 +541,7 @@ export default function ConstructWorkbench({
                     }}
                   >
                     <i style={{ background: annotation.color }} />
-                    <span><strong>{annotation.name}</strong><small>{annotation.type} · {annotation.direction === -1 ? "reverse" : annotation.direction === 1 ? "forward" : "unstranded"}</small></span>
+                    <span><strong>{annotation.name}</strong><small>{annotation.type} · {annotation.direction === -1 ? "reverse" : annotation.direction === 1 ? "forward" : "unstranded"}{annotation.inferred ? " · detected" : ""}</small></span>
                     <code>{(annotation.start + 1).toLocaleString()}–{annotation.end.toLocaleString()}</code>
                   </button>
                 ))}

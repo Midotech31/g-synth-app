@@ -12,8 +12,11 @@ from __future__ import annotations
 import io
 from dataclasses import asdict, dataclass, field
 
+import sbol3
 from Bio import SeqIO
 from Bio.SeqFeature import SeqFeature
+
+from apps.sequences.sbol import ROLE_FEATURES, read_sbol3
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024   # 10 MB
 
@@ -64,7 +67,7 @@ class ParsedRecord:
     length: int
     topology: str           # "circular" | "linear"
     gc_content: float       # percent, 1 decimal
-    source_format: str      # "fasta" | "genbank"
+    source_format: str      # "fasta" | "genbank" | "snapgene" | "sbol3"
     annotations: list[Annotation] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -99,6 +102,17 @@ def detect_format(text: str | bytes, filename: str = "") -> str:
             ) from error
 
     head = text.lstrip()[:200].upper()
+    sbol_marker = "http://sbols.org/v3#"
+    if lower.endswith((".jsonld", ".sbol.json")) or (
+        text.lstrip().startswith("{") and sbol_marker in text
+    ):
+        return "sbol3-jsonld"
+    if lower.endswith((".ttl", ".sbol")) or (
+        sbol_marker in text and ("@prefix" in text.lower() or "PREFIX" in text[:200])
+    ):
+        return "sbol3-turtle"
+    if lower.endswith((".rdf", ".xml")) and sbol_marker in text:
+        return "sbol3-xml"
     if head.startswith("LOCUS"):
         return "genbank"
     if head.startswith(">"):
@@ -109,7 +123,57 @@ def detect_format(text: str | bytes, filename: str = "") -> str:
         return "fasta"
     raise ParseError(
         "Unrecognised file. Expected FASTA (starting with '>'), GenBank "
-        "(starting with 'LOCUS'), or a SnapGene .dna file."
+        "(starting with 'LOCUS'), SBOL 3, or a SnapGene .dna file."
+    )
+
+
+def _record_from_sbol(content: str, source_format: str, filename: str) -> ParsedRecord:
+    document = read_sbol3(content, source_format)
+    components = [item for item in document if isinstance(item, sbol3.Component)]
+    component = next((item for item in components if item.sequences), None)
+    if component is None:
+        raise ParseError("The SBOL 3 document contains no DNA component with a sequence.")
+    sequence_object = document.find(component.sequences[0])
+    if not isinstance(sequence_object, sbol3.Sequence) or not sequence_object.elements:
+        raise ParseError("The SBOL 3 component does not contain nucleotide elements.")
+
+    sequence = sequence_object.elements.upper()
+    annotations: list[Annotation] = []
+    for feature in component.features:
+        ranges = [location for location in feature.locations if isinstance(location, sbol3.Range)]
+        if not ranges:
+            continue
+        ranges.sort(key=lambda location: location.order or 0)
+        if len(ranges) > 1 and ranges[0].end == len(sequence) and ranges[1].start == 1:
+            start = ranges[0].start - 1
+            end = len(sequence) + ranges[1].end
+        else:
+            start = min(location.start for location in ranges) - 1
+            end = max(location.end for location in ranges)
+        role = next((value for value in feature.roles if value in ROLE_FEATURES), "")
+        feature_type = ROLE_FEATURES.get(role, "misc_feature")
+        orientation = ranges[0].orientation or feature.orientation
+        annotations.append(Annotation(
+            name=(feature.name or feature.display_id or feature_type)[:80],
+            type=feature_type,
+            start=start,
+            end=end,
+            direction=-1 if orientation == sbol3.SBOL_REVERSE_COMPLEMENT else 1,
+            color=FEATURE_COLORS.get(feature_type, DEFAULT_FEATURE_COLOR),
+        ))
+    annotations.sort(key=lambda annotation: (annotation.start, -(annotation.end - annotation.start)))
+
+    topology = "circular" if sbol3.SO_CIRCULAR in component.types else "linear"
+    fallback = filename.rsplit("/", 1)[-1].split(".", 1)[0] or "Untitled"
+    return ParsedRecord(
+        name=(component.name or component.display_id or fallback)[:120],
+        description=(component.description or "")[:300],
+        sequence=sequence,
+        length=len(sequence),
+        topology=topology,
+        gc_content=_gc_content(sequence),
+        source_format="sbol3",
+        annotations=annotations,
     )
 
 
@@ -217,6 +281,16 @@ def parse_sequence_file(content: bytes | str, filename: str = "") -> ParsedRecor
         raise ParseError("The file is empty.")
 
     source_format = detect_format(content, filename)
+
+    if source_format.startswith("sbol3-"):
+        if isinstance(content, bytes):
+            content = content.decode("utf-8")
+        try:
+            return _record_from_sbol(content, source_format, filename)
+        except Exception as exc:
+            if isinstance(exc, ParseError):
+                raise
+            raise ParseError(f"Could not read this SBOL 3 file: {exc}") from exc
 
     if source_format == "snapgene":
         if isinstance(content, str):

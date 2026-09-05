@@ -163,6 +163,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 }
 .rail nav a:hover { background: var(--navy-700); color: #fff; }
 .rail nav a.active { background: var(--accent); color: #fff; font-weight: 600; }
+.rail-menu-toggle { display: none; }
 
 .rail .spacer { flex: 1; }
 
@@ -230,6 +231,10 @@ a { color: var(--accent); text-underline-offset: 3px; }
   overflow-wrap: normal;
   word-break: normal;
 }
+.enzyme-picker input[type="search"] { min-height: 38px; font-size: 0.78rem; }
+.enzyme-picker select { margin-top: 0.35rem; }
+.empty-inline { display: flex; flex-direction: column; align-items: flex-start; gap: 0.55rem; }
+.empty-inline .actions { display: flex; flex-wrap: wrap; gap: 0.45rem; }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .btn-primary { background: var(--accent); color: var(--accent-ink); }
 .btn-primary:hover:not(:disabled) { background: #0b5b63; }
@@ -1742,8 +1747,17 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .hybrid-stats .stat-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workflow-next-card { align-items: stretch; flex-direction: column; }
   .workflow-next-card .btn, .design-hybrid-actions .btn { width: 100%; }
-  .core-workflow-trail { max-width: calc(100vw - 1.7rem); }
-  .core-workflow-stage > a { min-width: 154px; }
+  .core-workflow-trail {
+    width: 100%;
+    max-width: none;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
+  }
+  .core-workflow-stage { min-width: 0; }
+  .core-workflow-stage > a { width: 100%; min-width: 0; }
+  .core-workflow-stage strong { white-space: normal; }
+  .core-workflow-stage small, .core-workflow-arrow { display: none; }
   .hybrid-thermo-list div { grid-template-columns: 1fr; gap: 0.15rem; }
   .clone-molecule-flow { grid-template-columns: 1fr; }
   .clone-molecule-flow > .icon { transform: rotate(90deg); justify-self: center; }
@@ -1819,7 +1833,9 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .check-list li { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.86rem; }
 .check-list .mark { width: 1.2rem; flex: none; margin-top: 0.12rem; }
 .check-list li.ok .mark { color: var(--success); }
+.check-list li.review .mark { color: var(--amber); }
 .check-list li.bad .mark { color: var(--danger); }
+.check-list li.block .mark { color: var(--danger); }
 .check-list strong { display: block; color: var(--ink); font-weight: 600; }
 .check-list .detail { display: block; color: var(--ink-soft); font-size: 0.8rem; line-height: 1.5; }
 
@@ -2087,28 +2103,47 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     gap: 0.55rem 0.7rem;
   }
   .rail .brand { grid-column: 1; grid-row: 1; padding-bottom: 0; border-bottom: 0; }
+  .rail-menu-toggle {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 44px;
+    padding: 0.5rem 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid rgb(255 255 255 / 18%);
+    border-radius: var(--radius);
+    background: transparent;
+    color: #fff;
+    font: 600 0.78rem/1 var(--sans);
+    cursor: pointer;
+  }
+  .rail-menu-toggle:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  .rail-menu-lines { width: 18px; display: flex; flex-direction: column; gap: 3px; }
+  .rail-menu-lines i { width: 100%; height: 1.5px; display: block; background: currentColor; }
   .rail nav {
     grid-column: 1 / -1;
     grid-row: 2;
-    flex-direction: row;
-    overflow-x: auto;
-    gap: 0.2rem;
-    padding-bottom: 0.15rem;
-    scrollbar-width: none;
+    display: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem;
+    padding-top: 0.35rem;
   }
-  .rail nav::-webkit-scrollbar { display: none; }
+  .rail nav.open { display: grid; }
   .rail-group, .rail-utilities { display: contents; }
   .rail-group-label { display: none; }
-  .rail nav a { flex: 0 0 auto; padding: 0.42rem 0.6rem; }
+  .rail nav a { min-width: 0; padding: 0.5rem 0.6rem; }
   .rail .spacer { display: none; }
   .rail .account {
-    grid-column: 2;
-    grid-row: 1;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    display: none;
     border-top: 0;
     padding-top: 0;
     grid-template-columns: 34px 44px;
     gap: 0.25rem;
   }
+  .rail nav.open ~ .spacer + .account { display: grid; justify-self: end; }
   .rail .account-avatar { width: 34px; height: 34px; }
   .rail .account .who { display: none; }
   .topbar {
@@ -2363,7 +2398,49 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .product-view .seq-body { color: var(--accent); }
 
-/* An enzyme name is a proper noun, not a label: NdeI and NDEI are not the
-   same word to anyone ordering one, and `.pill` uppercases. Same reasoning
-   as `.terminal-end`, which fixed this once already elsewhere. */
 .pill-enzyme { text-transform: none; letter-spacing: 0.02em; }
+
+.frame-assessment { overflow: hidden; }
+.frame-assessment.frame-pass { border-color: #a9d3ba; }
+.frame-assessment.frame-block { border-color: #dfb3b3; }
+.frame-assessment.frame-review { border-color: #dec98e; }
+.frame-verdict {
+  border-radius: 999px; padding: 0.28rem 0.58rem;
+  background: #eef1f3; color: var(--ink-soft); font-size: 0.72rem; font-weight: 700;
+}
+.frame-pass .frame-verdict { background: #eaf6ef; color: #1e6843; }
+.frame-block .frame-verdict { background: #fbebeb; color: #8a3030; }
+.frame-review .frame-verdict { background: #fff5db; color: #7a5913; }
+.frame-assessment-body { display: flex; flex-direction: column; gap: 0.85rem; }
+.frame-summary { margin: 0; color: var(--ink-soft); font-size: 0.82rem; line-height: 1.5; }
+.frame-path {
+  display: grid; grid-template-columns: minmax(96px, 1fr) auto minmax(96px, 1fr) auto minmax(82px, .75fr) auto minmax(82px, .75fr) auto minmax(82px, .75fr);
+  gap: 0.35rem; align-items: center;
+}
+.frame-path > div {
+  min-width: 0; border: 1px solid var(--line); border-radius: 8px;
+  padding: 0.55rem 0.6rem; background: #fbfaf7;
+}
+.frame-path > div.verified { border-color: #b9d7c5; background: #f1f8f4; }
+.frame-path > div.invalid { border-color: #dfb3b3; background: #fdf3f3; }
+.frame-path > div.unknown { border-color: #dec98e; background: #fff9e9; }
+.frame-path span, .frame-path strong, .frame-path small { display: block; overflow-wrap: anywhere; }
+.frame-path span { color: var(--muted); font: 0.64rem var(--mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.frame-path strong { margin-top: 0.15rem; font-size: 0.78rem; }
+.frame-path small { margin-top: 0.12rem; color: var(--ink-soft); font-size: 0.67rem; }
+.frame-path > .icon { color: var(--muted); }
+.frame-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.45rem; }
+.frame-checks > div { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 0.4rem; align-items: start; padding: 0.5rem 0.55rem; border-radius: 7px; background: #f8f8f6; }
+.frame-checks > div.pass > .icon { color: var(--success); }
+.frame-checks > div.review > .icon { color: #9a7118; }
+.frame-checks > div.block > .icon { color: var(--danger); }
+.frame-checks strong, .frame-checks small { display: block; }
+.frame-checks strong { font-size: 0.76rem; }
+.frame-checks small { margin-top: 0.12rem; color: var(--ink-soft); font-size: 0.7rem; line-height: 1.4; }
+@media (max-width: 900px) {
+  .frame-path { grid-template-columns: 1fr; }
+  .frame-path > .icon { transform: rotate(90deg); justify-self: center; }
+}
+@media (max-width: 620px) {
+  .frame-checks { grid-template-columns: 1fr; }
+}

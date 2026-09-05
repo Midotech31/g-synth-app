@@ -18,6 +18,7 @@ from apps.sequences.parsing import (
     detect_format,
     parse_sequence_file,
 )
+from apps.sequences.sbol import to_sbol3
 
 GENBANK = """LOCUS       pDEMO                    120 bp    DNA     circular SYN 01-JAN-2026
 DEFINITION  Demonstration plasmid for the G-Synth viewer.
@@ -157,6 +158,38 @@ class TestFastaParsing:
         assert "some description" in rec.description
 
 
+class TestSbol3Parsing:
+    def test_validated_jsonld_round_trip_preserves_sequence_topology_and_features(self):
+        document = to_sbol3(
+            "ATGGTGAGCAAGGGCGAGGA",
+            name="pGS test",
+            description="SBOL interchange construct",
+            circular=True,
+            features=[{
+                "name": "coding region",
+                "type": "CDS",
+                "start": 0,
+                "end": 18,
+                "direction": 1,
+            }],
+        )
+
+        record = parse_sequence_file(document, "pGS_test.sbol.json")
+
+        assert record.source_format == "sbol3"
+        assert record.name == "pGS test"
+        assert record.topology == "circular"
+        assert record.annotations[0].type == "CDS"
+        assert (record.annotations[0].start, record.annotations[0].end) == (0, 18)
+
+    def test_detects_turtle_and_jsonld_by_content(self):
+        document = to_sbol3("ATGC", name="test")
+        assert detect_format(document, "renamed.txt") == "sbol3-jsonld"
+        assert detect_format(
+            "@prefix sbol: <http://sbols.org/v3#> .", "renamed.txt"
+        ) == "sbol3-turtle"
+
+
 class TestParseFailures:
     def test_empty_file(self):
         with pytest.raises(ParseError, match="empty"):
@@ -194,6 +227,20 @@ class TestParseEndpoint:
         r = auth_client.post(self.url, {"file": upload}, format="multipart")
         assert r.status_code == 200
         assert r.data["length"] == 120
+
+    def test_uploads_sbol3_with_annotations(self, auth_client):
+        text = to_sbol3(
+            "ATGGTGAGCAAG",
+            name="pSBOL",
+            features=[{"name": "gene", "type": "gene", "start": 0, "end": 12}],
+        )
+        upload = io.BytesIO(text.encode())
+        upload.name = "pSBOL.sbol.json"
+        response = auth_client.post(self.url, {"file": upload}, format="multipart")
+
+        assert response.status_code == 200, response.data
+        assert response.data["source_format"] == "sbol3"
+        assert response.data["annotations"][0]["name"] == "gene"
 
     def test_missing_file_is_a_clear_error(self, auth_client):
         r = auth_client.post(self.url, {}, format="multipart")

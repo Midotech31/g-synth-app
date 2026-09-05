@@ -59,3 +59,14 @@ def test_linear_sequence_does_not_match_across_its_ends():
         item for item in detect_common_features(sequence)
         if item["annotation"]["name"] == "T7 promoter"
     ]
+
+
+def test_detects_exact_bacterial_rbs_as_reviewable_evidence():
+    match = next(
+        item for item in detect_common_features("CCCAAGGAGAAAAATGCCC")
+        if item["annotation"]["type"] == "RBS"
+    )
+
+    assert match["annotation"]["name"] == "Shine-Dalgarno RBS"
+    assert match["matched_sequence"] == "AAGGAG"
+    assert "review" in match["basis"].lower()

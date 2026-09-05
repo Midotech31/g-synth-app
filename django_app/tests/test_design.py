@@ -987,6 +987,20 @@ class TestExport:
         assert response.status_code == 200
         assert response.content.decode().startswith(">EntA")
 
+    def test_the_plasmid_exports_as_valid_sbol3(self, auth_client):
+        from apps.sequences.parsing import parse_sequence_file
+
+        response = auth_client.post(
+            reverse("design-clone-export") + "?filetype=sbol3",
+            {"sequence": LONG_INSERT, "vector_key": "pET-21a", "name": "EntA"},
+        )
+        record = parse_sequence_file(response.content, "EntA.sbol.json")
+
+        assert response.status_code == 200
+        assert record.topology == "circular"
+        assert record.length > 5000
+        assert {annotation.name for annotation in record.annotations} >= {"AmpR", "EntA"}
+
     def test_cloning_worksheet_links_preflight_bands_ligation_and_primers(self, auth_client):
         response = auth_client.post(
             reverse("design-clone-worksheet"),
@@ -1014,6 +1028,19 @@ class TestExport:
         }
         assert "6×His tag" in labels
         assert "F1" in labels          # the fragments are drawn too
+
+    def test_the_linear_construct_exports_as_valid_sbol3(self, auth_client):
+        from apps.sequences.parsing import parse_sequence_file
+
+        response = auth_client.post(
+            reverse("design-construct-export") + "?filetype=sbol3",
+            {"sequence": LONG_INSERT, "name": "EntA"},
+        )
+        record = parse_sequence_file(response.content, "EntA.sbol.json")
+
+        assert response.status_code == 200
+        assert record.topology == "linear"
+        assert any(annotation.name == "6×His tag" for annotation in record.annotations)
 
     def test_the_oligos_export_as_one_fasta_per_oligo(self, auth_client):
         """Suppliers take a FASTA upload; retyping thirty names is where
@@ -1546,8 +1573,9 @@ class TestValidationAndJunctionViews:
         assert {"Overhangs are compatible", "Both strands pair everywhere",
                 "Each enzyme cuts the vector once", "Orientation is forced",
                 "Sites are regenerated at both seams",
-                "Reading frame survives the junction"} <= set(checks)
+                "Expression reading frame"} <= set(checks)
         assert all(row["passed"] for row in data["validation"]), checks
+        assert all(row["status"] == "pass" for row in data["validation"]), checks
         assert all(row["detail"] for row in data["validation"])
 
     def test_a_failing_check_says_which_one(self, auth_client):
@@ -1558,7 +1586,98 @@ class TestValidationAndJunctionViews:
             sequence="GGCTAAATCGTGGAACAGTGCTGCACCAGCTGCAGCCTGTACCAGCTGGAA",
         )
         failed = [row["check"] for row in data["validation"] if not row["passed"]]
-        assert failed == ["Reading frame survives the junction"]
+        assert failed == ["Expression reading frame"]
+
+    def test_a_missing_reading_frame_is_review_not_pass(self, auth_client):
+        designed = self.cloned(auth_client)
+        assembly = designed["assembly"]
+        data = self.cloned(
+            auth_client,
+            sequence=assembly["construct_forward"],
+            insert_reverse=assembly["construct_reverse"],
+            pre_digested=True,
+        )
+        frame = next(
+            row for row in data["validation"]
+            if row["check"] == "Expression reading frame"
+        )
+
+        assert frame["status"] == "review"
+        assert frame["passed"] is False
+        assert data["reading_frame"]["start_source"] == "sequence_candidate"
+        assert "not confirmed" in frame["detail"].lower()
+
+    def test_design_handoff_preserves_and_confirms_the_frame(self, auth_client):
+        designed = self.cloned(auth_client)
+        assembly = designed["assembly"]
+        data = self.cloned(
+            auth_client,
+            sequence=assembly["construct_forward"],
+            insert_reverse=assembly["construct_reverse"],
+            pre_digested=True,
+            orf_start=assembly["ssd"]["orf_start"],
+        )
+
+        assert data["reading_frame"]["status"] == "pass"
+        assert data["reading_frame"]["start_source"] == "declared"
+
+    def test_uploaded_annotated_vector_is_validated_without_catalogue_identity(self, auth_client):
+        from gsynth_engine import vectors
+
+        record = vectors.sequence_of("pET-21a")
+        custom_vector = "AAA" + record["sequence"]
+        shifted = [
+            {**feature, "start": feature["start"] + 3, "end": feature["end"] + 3}
+            for feature in record["annotations"]
+        ]
+        data = self.cloned(
+            auth_client,
+            vector_key="",
+            vector=custom_vector,
+            vector_name="Imported expression vector",
+            vector_annotations=shifted,
+        )
+
+        assert data["vector"]["recognised"] is False
+        assert data["reading_frame"]["status"] == "pass"
+        assert data["reading_frame"]["rbs_source"] == "annotation"
+        assert data["reading_frame"]["promoter_source"] == "annotation"
+
+    def test_unannotated_uploaded_vector_gets_reviewable_sequence_annotations(self, auth_client):
+        from gsynth_engine import vectors
+
+        record = vectors.sequence_of("pET-21a")
+        data = self.cloned(
+            auth_client,
+            vector_key="",
+            vector="AAA" + record["sequence"],
+            vector_name="Unannotated expression vector",
+            vector_annotations=[],
+        )
+
+        assert data["vector"]["recognised"] is False
+        assert data["reading_frame"]["status"] == "review"
+        assert data["reading_frame"]["rbs_source"] == "sequence_motif"
+        assert data["reading_frame"]["promoter_source"] == "sequence_motif"
+        assert any(feature.get("inferred") for feature in data["annotations"])
+
+    def test_expression_frame_exposes_vector_context_evidence(self, auth_client):
+        frame = self.cloned(auth_client)["reading_frame"]
+
+        assert frame["confirmed"] is True
+        assert frame["status"] == "pass"
+        assert frame["start_codon"] == "ATG"
+        assert frame["rbs_name"] == "RBS"
+        assert frame["rbs_spacing_nt"] == 8
+        assert frame["promoter_name"] == "T7 promoter"
+        assert frame["stop_context"] in {"insert", "vector"}
+        assert {check["code"] for check in frame["checks"]} == {
+            "FRAME_START_CODON",
+            "FRAME_RBS_CONTEXT",
+            "FRAME_PROMOTER_CONTEXT",
+            "FRAME_JUNCTION_PHASE",
+            "FRAME_TRANSLATED_TERMINUS",
+        }
 
     def test_restriction_sites_are_annotated_on_the_map(self, auth_client):
         data = self.cloned(auth_client)

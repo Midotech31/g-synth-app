@@ -1,4 +1,5 @@
 import type { Catalogue, DesignParams } from "../api/client";
+import EnzymePicker from "./EnzymePicker";
 
 /**
  * The insert controls, shared by the design and cloning pages.
@@ -31,8 +32,6 @@ export default function InsertForm({
 
   const enzymes = catalogue?.enzymes ?? [];
   const byName = new Map(enzymes.map((e) => [e.name, e]));
-  const common = enzymes.filter((e) => e.common !== false);
-  const rest = enzymes.filter((e) => e.common === false);
   const left = byName.get(params.left_enzyme);
   const right = byName.get(params.right_enzyme);
 
@@ -65,30 +64,14 @@ export default function InsertForm({
       </div>
 
       <div className="row-2">
-        <div className="field">
-          <label htmlFor={id("left")}>5' enzyme</label>
-          <select
+        <div>
+          <EnzymePicker
             id={id("left")}
+            label="5' enzyme"
+            enzymes={enzymes}
             value={params.left_enzyme}
-            onChange={(e) => onChange("left_enzyme", e.target.value)}
-          >
-            <optgroup label="Common cloning enzymes">
-              {common.map((e) => (
-                <option key={e.name} value={e.name}>
-                  {[e.name, ...(e.aliases ?? [])].join(" / ")} · {e.recognition}
-                </option>
-              ))}
-            </optgroup>
-            {rest.length > 0 && (
-              <optgroup label={`Additional verified enzymes (${rest.length})`}>
-                {rest.map((e) => (
-                  <option key={e.name} value={e.name}>
-                    {[e.name, ...(e.aliases ?? [])].join(" / ")} · {e.recognition}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
+            onChange={(value) => onChange("left_enzyme", value)}
+          />
           {left && (
             <span className="label">
               {left.overhang ? `${left.overhang_type} ${left.overhang}` : "blunt"}
@@ -96,30 +79,14 @@ export default function InsertForm({
             </span>
           )}
         </div>
-        <div className="field">
-          <label htmlFor={id("right")}>3' enzyme</label>
-          <select
+        <div>
+          <EnzymePicker
             id={id("right")}
+            label="3' enzyme"
+            enzymes={enzymes}
             value={params.right_enzyme}
-            onChange={(e) => onChange("right_enzyme", e.target.value)}
-          >
-            <optgroup label="Common cloning enzymes">
-              {common.map((e) => (
-                <option key={e.name} value={e.name}>
-                  {[e.name, ...(e.aliases ?? [])].join(" / ")} · {e.recognition}
-                </option>
-              ))}
-            </optgroup>
-            {rest.length > 0 && (
-              <optgroup label={`Additional verified enzymes (${rest.length})`}>
-                {rest.map((e) => (
-                  <option key={e.name} value={e.name}>
-                    {[e.name, ...(e.aliases ?? [])].join(" / ")} · {e.recognition}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
+            onChange={(value) => onChange("right_enzyme", value)}
+          />
           {right && (
             <span className="label">
               {right.overhang ? `${right.overhang_type} ${right.overhang}` : "blunt"}
