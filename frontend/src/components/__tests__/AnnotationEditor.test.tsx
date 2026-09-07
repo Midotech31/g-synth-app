@@ -4,6 +4,18 @@ import { describe, expect, it, vi } from "vitest";
 import AnnotationEditor, { annotationFromDraft } from "../AnnotationEditor";
 
 describe("editable sequence annotations", () => {
+  it("prefills a selected range while retaining the add-annotation operation", () => {
+    const onSave = vi.fn();
+    render(<AnnotationEditor open annotation={null}
+      initialAnnotation={{ name: "", type: "misc_feature", start: 58, end: 63, direction: 1, color: "#3F7A52" }}
+      sequenceLength={160} circular={false} saving={false} onCancel={vi.fn()} onSave={onSave} />);
+    expect(screen.getByLabelText("Start base")).toHaveValue(59);
+    expect(screen.getByLabelText("End base")).toHaveValue(63);
+    fireEvent.change(screen.getByLabelText("Feature name"), { target: { value: "Selected target" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add feature" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ name: "Selected target", start: 58, end: 63 }));
+  });
+
   it("converts displayed 1-based inclusive coordinates to engine coordinates", () => {
     const result = annotationFromDraft({
       name: "New insulin insert", type: "CDS", start: "11", end: "40",

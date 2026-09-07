@@ -5,6 +5,7 @@ import {
   ApiError,
   api,
   type AlignResult,
+  type Annotation,
   type HybridizationResult,
 } from "../api/client";
 import CoreWorkflowTrail from "../components/CoreWorkflowTrail";
@@ -33,6 +34,7 @@ type Handoff = {
   leftEnzyme?: string;
   rightEnzyme?: string;
   orfStart?: number;
+  insertAnnotations?: Annotation[];
   autoRun?: boolean;
 };
 
@@ -102,6 +104,7 @@ export default function Align({ initialTool = "alignment" }: { initialTool?: Too
       leftEnzyme: handed.leftEnzyme,
       rightEnzyme: handed.rightEnzyme,
       orfStart: handed.orfStart,
+      insertAnnotations: handed.insertAnnotations,
     });
     setAlignment(null);
     setHybridization(null);
@@ -231,6 +234,7 @@ export default function Align({ initialTool = "alignment" }: { initialTool?: Too
           leftEnzyme: source?.leftEnzyme ?? null,
           rightEnzyme: source?.rightEnzyme ?? null,
           orfStart: source?.orfStart ?? null,
+          insertAnnotations: source?.insertAnnotations,
           name: source?.name,
           origin: "hybridization",
         },

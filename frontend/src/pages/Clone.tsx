@@ -69,6 +69,7 @@ type PreDigested = {
   leftEnzyme: string | null;
   rightEnzyme: string | null;
   orfStart?: number | null;
+  insertAnnotations?: Annotation[];
   name?: string;
   origin?: "design" | "hybridization" | "pcr";
 };
@@ -263,6 +264,7 @@ export default function Clone() {
             left_enzyme: preDigested.leftEnzyme ?? params.left_enzyme,
             right_enzyme: preDigested.rightEnzyme ?? params.right_enzyme,
             orf_start: preDigested.orfStart ?? null,
+            insert_annotations: preDigested.insertAnnotations,
           }
         : {}),
       vector_key: vector.key,
