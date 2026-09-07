@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import type { Annotation } from "../api/client";
 
@@ -81,6 +81,7 @@ export function chooseAnnotationWindow(
   circular = false,
 ): Window {
   if (sequenceLength <= 0) return { start: 0, end: 0 };
+  if (circular && sequenceLength <= MAX_WINDOW) return { start: 0, end: sequenceLength };
 
   const preferred = preferredName
     ? annotations.find((annotation) => annotation.name === preferredName)
@@ -216,8 +217,8 @@ function translationCells(
   const cells: TranslationCell[] = [];
 
   if (feature.direction === -1) {
-    let residue = 1;
-    for (let codonEnd = featureEnd; codonEnd - 3 >= featureStart; codonEnd -= 3) {
+    let residue = Math.max(1, Math.floor((featureEnd - rowEnd) / 3) + 1);
+    for (let codonEnd = featureEnd - (residue - 1) * 3; codonEnd - 3 >= featureStart && codonEnd > rowStart; codonEnd -= 3) {
       const codonStart = codonEnd - 3;
       if (codonEnd > rowStart && codonStart < rowEnd) {
         const codon = reverseComplement(virtualSequence(sequence, codonStart, codonEnd));
@@ -234,8 +235,8 @@ function translationCells(
     return cells;
   }
 
-  let residue = 1;
-  for (let codonStart = featureStart; codonStart + 3 <= featureEnd; codonStart += 3) {
+  let residue = Math.max(1, Math.floor((rowStart - featureStart) / 3) + 1);
+  for (let codonStart = featureStart + (residue - 1) * 3; codonStart + 3 <= featureEnd && codonStart < rowEnd; codonStart += 3) {
     const codonEnd = codonStart + 3;
     if (codonEnd > rowStart && codonStart < rowEnd) {
       const codon = virtualSequence(sequence, codonStart, codonEnd).toUpperCase();
@@ -264,12 +265,36 @@ type Props = {
 export default function AnnotatedSequenceView({
   sequence, annotations, selected, preferredName = "", circular = false, onSelect,
 }: Props) {
-  const window = useMemo(
+  const [scope, setScope] = useState<"locus" | "whole">("locus");
+  const [manualWindow, setManualWindow] = useState<Window | null>(null);
+  const [position, setPosition] = useState("");
+  const [navigationError, setNavigationError] = useState("");
+  const [rowBases, setRowBases] = useState(ROW_BASES);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(660);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setViewportHeight(node.clientHeight || 660));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => { setManualWindow(null); }, [selected, sequence]);
+  const locus = useMemo(
     () => chooseAnnotationWindow(
       annotations, sequence.length, selected, preferredName, circular,
     ),
     [annotations, circular, preferredName, selected, sequence.length],
   );
+
+  const window = useMemo(() => scope === "whole"
+    ? { start: 0, end: sequence.length } : manualWindow ?? locus,
+  [scope, sequence.length, manualWindow, locus]);
+  useEffect(() => {
+    setScrollTop(0);
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [window, rowBases]);
 
   const placedAnnotations = useMemo(
     () => placedAnnotationsForWindow(annotations, sequence.length, window, circular),
@@ -278,9 +303,9 @@ export default function AnnotatedSequenceView({
 
   const rows = useMemo(() => {
     const starts: number[] = [];
-    for (let start = window.start; start < window.end; start += ROW_BASES) starts.push(start);
+    for (let start = window.start; start < window.end; start += rowBases) starts.push(start);
     return starts;
-  }, [window]);
+  }, [window, rowBases]);
 
   const codingFeature = useMemo(() => {
     const candidates = placedAnnotations.filter((annotation) =>
@@ -296,6 +321,43 @@ export default function AnnotatedSequenceView({
     return candidates.find((annotation) => annotation.name === preferredName) ?? candidates[0] ?? null;
   }, [placedAnnotations, preferredName, selected, window]);
 
+  const blocks = useMemo(() => {
+    let offset = 0;
+    return rows.map((rowStart) => {
+      const rowEnd = Math.min(window.end, rowStart + rowBases);
+      const visible = visibleFeaturesForRow(placedAnnotations, rowStart, rowEnd);
+      const laneCount = Math.max(1, ...visible.map((feature) => feature.lane + 1));
+      const translations = codingFeature ? translationCells(sequence, codingFeature, rowStart, rowEnd) : [];
+      const height = 76 + laneCount * 28 + (translations.length ? 29 : 0);
+      const block = { rowStart, rowEnd, visible, laneCount, translations, offset, height };
+      offset += height;
+      return block;
+    });
+  }, [rows, window.end, rowBases, placedAnnotations, codingFeature, sequence]);
+  const totalHeight = blocks.length ? blocks[blocks.length - 1].offset + blocks[blocks.length - 1].height : 0;
+  const visibleBlocks = blocks.filter((block) => block.offset + block.height >= scrollTop - 350
+    && block.offset <= scrollTop + viewportHeight + 350);
+
+  function moveRegion(start: number) {
+    const size = Math.min(600, sequence.length);
+    const nextStart = clamp(start, 0, Math.max(0, sequence.length - size));
+    setScope("locus");
+    setManualWindow({ start: nextStart, end: nextStart + size });
+  }
+  function goToPosition(event: React.FormEvent) {
+    event.preventDefault();
+    const coordinate = Number(position);
+    if (!Number.isInteger(coordinate) || coordinate < 1 || coordinate > sequence.length) {
+      setNavigationError(`Enter a base from 1 to ${sequence.length.toLocaleString()}.`);
+      return;
+    }
+    setNavigationError("");
+    if (scope === "whole") {
+      const block = blocks.find((item) => item.rowStart <= coordinate - 1 && item.rowEnd > coordinate - 1);
+      if (block && scrollRef.current) { scrollRef.current.scrollTop = block.offset; setScrollTop(block.offset); }
+    } else moveRegion(coordinate - 1 - rowBases);
+  }
+
   const displayCoordinate = (position: number) => {
     if (!circular || !sequence.length) return position + 1;
     return ((position % sequence.length + sequence.length) % sequence.length) + 1;
@@ -309,27 +371,44 @@ export default function AnnotatedSequenceView({
           <p>
             Showing bases {displayCoordinate(window.start).toLocaleString()}–
             {displayCoordinate(window.end - 1).toLocaleString()}
-            {circular && window.end > sequence.length ? " across the circular origin" : ""}
+            {circular && (window.end > sequence.length || window.start < 0) ? " across the circular origin" : ""}
             {codingFeature ? ` · translation from ${codingFeature.name}` : ""}
           </p>
         </div>
         <span className="label">1-based coordinates</span>
       </header>
 
-      <div className="annotated-sequence-scroll" tabIndex={0}>
-        {rows.map((rowStart) => {
-          const rowEnd = Math.min(window.end, rowStart + ROW_BASES);
+      <div className="sequence-navigation" aria-label="Sequence navigation">
+        <div className="seg-toggle" role="group" aria-label="Sequence range">
+          <button type="button" className={scope === "locus" ? "on" : ""} aria-pressed={scope === "locus"}
+            onClick={() => { setScope("locus"); setManualWindow(null); }}>Feature context</button>
+          <button type="button" className={scope === "whole" ? "on" : ""} aria-pressed={scope === "whole"}
+            onClick={() => setScope("whole")}>{circular ? "Whole plasmid" : "Whole sequence"}</button>
+        </div>
+        <label>Bases per row <select value={rowBases} onChange={(event) => setRowBases(Number(event.target.value))}>
+          {[30, 60, 90].map((value) => <option key={value} value={value}>{value}</option>)}
+        </select></label>
+        <form onSubmit={goToPosition}>
+          <label>Go to base <input type="text" inputMode="numeric" value={position} onChange={(event) => setPosition(event.target.value)} placeholder={`1–${sequence.length}`} /></label>
+          <button type="submit" className="btn btn-outline">Go</button>
+        </form>
+        {scope === "locus" && <div className="sequence-page-buttons">
+          <button type="button" className="btn btn-outline" disabled={window.start <= 0} onClick={() => moveRegion(window.start - 600)}>Previous region</button>
+          <button type="button" className="btn btn-outline" disabled={window.end >= sequence.length} onClick={() => moveRegion(window.end)}>Next region</button>
+        </div>}
+        {navigationError && <p role="alert">{navigationError}</p>}
+      </div>
+      <div className="annotated-sequence-scroll" tabIndex={0} ref={scrollRef}
+        aria-label="Scrollable annotated DNA" onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}>
+        <div style={{ height: totalHeight, position: "relative", minWidth: rowBases * 13,
+          "--sequence-row-bases": rowBases } as CSSProperties}>
+        {visibleBlocks.map(({ rowStart, rowEnd, visible, laneCount, translations, offset, height }) => {
           const bases = virtualSequence(sequence, rowStart, rowEnd).toUpperCase().split("");
-          const visible = visibleFeaturesForRow(placedAnnotations, rowStart, rowEnd);
-          const laneCount = Math.max(1, ...visible.map((feature) => feature.lane + 1));
-          const translations = codingFeature
-            ? translationCells(sequence, codingFeature, rowStart, rowEnd)
-            : [];
 
           return (
-            <div className="annotation-block" key={rowStart}>
+            <div className="annotation-block" key={rowStart} style={{ position: "absolute", top: offset, height, width: "100%" }}>
               <div className="annotation-ruler" aria-hidden="true">
-                {Array.from({ length: ROW_BASES }, (_, index) => {
+                {Array.from({ length: rowEnd - rowStart }, (_, index) => {
                   const coordinate = rowStart + index;
                   const shownCoordinate = displayCoordinate(coordinate);
                   const show = index === 0 || shownCoordinate % 10 === 0 || shownCoordinate === 1;
@@ -350,22 +429,22 @@ export default function AnnotatedSequenceView({
                   const width = feature.end - feature.start;
                   const clippedLeft = feature.annotation.start < rowStart;
                   const clippedRight = feature.annotation.end > rowEnd;
-                  const direction = feature.annotation.direction === -1 ? "←" : "→";
+                  const direction = feature.annotation.direction === -1 ? "←" : feature.annotation.direction === 1 ? "→" : "";
                   return (
                     <button
                       type="button"
-                      className={`annotation-feature ${selected === (feature.annotation as PlacedAnnotation).sourceAnnotation ? "selected" : ""}`}
+                      className={`annotation-feature ${feature.annotation.inferred ? "inferred" : ""} ${selected === (feature.annotation as PlacedAnnotation).sourceAnnotation ? "selected" : ""}`}
                       key={`${feature.annotation.name}-${feature.annotation.start}-${index}`}
                       style={{
-                        left: `${100 * (feature.start - rowStart) / ROW_BASES}%`,
-                        width: `${100 * width / ROW_BASES}%`,
+                        left: `${100 * (feature.start - rowStart) / rowBases}%`,
+                        width: `${100 * width / rowBases}%`,
                         top: `${feature.lane * 28}px`,
                         backgroundColor: feature.annotation.color,
                         color: readableTextColour(feature.annotation.color),
                       }}
                       onClick={() => onSelect((feature.annotation as PlacedAnnotation).sourceAnnotation)}
-                      title={`${feature.annotation.name}: ${displayCoordinate(feature.annotation.start)}–${displayCoordinate(feature.annotation.end - 1)} (${feature.annotation.direction === -1 ? "reverse" : "forward"})`}
-                      aria-label={`${feature.annotation.name}, ${feature.annotation.type}, bases ${displayCoordinate(feature.annotation.start)} to ${displayCoordinate(feature.annotation.end - 1)}, ${feature.annotation.direction === -1 ? "reverse" : "forward"} strand`}
+                      title={`${feature.annotation.name}: ${displayCoordinate(feature.annotation.start)}–${displayCoordinate(feature.annotation.end - 1)} (${feature.annotation.direction === -1 ? "reverse" : feature.annotation.direction === 1 ? "forward" : "unstranded"})`}
+                      aria-label={`${feature.annotation.name}, ${feature.annotation.type}, bases ${displayCoordinate(feature.annotation.start)} to ${displayCoordinate(feature.annotation.end - 1)}, ${feature.annotation.direction === -1 ? "reverse" : feature.annotation.direction === 1 ? "forward" : "unstranded"} strand`}
                     >
                       <span aria-hidden="true">{!clippedLeft && direction} {feature.annotation.name}{clippedRight ? "…" : ""}</span>
                     </button>
@@ -404,13 +483,14 @@ export default function AnnotatedSequenceView({
             </div>
           );
         })}
+        </div>
       </div>
 
       <footer className="annotation-legend" aria-label="Nucleotide colour legend">
         {(["A", "C", "G", "T"] as const).map((base) => (
           <span key={base}><i className={`base-${base}`} />{base}</span>
         ))}
-        <span className="annotation-legend-note">Select a feature to inspect its strand and sequence.</span>
+        <span className="annotation-legend-note">Drag the lower edge to resize. Dashed features are detected candidates.</span>
       </footer>
     </section>
   );

@@ -16,6 +16,9 @@ class AnnotationSerializer(serializers.Serializer):
         error_messages={"invalid": "Use a six-digit hexadecimal colour such as #0E6E77."},
     )
     truncated = serializers.BooleanField(required=False)
+    inferred = serializers.BooleanField(required=False)
+    basis = serializers.CharField(max_length=300, required=False)
+    regulatory_class = serializers.CharField(max_length=80, required=False)
     translation_start = serializers.IntegerField(min_value=0, required=False)
     translation_end = serializers.IntegerField(min_value=1, required=False)
 

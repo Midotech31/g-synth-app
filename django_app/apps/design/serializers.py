@@ -128,6 +128,7 @@ class VectorAnnotationSerializer(serializers.Serializer):
     truncated = serializers.BooleanField(required=False)
     inferred = serializers.BooleanField(required=False)
     basis = serializers.CharField(max_length=300, required=False)
+    regulatory_class = serializers.CharField(max_length=80, required=False)
 
     def validate(self, attrs):
         if attrs["end"] < attrs["start"]:
@@ -264,6 +265,12 @@ def resolve_vector(data: dict) -> tuple[str, str, list[dict], object]:
         annotations.append(annotation)
     annotations.sort(key=lambda feature: (feature["start"], feature["end"], feature["name"]))
     return sequence, name, annotations, spec
+
+
+class FeatureDetectionSerializer(serializers.Serializer):
+    sequence = serializers.CharField(max_length=200_000)
+    circular = serializers.BooleanField(default=False)
+    annotations = VectorAnnotationSerializer(many=True, required=False, default=list, max_length=5000)
 
 
 class OptimiseRequestSerializer(serializers.Serializer):

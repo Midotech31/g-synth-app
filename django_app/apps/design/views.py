@@ -18,6 +18,7 @@ from apps.design.serializers import (
     CLEAVAGE_NAMES,
     AlignRequestSerializer,
     CloneRequestSerializer,
+    FeatureDetectionSerializer,
     HybridizationRequestSerializer,
     LigationRequestSerializer,
     OptimiseRequestSerializer,
@@ -33,6 +34,7 @@ from apps.projects.models import Project
 from apps.sequences.sbol import to_sbol3
 from gsynth_engine import vectors as vector_catalogue
 from gsynth_engine.align import Scoring, align, blosum62
+from gsynth_engine.annotations import detect_common_features
 from gsynth_engine.chromatogram import read_trace, summarise
 from gsynth_engine.cloning import (
     CloningResult,
@@ -1854,3 +1856,19 @@ class PcrView(APIView):
                 "trimmed_right": result.digest.trimmed_right,
             }
         return Response(payload)
+
+
+class FeatureDetectionView(APIView):
+    """Read-only sequence annotation proposals for unsaved molecules."""
+
+    def post(self, request):
+        serializer = FeatureDetectionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            matches = detect_common_features(
+                data['sequence'], circular=data['circular'], existing=data['annotations'],
+            )
+        except SequenceError as error:
+            return _bad_request(error)
+        return Response({'matches': matches})

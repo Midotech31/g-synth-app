@@ -67,6 +67,50 @@ def test_detects_exact_bacterial_rbs_as_reviewable_evidence():
         if item["annotation"]["type"] == "RBS"
     )
 
-    assert match["annotation"]["name"] == "Shine-Dalgarno RBS"
+    assert match["annotation"]["name"] == "Shine-Dalgarno candidate"
     assert match["matched_sequence"] == "AAGGAG"
     assert "review" in match["basis"].lower()
+
+
+def test_sd_requires_a_downstream_possible_start_in_transcript_direction():
+    sequence = "CCCAAGGAG" + "C" * 7 + "ATG" + "C" * 20
+    forward = [m for m in detect_common_features(sequence) if m['annotation']['type'] == 'RBS']
+    reverse = [m for m in detect_common_features(reverse_complement(sequence)) if m['annotation']['type'] == 'RBS']
+    assert len(forward) == len(reverse) == 1
+    assert forward[0]['annotation']['direction'] == 1
+    assert reverse[0]['annotation']['direction'] == -1
+    assert '7 nt upstream' in forward[0]['basis']
+    assert 'mRNA' in forward[0]['basis']
+    assert forward[0]['annotation']['inferred'] is True
+    for isolated in ['AAGGAG' + 'C' * 30, 'ATG' + 'C' * 7 + 'AAGGAG', 'AAGGAGATG']:
+        assert not [m for m in detect_common_features(isolated) if m['annotation']['type'] == 'RBS']
+
+
+def test_sd_overlapping_spellings_do_not_make_two_annotations():
+    matches = detect_common_features('AAGGAGG' + 'C' * 7 + 'ATG')
+    assert len([m for m in matches if m['annotation']['type'] == 'RBS']) == 1
+
+
+def test_sd_circular_context_and_coding_overlap_are_respected():
+    sequence = 'AAGGAG' + 'C' * 7 + 'ATGCCC'
+    rotated = sequence[10:] + sequence[:10]
+    assert len([m for m in detect_common_features(rotated, circular=True) if m['annotation']['type'] == 'RBS']) == 1
+    assert not [m for m in detect_common_features(sequence, existing=[
+        {'name': 'coding region', 'type': 'CDS', 'start': 0, 'end': len(sequence), 'direction': 1},
+    ]) if m['annotation']['type'] == 'RBS']
+
+
+def test_existing_rbs_alias_and_strand_do_not_create_a_false_duplicate():
+    sequence = 'AAGGAG' + 'C' * 7 + 'ATG'
+    known = {'name': 'RBS', 'type': 'RBS', 'start': 0, 'end': 6, 'direction': 1}
+    assert not [m for m in detect_common_features(sequence, existing=[known]) if m['annotation']['type'] == 'RBS']
+    known['direction'] = -1
+    assert len([m for m in detect_common_features(sequence, existing=[known]) if m['annotation']['type'] == 'RBS']) == 1
+
+
+def test_t7_terminator_direction_follows_transcription_in_the_reference():
+    from gsynth_engine.vectors import sequence_of
+    sequence = sequence_of('pET-21a')['sequence']
+    terminators = [m for m in detect_common_features(sequence, circular=True) if m['annotation']['type'] == 'terminator']
+    assert len(terminators) == 1
+    assert terminators[0]['annotation']['direction'] == -1

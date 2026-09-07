@@ -62,6 +62,7 @@ export type Annotation = {
   /** Optional reading-frame bounds for coordinate-level translation. */
   translation_start?: number;
   translation_end?: number;
+  regulatory_class?: string;
   inferred?: boolean;
   basis?: string;
 };
@@ -1078,6 +1079,9 @@ export const api = {
       method: "PATCH",
       body: { annotations },
     }),
+
+  detectSequenceFeatures: (sequence: string, annotations: Annotation[], circular: boolean) =>
+    request<{ matches: DetectedFeature[] }>("/api/design/features/", { method: "POST", body: { sequence, annotations, circular } }),
 
   detectCommonFeatures: (id: number) =>
     request<{ matches: DetectedFeature[]; method: string }>(

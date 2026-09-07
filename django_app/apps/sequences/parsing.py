@@ -57,6 +57,9 @@ class Annotation:
     end: int
     direction: int          # 1 forward, -1 reverse, 0 unstranded
     color: str
+    regulatory_class: str = ""
+    inferred: bool = False
+    basis: str = ""
 
 
 @dataclass
@@ -72,7 +75,9 @@ class ParsedRecord:
 
     def to_dict(self) -> dict:
         return {**asdict(self),
-                "annotations": [asdict(a) for a in self.annotations]}
+                "annotations": [{key: value for key, value in asdict(a).items()
+                                 if key not in {"regulatory_class", "basis", "inferred"} or value}
+                                for a in self.annotations]}
 
 
 #: A SnapGene file opens with a length-prefixed block whose first byte is 9.
@@ -235,6 +240,12 @@ def _annotations_from(record) -> list[Annotation]:
                 1 if location.strand == 1 else -1 if location.strand == -1 else 0
             ),
             color=FEATURE_COLORS.get(ftype, DEFAULT_FEATURE_COLOR),
+            regulatory_class=str(feature.qualifiers.get("regulatory_class", [""])[0]),
+            inferred=bool(feature.qualifiers.get("inference")) or any(
+                note.startswith("Computational candidate:") for note in feature.qualifiers.get("note", [])
+            ),
+            basis=next((note.removeprefix("Computational candidate: ") for note in feature.qualifiers.get("note", [])
+                        if note.startswith("Computational candidate:")), "")[:300],
         ))
     out.sort(key=lambda a: (a.start, -(a.end - a.start)))
     return out

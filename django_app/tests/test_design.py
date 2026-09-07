@@ -2022,3 +2022,22 @@ class TestTraceVerifyEndpoint:
             "design": self.DESIGN,
         }, format="multipart")
         assert response.status_code == 400
+
+
+@pytest.mark.django_db
+class TestAutomaticFeatureDetection:
+    def test_unsaved_sequence_scan_returns_candidate_evidence(self, auth_client):
+        response = auth_client.post(reverse('design-features'), {
+            'sequence': 'AAGGAGCCCCCCCATG', 'annotations': [], 'circular': False,
+        }, format='json')
+        assert response.status_code == 200, response.data
+        matches = response.data['matches']
+        assert len(matches) == 1
+        assert matches[0]['annotation']['inferred'] is True
+        assert 'mRNA' in matches[0]['annotation']['basis']
+
+    def test_anonymous_scan_is_refused(self, api_client):
+        assert api_client.post(reverse('design-features'), {'sequence': 'ATG'}).status_code == 401
+
+    def test_invalid_sequence_is_refused(self, auth_client):
+        assert auth_client.post(reverse('design-features'), {'sequence': 'not DNA'}).status_code == 400
