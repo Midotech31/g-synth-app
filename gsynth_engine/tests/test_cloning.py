@@ -367,6 +367,7 @@ class TestReadingFrame:
         )
         assert result.protein.startswith("MGSSHHHHHHSSG")
         assert "LVPRGS" in result.protein          # the thrombin site
+        assert result.translation_start == result.insert_start + ssd.orf_start
 
     def test_a_stop_inside_the_insert_blocks_the_clone(self, vector):
         design = design_small_sequence(
@@ -403,6 +404,7 @@ class TestReadingFrame:
     def test_no_frame_check_without_an_orf_start(self, vector, ssd):
         result = clone(vector, ssd.forward, left_enzyme="NdeI", right_enzyme="XhoI")
         assert result.protein == ""
+        assert result.translation_start is None
         assert result.reading_frame.status == "review"
 
     def test_pre_digested_insert_can_expose_one_start_candidate(self):
@@ -420,8 +422,22 @@ class TestReadingFrame:
         )
 
         assert result.protein
+        assert result.translation_start == result.insert_start + design.orf_start
         assert result.reading_frame.start_source == "sequence_candidate"
         assert result.reading_frame.status == "review"
+
+    def test_translation_origin_is_retained_on_a_non_expression_backbone(self, vector, ssd):
+        """Displaying the translated insert does not imply confirmed expression."""
+        from dataclasses import replace
+
+        result = clone(
+            vector, ssd.forward,
+            left_enzyme="NdeI", right_enzyme="XhoI", orf_start=ssd.orf_start,
+            vector_spec=replace(vectors.get("pET-21a"), expression_capable=False),
+        )
+        assert result.reading_frame.status == "not_applicable"
+        assert result.translation_start == result.insert_start + ssd.orf_start
+        assert result.protein.startswith("MGSSHHHHHHSSG")
 
     def test_real_pet21a_expression_context_is_confirmed(self):
         vector_record = vectors.sequence_of("pET-21a")

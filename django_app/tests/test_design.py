@@ -1648,6 +1648,34 @@ class TestValidationAndJunctionViews:
         assert data["reading_frame"]["status"] == "pass"
         assert data["reading_frame"]["start_source"] == "declared"
 
+    @pytest.mark.parametrize("declare_start", [True, False])
+    def test_handoff_annotation_translates_the_same_n_terminus(self, auth_client, declare_start):
+        """A duplex handoff must display Met and six His in the engine's frame."""
+        from Bio.Seq import Seq
+
+        designed = self.cloned(auth_client)
+        assembly = designed["assembly"]
+        extra = {"orf_start": assembly["ssd"]["orf_start"]} if declare_start else {}
+        data = self.cloned(
+            auth_client,
+            sequence=assembly["construct_forward"],
+            insert_reverse=assembly["construct_reverse"],
+            pre_digested=True,
+            **extra,
+        )
+        cassette = next(a for a in data["annotations"] if a["name"] == "EntA")
+        start = cassette.get("translation_start", cassette["start"])
+        end = cassette.get("translation_end", cassette["end"])
+        coding = data["plasmid"][start:end]
+        displayed = str(Seq(coding[:len(coding) // 3 * 3]).translate()).split("*")[0]
+
+        assert displayed.startswith("MGSSHHHHHHSSG")
+        assert data["protein"].startswith(displayed)
+        assert start == data["reading_frame"]["translation_start"]
+        assert data["reading_frame"]["start_source"] == (
+            "declared" if declare_start else "sequence_candidate"
+        )
+
     def test_uploaded_annotated_vector_is_validated_without_catalogue_identity(self, auth_client):
         from gsynth_engine import vectors
 

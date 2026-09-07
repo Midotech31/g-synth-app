@@ -523,6 +523,9 @@ class CloningResult:
     warnings: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
 
+    #: Actual protein origin, independent of expression-context confirmation.
+    translation_start: int | None = None
+
     @property
     def length(self) -> int:
         return len(self.plasmid)
@@ -760,9 +763,11 @@ def clone(
 
     protein = ""
     stop_at: int | None = None
+    translation_start: int | None = None
     if orf_start is not None and 0 <= orf_start < len(insert_top):
         # Translate through the plasmid to retain downstream vector fusions.
-        protein, stop_at = _translate_in_plasmid(plasmid, insert_start + orf_start)
+        translation_start = insert_start + orf_start
+        protein, stop_at = _translate_in_plasmid(plasmid, translation_start)
 
         if protein and protein[0] != "M":
             warnings.append(
@@ -851,6 +856,7 @@ def clone(
         annotations=remapped_annotations,
         protein=protein,
         reversed_insert=backbone.reversed_insert,
+        translation_start=translation_start,
         tags=tags,
         reading_frame=reading_frame,
         warnings=warnings,

@@ -372,8 +372,10 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan) -> dict:
         "direction": 1,
         "color": "#0E6E77",
     }
-    if ssd is not None and result.protein:
-        cassette_annotation["translation_start"] = result.insert_start + ssd.orf_start
+    # Duplex handoffs have no SSD object. Use the same origin as the engine's
+    # protein so cohesive-end bases cannot shift the displayed codon frame.
+    if result.translation_start is not None and result.protein:
+        cassette_annotation["translation_start"] = result.translation_start
         cassette_annotation["translation_end"] = result.insert_end
     annotations.append(cassette_annotation)
 
