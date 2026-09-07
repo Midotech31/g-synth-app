@@ -47,7 +47,7 @@ test("design proceeds through hybridization to restriction cloning", async ({ pa
   await expect(page.locator(".frame-assessment").getByText("8 nt to ATG", { exact: true })).toBeVisible();
 });
 
-test("a single-fragment design bypasses inter-fragment assembly", async ({ page }) => {
+test("a single-fragment design bypasses assembly and retains its annotated N terminus", async ({ page }) => {
   await createAccount(page, `single-fragment-${Date.now()}`);
   await page.getByRole("navigation", { name: "Workspace" })
     .getByRole("link", { name: "Design", exact: true }).click();
@@ -59,6 +59,20 @@ test("a single-fragment design bypasses inter-fragment assembly", async ({ page 
   await expect(page.getByRole("button", { name: "Assemble fragments" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Export all sequences" })).toBeEnabled();
   await expect(page.getByRole("button", { name: /Verify hybridization/ })).toBeEnabled();
+
+  await page.getByRole("button", { name: /Verify hybridization/ }).click();
+  await page.getByRole("button", { name: /Simulate restriction cloning/ }).click();
+  await page.getByRole("button", { name: "Simulate digestion" }).click();
+  await page.getByRole("button", { name: "Ligate compatible ends" }).click();
+  await page.getByRole("tab", { name: /^Product/ }).click();
+  await page.getByRole("tab", { name: "Sequence", exact: true }).click();
+
+  const annotated = page.getByRole("region", { name: "Coordinate-level annotated sequence" });
+  await expect(annotated.getByTitle("Residue 1: Met (ATG)", { exact: true })).toBeVisible();
+  for (let residue = 5; residue <= 10; residue += 1) {
+    await expect(annotated.getByTitle(`Residue ${residue}: His (CAC)`, { exact: true }).first()).toBeVisible();
+  }
+  await expect(annotated.getByTitle("Residue 1: Tyr (TAT)", { exact: true })).toHaveCount(0);
 });
 
 test("mobile navigation is complete and does not widen the viewport", async ({ page }) => {
