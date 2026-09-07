@@ -313,7 +313,7 @@ export default function AnnotatedSequenceView({
   useEffect(() => {
     setScrollTop(0);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
-  }, [window, rowBases]);
+  }, [window.start, window.end, rowBases]);
 
   const placedAnnotations = useMemo(
     () => placedAnnotationsForWindow(annotations, sequence.length, window, circular),
