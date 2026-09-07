@@ -13,6 +13,8 @@ import {
   type ValidationCheck,
   type VectorSpec,
 } from "../api/client";
+import InsertSettingsSummary from "../components/InsertSettingsSummary";
+import VectorConfiguration from "../components/VectorConfiguration";
 import InsertForm from "../components/InsertForm";
 import ConstructWorkbench from "../components/ConstructWorkbench";
 import CoreWorkflowTrail from "../components/CoreWorkflowTrail";
@@ -93,6 +95,20 @@ export default function Clone() {
   const [experience, setExperience] = useWorkspaceState<"guided" | "expert">("clone.experience", "guided");
   const fileInput = useRef<HTMLInputElement>(null);
 
+  const requestVersion = useRef(0);
+  const vectorRequestVersion = useRef(0);
+  const [vectorLoading, setVectorLoading] = useState(false);
+
+  const invalidate = useCallback(() => {
+    requestVersion.current += 1;
+    setResult(null);
+    setProductAnnotations(null);
+    setLigationCommitted(false);
+    setSaved("");
+    setError("");
+    setBusy(false);
+  }, [setResult, setProductAnnotations, setLigationCommitted, setSaved]);
+
   useEffect(() => {
     api.catalogue().then(setCatalogue).catch(() => {
       setError("Could not load the enzyme catalogue.");
@@ -108,10 +124,8 @@ export default function Clone() {
       left_enzyme: location.state?.preDigested?.leftEnzyme ?? current.left_enzyme,
       right_enzyme: location.state?.preDigested?.rightEnzyme ?? current.right_enzyme,
     }));
-    setResult(null);
-    setProductAnnotations(null);
-    setLigationCommitted(false);
-  }, [location.state?.preDigested, setLigationCommitted, setParams, setPreDigested, setProductAnnotations, setResult]);
+    invalidate();
+  }, [location.state?.preDigested, invalidate, setParams, setPreDigested]);
 
   // Load the vector list, then the default vector's own sequence, so the
   // page is usable without importing anything.
@@ -141,8 +155,10 @@ export default function Clone() {
   /** Switch vector, pulling its bundled sequence when it has one. */
   async function selectVector(key: string, known: VectorSpec[] = vectors) {
     const spec = known.find((v) => v.key === key);
-    setResult(null);
-    setSaved("");
+    const version = ++vectorRequestVersion.current;
+    invalidate();
+    setVectorLoading(false);
+    setVector({ ...EMPTY_VECTOR, key: spec?.key ?? "", name: spec?.name ?? "" });
 
     if (!spec) {
       setVector({ ...EMPTY_VECTOR, key: "" });
@@ -152,7 +168,7 @@ export default function Clone() {
     // Follow the vector's own cloning pair — pET-21(+) has no NdeI site, so
     // leaving the G-Synth default selected would just fail.
     const pair = spec.recommended_pairs[0]?.split("/").map((p) => p.trim());
-    if (pair?.length === 2) {
+    if (pair?.length === 2 && !preDigested && !location.state?.preDigested) {
       setParams((current) => ({
         ...current,
         left_enzyme: pair[0],
@@ -166,8 +182,10 @@ export default function Clone() {
       });
       return;
     }
+    setVectorLoading(true);
     try {
       const record = await api.vectorSequence(spec.key);
+      if (vectorRequestVersion.current !== version) return;
       setVector({
         key: spec.key,
         name: record.name,
@@ -177,24 +195,30 @@ export default function Clone() {
         bundled: true,
       });
     } catch {
-      setError(`Could not load the sequence for ${spec.name}.`);
+      if (vectorRequestVersion.current === version) setError(`Could not load the sequence for ${spec.name}.`);
+    } finally {
+      if (vectorRequestVersion.current === version) setVectorLoading(false);
     }
   }
 
   const set = useCallback(
     <K extends keyof DesignParams>(key: K, value: DesignParams[K]) => {
       setParams((current) => ({ ...current, [key]: value }));
-      setResult(null);
-      setSaved("");
+      invalidate();
     },
-    [],
+    [invalidate, setParams],
   );
 
   const setVectorField = useCallback(<K extends keyof Vector>(key: K, value: Vector[K]) => {
-    setVector((current) => ({ ...current, [key]: value }));
-    setResult(null);
-    setSaved("");
-  }, []);
+    vectorRequestVersion.current += 1;
+    setVectorLoading(false);
+    setVector((current) => ({
+      ...current, [key]: value,
+      // Editing bases invalidates imported coordinates and the catalogue shortcut.
+      ...(key === "sequence" ? { bundled: false, annotations: [] } : {}),
+    }));
+    invalidate();
+  }, [invalidate, setVector]);
 
   function setTransferredEnzyme(side: "leftEnzyme" | "rightEnzyme", enzyme: string) {
     setPreDigested((current) => current ? { ...current, [side]: enzyme } : current);
@@ -202,17 +226,16 @@ export default function Clone() {
       ...current,
       [side === "leftEnzyme" ? "left_enzyme" : "right_enzyme"]: enzyme,
     }));
-    setResult(null);
-    setProductAnnotations(null);
-    setLigationCommitted(false);
-    setSaved("");
-    setError("");
+    invalidate();
   }
 
   async function importFile(file: File) {
-    setError("");
+    const version = ++vectorRequestVersion.current;
+    invalidate();
+    setVectorLoading(true);
     try {
       const record = await api.parseFile(file);
+      if (vectorRequestVersion.current !== version) return;
       setVector((current) => ({
         // Keep the catalogue entry selected: the imported sequence is then
         // checked against it, which is how a substitution gets caught.
@@ -223,27 +246,31 @@ export default function Clone() {
         circular: record.topology === "circular",
         bundled: false,
       }));
-      setResult(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not read that file.");
+      if (vectorRequestVersion.current === version) setError(err instanceof ApiError ? err.message : "Could not read that file.");
+    } finally {
+      if (vectorRequestVersion.current === version) setVectorLoading(false);
     }
   }
 
   async function runClone(saveAsProject = false) {
+    const version = ++requestVersion.current;
     setBusy(true);
     setError("");
     setSaved("");
     if (!saveAsProject) setLigationCommitted(false);
     try {
       const data = await api.clone(clonePayload(saveAsProject, saveAsProject));
+      if (requestVersion.current !== version) return;
       setResult(data);
       setProductAnnotations(data.annotations);
       if (data.project_id) setSaved(`Saved to your projects (#${data.project_id}).`);
     } catch (err) {
+      if (requestVersion.current !== version) return;
       setError(err instanceof ApiError ? err.message : "The cloning failed.");
       setResult(null);
     } finally {
-      setBusy(false);
+      if (requestVersion.current === version) setBusy(false);
     }
   }
 
@@ -300,7 +327,7 @@ export default function Clone() {
   const insertReady = preDigested
     ? preDigested.top.trim().length > 0 && preDigested.bottom.trim().length > 0
     : params.sequence.trim().length > 0;
-  const ready = vectorLength > 0 && insertReady;
+  const ready = !vectorLoading && vectorLength > 0 && insertReady;
   const spec = vectors.find((v) => v.key === vector.key) ?? null;
   const validationStatus = (check: ValidationCheck) =>
     check.status ?? (check.passed ? "pass" : "block");
@@ -325,6 +352,7 @@ export default function Clone() {
         : "This will not clone. Read the reasons above the result.";
 
   function clearWorkspace() {
+    invalidate();
     clearPreDigested();
     clearParams();
     clearResult();
@@ -411,22 +439,12 @@ export default function Clone() {
                     ))}
                     <option value="">Something else — I'll supply it</option>
                   </select>
-                  {spec && <span className="label">{spec.tag_summary}</span>}
                 </div>
 
-                {spec && (
-                  <div className="vector-brief">
-                    <p className="note" style={{ margin: 0 }}>{spec.summary}</p>
-                    <div className="vector-facts">
-                      <span><b>{spec.promoter}</b> promoter</span>
-                      <span><b>{spec.resistance}</b></span>
-                      <span>cloned with <b>{spec.recommended_pairs[0]}</b></span>
-                    </div>
-                    {spec.notes.map((note) => (
-                      <p key={note} className="note vector-note">{note}</p>
-                    ))}
-                  </div>
-                )}
+                <VectorConfiguration spec={spec}
+                  leftEnzyme={preDigested?.leftEnzyme ?? params.left_enzyme}
+                  rightEnzyme={preDigested?.rightEnzyme ?? params.right_enzyme}
+                  result={result} bundled={vector.bundled} loading={vectorLoading} />
 
                 {!vector.key && (
                   <div className="field">
@@ -500,7 +518,7 @@ export default function Clone() {
                   <button className={experience === "guided" ? "active" : ""} onClick={() => {
                     setExperience("guided");
                     setParams((current) => ({ ...current, cleavage_site: "Thrombin", include_his_tag: true, include_linkers: true, remove_stop: false, target_oligo_length: 90, overhang_length: 4 }));
-                    setResult(null);
+                    invalidate();
                   }}>Guided</button>
                   <button className={experience === "expert" ? "active" : ""} onClick={() => setExperience("expert")}>Expert</button>
                 </div>
@@ -526,11 +544,7 @@ export default function Clone() {
                     style={{ padding: "0.1rem 0.4rem", fontSize: "0.8rem" }}
                     onClick={() => {
                       setPreDigested(null);
-                      setResult(null);
-                      setProductAnnotations(null);
-                      setLigationCommitted(false);
-                      setSaved("");
-                      setError("");
+                      invalidate();
                     }}
                   >
                     Change insert or enzymes
@@ -561,9 +575,7 @@ export default function Clone() {
               )}
               <div className="card-body">
                 {experience === "guided" && !preDigested && (
-                  <div className="notice notice-info compact">
-                    Validated defaults add a 6×His tag, flexible linkers and a Thrombin site, using 90 nt oligos with 4 nt assembly junctions.
-                  </div>
+                  <InsertSettingsSummary params={params} fragment={fragment} />
                 )}
                 {!preDigested && (
                   <InsertForm
@@ -578,7 +590,7 @@ export default function Clone() {
                 {experience === "expert" && <div className="checks">
                   <label>
                     <input type="checkbox" checked={!fragment}
-                           onChange={(e) => { setFragment(!e.target.checked); setResult(null); }} />
+                           onChange={(e) => { setFragment(!e.target.checked); invalidate(); }} />
                     Clone the SSD duplex as it is, without fragmenting it
                   </label>
                 </div>}

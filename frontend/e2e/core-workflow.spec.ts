@@ -15,7 +15,7 @@ async function createAccount(page, suffix: string) {
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible();
 }
 
-test("design proceeds through hybridization to restriction cloning", async ({ page }) => {
+test("design proceeds through hybridization to restriction cloning", async ({ page }, testInfo) => {
   await createAccount(page, `workflow-${Date.now()}`);
   await page.getByRole("navigation", { name: "Workspace" }).getByRole("link", { name: "Design", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Design a construct" })).toBeVisible();
@@ -45,6 +45,14 @@ test("design proceeds through hybridization to restriction cloning", async ({ pa
   await expect(page.getByRole("heading", { name: "Expression reading frame" })).toBeVisible();
   await expect(page.locator(".frame-assessment").getByText("Confirmed", { exact: true })).toBeVisible();
   await expect(page.locator(".frame-assessment").getByText("8 nt to ATG", { exact: true })).toBeVisible();
+  await page.getByLabel("Left restriction enzyme", { exact: true }).selectOption("BamHI");
+  const configuration = page.getByRole("region", { name: "Cloning configuration" });
+  await expect(configuration.getByText("BamHI / XhoI", { exact: true })).toBeVisible();
+  await expect(configuration.getByText(/Awaiting simulation/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Expression reading frame" })).toHaveCount(0);
+  await expect(page.getByText(/Cloning at NdeI uses/)).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await testInfo.attach("updated-cloning-configuration", { body: await configuration.screenshot(), contentType: "image/png" });
 });
 
 test("a single-fragment design bypasses assembly and retains its annotated N terminus", async ({ page }, testInfo) => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import {
@@ -12,6 +12,7 @@ import {
 import CoreWorkflowTrail from "../components/CoreWorkflowTrail";
 import EnzymePicker from "../components/EnzymePicker";
 import DuplexView from "../components/DuplexView";
+import InsertSettingsSummary from "../components/InsertSettingsSummary";
 import InsertForm from "../components/InsertForm";
 import { segmentColour } from "../components/segmentColour";
 import Icon from "../components/Icon";
@@ -50,6 +51,7 @@ export default function Design() {
   );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const requestVersion = useRef(0);
   const [saved, setSaved, clearSaved] = useWorkspaceState("design.saved", "");
   const [exportOpen, setExportOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -71,6 +73,8 @@ export default function Design() {
         sequence,
         ...(typeof handed.isCoding === "boolean" ? { is_coding: handed.isCoding } : {}),
       }));
+      requestVersion.current += 1;
+      setBusy(false);
       setResult(null);
       setAssembledToken("");
     }
@@ -85,6 +89,8 @@ export default function Design() {
   const set = useCallback(
     <K extends keyof DesignParams>(key: K, value: DesignParams[K]) => {
       setParams((current) => ({ ...current, [key]: value }));
+      requestVersion.current += 1;
+      setBusy(false);
       setResult(null);
       setAssembledToken("");
       setSaved("");
@@ -93,19 +99,22 @@ export default function Design() {
   );
 
   async function design(saveAsProject = false) {
+    const version = ++requestVersion.current;
     setBusy(true);
     setError("");
     setSaved("");
     try {
       const data = await api.designAssembly({ ...params, save_as_project: saveAsProject });
+      if (requestVersion.current !== version) return;
       setResult(data);
       setAssembledToken((current) => current === assemblyTokenFor(data) ? current : "");
       if (data.project_id) setSaved(`Saved to your projects (#${data.project_id}).`);
     } catch (err) {
+      if (requestVersion.current !== version) return;
       setError(err instanceof ApiError ? err.message : "The design failed.");
       setResult(null);
     } finally {
-      setBusy(false);
+      if (requestVersion.current === version) setBusy(false);
     }
   }
 
@@ -149,6 +158,8 @@ export default function Design() {
   const canExport = preflightPassed && assemblyComplete;
 
   function clearWorkspace() {
+    requestVersion.current += 1;
+    setBusy(false);
     clearParams();
     clearResult();
     clearSaved();
@@ -274,17 +285,18 @@ export default function Design() {
                 <button className={experience === "guided" ? "active" : ""} onClick={() => {
                   setExperience("guided");
                   setParams((current) => ({ ...current, cleavage_site: "Thrombin", include_his_tag: true, include_linkers: true, remove_stop: false, target_oligo_length: 90, overhang_length: 4 }));
+                  requestVersion.current += 1;
+                  setBusy(false);
                   setResult(null);
                   setAssembledToken("");
+                  setSaved("");
                 }}>Guided</button>
                 <button className={experience === "expert" ? "active" : ""} onClick={() => setExperience("expert")}>Expert</button>
               </div>
             </div>
             <div className="card-body">
               {experience === "guided" && (
-                <div className="notice notice-info compact">
-                  Validated defaults add a 6×His tag, flexible linkers and a Thrombin site, using 90 nt oligos with 4 nt assembly junctions.
-                </div>
+                <InsertSettingsSummary params={params} />
               )}
               <InsertForm params={params} catalogue={catalogue} onChange={set} expert={experience === "expert"} />
             </div>

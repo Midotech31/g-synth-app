@@ -252,7 +252,7 @@ export default function Pcr() {
 
   const enzymes = catalogue?.enzymes ?? [];
   const leftSuppliesStart = enzymes.find((enzyme) => enzyme.name === leftEnzyme)
-    ?.supplies_start_codon ?? leftEnzyme === "NdeI";
+    ?.supplies_start_codon ?? false;
   const customPrimerPairReady = forwardPrimer.replace(/[^A-Za-z]/g, "").length > 0
     && reversePrimer.replace(/[^A-Za-z]/g, "").length > 0;
 
@@ -364,7 +364,12 @@ export default function Pcr() {
               <>
                 {experience === "guided" && (
                   <div className="notice notice-info compact">
-                    Uses a six-base terminal clamp, preserves the reading frame and avoids a duplicated start codon when the enzyme supplies ATG.
+                    {customPrimers ? "Using the entered primer sequences; simulation checks their geometry." : <>
+                      Current settings: {clamp}-base terminal clamp; reading-frame adjustment {keepFrame ? "enabled" : "disabled"}.
+                      {leftSuppliesStart && (startCodonMode === "use_site"
+                        ? ` Use the ATG in the ${leftEnzyme} site.`
+                        : " Keep both the site and template start codons.")}
+                    </>}
                   </div>
                 )}
                 <div className="row-2">
