@@ -59,3 +59,14 @@ describe("editable sequence annotations", () => {
     }));
   });
 });
+
+it("renaming a CDS preserves its translation origin", () => {
+  const previous = { name: "CDS", type: "CDS", start: 10, end: 31, translation_start: 11,
+    translation_end: 29, direction: 1, color: "#0E6E77", inferred: true, basis: "Sequence evidence." };
+  const draft = { name: "Renamed CDS", type: "CDS", start: "11", end: "31", direction: "1", color: "#0E6E77", wraps: false };
+  const result = annotationFromDraft(draft, 100, false, previous);
+  expect(result.annotation?.translation_start).toBe(11);
+  expect(result.annotation?.translation_end).toBe(29);
+  expect(result.annotation?.inferred).toBe(true);
+  expect(result.annotation?.basis).toBe("Sequence evidence.");
+});

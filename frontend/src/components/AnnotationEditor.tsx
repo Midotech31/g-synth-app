@@ -7,7 +7,8 @@ const TYPES = [
   ["CDS", "Coding sequence (CDS)"],
   ["mat_peptide", "Mature peptide / insert"],
   ["promoter", "Promoter"],
-  ["RBS", "Ribosome-binding site"],
+  ["RBS", "Ribosome-binding site (mRNA)"],
+  ["regulatory", "Regulatory region"],
   ["protein_bind", "Protein-binding site"],
   ["terminator", "Terminator"],
   ["rep_origin", "Replication origin"],
@@ -86,9 +87,17 @@ export function annotationFromDraft(
     color: draft.color.toUpperCase(),
   };
   if (previous?.truncated) annotation.truncated = true;
+  const unchangedSpan = previous?.start === start && previous.end === end
+    && previous.direction === annotation.direction && previous.type === draft.type;
+  if (previous?.inferred) {
+    annotation.inferred = true;
+    annotation.basis = unchangedSpan ? previous.basis : "Annotation edited; sequence evidence and biological function require review.";
+  } else if (unchangedSpan && previous?.basis) annotation.basis = previous.basis;
+  if (previous?.type === draft.type && previous.regulatory_class) annotation.regulatory_class = previous.regulatory_class;
+  if (draft.type === "RBS") annotation.regulatory_class = "ribosome_binding_site";
   if (draft.type === "CDS") {
-    annotation.translation_start = start;
-    annotation.translation_end = end;
+    annotation.translation_start = unchangedSpan ? previous?.translation_start ?? start : start;
+    annotation.translation_end = unchangedSpan ? previous?.translation_end ?? end : end;
   }
   return { annotation };
 }
@@ -122,7 +131,9 @@ export default function AnnotationEditor({
     if (!open) return;
     setDraft(draftFromAnnotation(annotation, sequenceLength));
     setError("");
-    window.setTimeout(() => firstField.current?.focus(), 0);
+    const opener = document.activeElement as HTMLElement | null;
+    const timer = window.setTimeout(() => firstField.current?.focus(), 0);
+    return () => { window.clearTimeout(timer); if (opener?.isConnected) opener.focus(); };
   }, [annotation, open, sequenceLength]);
 
   if (!open) return null;
@@ -140,7 +151,13 @@ export default function AnnotationEditor({
         aria-modal="true"
         aria-labelledby={titleId}
         onKeyDown={(event) => {
-          if (event.key === "Escape" && !saving) onCancel();
+          if (event.key === "Escape") { event.stopPropagation(); if (!saving) onCancel(); }
+          if (event.key !== "Tab") return;
+          event.stopPropagation();
+          const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled])')];
+          const first = controls[0]; const last = controls[controls.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+          if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
         }}
         onSubmit={(event) => {
           event.preventDefault();
@@ -179,6 +196,7 @@ export default function AnnotationEditor({
               value={draft.type}
               onChange={(event) => set("type", event.target.value)}
             >
+              {!TYPES.some(([type]) => type === draft.type) && <option value={draft.type}>{draft.type}</option>}
               {TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </div>

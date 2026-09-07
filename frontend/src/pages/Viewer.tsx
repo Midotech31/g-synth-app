@@ -13,6 +13,8 @@ import {
 } from "../api/client";
 import Icon from "../components/Icon";
 import AnnotatedSequenceView from "../components/AnnotatedSequenceView";
+import ExpandablePanel from "../components/ExpandablePanel";
+import FeatureEvidence from "../components/FeatureEvidence";
 import AnnotationEditor from "../components/AnnotationEditor";
 import ConfirmDialog from "../components/ConfirmDialog";
 import LiveStatus from "../components/LiveStatus";
@@ -27,7 +29,7 @@ import PreflightPanel from "../components/PreflightPanel";
  * containing the click point is the one a person meant: a 20 bp site inside
  * a 700 bp CDS is what the cursor was actually over.
  */
-const COMPLEMENT: Record<string, string> = { A: "T", T: "A", G: "C", C: "G", N: "N" };
+const COMPLEMENT: Record<string, string> = { A: "T", T: "A", G: "C", C: "G", R: "Y", Y: "R", S: "S", W: "W", K: "M", M: "K", B: "V", V: "B", D: "H", H: "D", N: "N" };
 
 /** A reverse-strand feature is read 5'→3' opposite to how it is stored. */
 function reverseComplement(seq: string): string {
@@ -46,7 +48,7 @@ export function annotationAt(
     if (a.start <= start && a.end >= end) return true;
     return Number.isFinite(sequenceLength)
       && a.end > sequenceLength
-      && start < a.end - sequenceLength;
+      && start < a.end - sequenceLength && end <= a.end - sequenceLength;
   });
   if (!covering.length) return null;
   return covering.reduce((smallest, a) =>
@@ -82,6 +84,7 @@ export default function Viewer() {
 
   useEffect(() => {
     let cancelled = false;
+    setProject(null); setError(""); setSelected(null); setDetected([]); setActionError("");
     (async () => {
       try {
         const data = await api.getProject(Number(id));
@@ -149,6 +152,18 @@ export default function Viewer() {
       setDetecting(false);
     }
   };
+
+  useEffect(() => {
+    if (!project) return;
+    let cancelled = false;
+    setDetecting(true);
+    api.detectCommonFeatures(project.id).then((result) => {
+      if (!cancelled) { setDetected(result.matches); setChosenMatches(new Set()); }
+    }).catch(() => {
+      if (!cancelled) setActionError("Automatic feature detection failed. Use Find common to retry.");
+    }).finally(() => { if (!cancelled) setDetecting(false); });
+    return () => { cancelled = true; };
+  }, [project?.id]);
 
   // SeqViz wants its own shape; keep the mapping in one place.
   const seqvizAnnotations = useMemo(
@@ -287,6 +302,7 @@ export default function Viewer() {
           </div>
         </div>
 
+        <ExpandablePanel label="Plasmid explorer">
         <div className="viewer-layout">
           <div className={`card seq-stage ${mode === "annotated" ? "seq-stage-annotated" : ""}`}>
             {mode === "annotated" ? (
@@ -384,7 +400,8 @@ export default function Viewer() {
                                 : feature.end).toLocaleString()}
                               {feature.direction === -1 ? " · reverse" : " · forward"}
                             </small>
-                            <code title={match.basis}>{match.matched_sequence}</code>
+                            <code>{match.matched_sequence}</code>
+                            <small>{match.basis}</small>
                           </span>
                         </label>
                       );
@@ -406,7 +423,7 @@ export default function Viewer() {
                       onClick={() => {
                         const additions = detected
                           .filter((_, index) => chosenMatches.has(index))
-                          .map((match) => match.annotation);
+                          .map((match) => ({ ...match.annotation, inferred: true, basis: match.basis }));
                         const firstAdded = annotations.length;
                         void saveAnnotationList(
                           [...annotations, ...additions],
@@ -452,7 +469,7 @@ export default function Viewer() {
                       <span style={{ minWidth: 0 }}>
                         <span className="nm" style={{ display: "block" }}>{a.name}</span>
                         <span className="ty">
-                          {a.type} · {a.direction === -1 ? "reverse" : "forward"}
+                          {a.type} · {a.direction === -1 ? "reverse" : a.direction === 1 ? "forward" : "unstranded"}{a.inferred ? " · candidate" : ""}
                         </span>
                       </span>
                       <span className="rg">
@@ -521,6 +538,7 @@ export default function Viewer() {
                     </div>
                   </div>
                 </div>
+                <FeatureEvidence annotation={selected} />
                 {selected.truncated && (
                   <p className="note" style={{ padding: "0 1.1rem 0.9rem", color: "var(--amber)" }}>
                     Truncated at the insert junction — this feature ran past the cut and only
@@ -614,7 +632,7 @@ export default function Viewer() {
                   onClick={() => void api.downloadUrl(
                     `/api/projects/${project.id}/export/`,
                     `${project.name.replace(/\s+/g, "_")}.gb`,
-                  )}
+                  ).catch(() => setActionError("Could not download the GenBank file. Try again."))}
                 >
                   GenBank
                 </button>
@@ -626,6 +644,8 @@ export default function Viewer() {
           </div>
         </div>
 
+        </ExpandablePanel>
+
         <div className="viewer-audit-grid">
           <PreflightPanel report={preflight} />
 
@@ -634,8 +654,9 @@ export default function Viewer() {
               <div className="card-head">
                 <h2 style={{ flex: 1 }}>Reproducibility record</h2>
                 <button className="btn btn-outline" onClick={() => {
-                  void navigator.clipboard.writeText(JSON.stringify(provenance, null, 2));
-                  setStatus("Provenance manifest copied.");
+                  void navigator.clipboard.writeText(JSON.stringify(provenance, null, 2))
+                    .then(() => setStatus("Provenance manifest copied."))
+                    .catch(() => setActionError("Clipboard access was denied. Select and copy the manifest manually."));
                 }}>Copy manifest</button>
               </div>
               <div className="card-body provenance-grid">

@@ -10,6 +10,7 @@ from apps.design.views import (
     ConstructExportView,
     EnzymeCatalogueView,
     ExtendedSequenceDesignView,
+    FeatureDetectionView,
     HybridizationView,
     LigationView,
     OptimiseView,
@@ -26,6 +27,7 @@ from apps.design.views import (
 )
 
 urlpatterns = [
+    path("features/", FeatureDetectionView.as_view(), name="design-features"),
     path("enzymes/", EnzymeCatalogueView.as_view(), name="design-enzymes"),
     path("codon-hosts/", CodonHostCatalogueView.as_view(), name="design-codon-hosts"),
     path("ssd/", SSDDesignView.as_view(), name="design-ssd"),

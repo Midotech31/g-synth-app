@@ -219,3 +219,19 @@ class TestFasta:
 
     def test_an_empty_order_sheet_is_empty(self):
         assert oligos_to_fasta([]) == ""
+
+
+def test_regulatory_class_and_candidate_evidence_survive_export():
+    import io
+
+    from Bio import SeqIO
+
+    from gsynth_engine.genbank import to_genbank
+    text = to_genbank('AAGGAGCCCCCCCATG', features=[{
+        'name': 'SD candidate', 'type': 'RBS', 'start': 0, 'end': 6,
+        'direction': 1, 'inferred': True, 'basis': 'mRNA motif; function requires review.',
+    }])
+    feature = SeqIO.read(io.StringIO(text), 'genbank').features[1]
+    assert feature.type == 'regulatory'
+    assert feature.qualifiers['regulatory_class'] == ['ribosome_binding_site']
+    assert any('Computational candidate' in note for note in feature.qualifiers['note'])

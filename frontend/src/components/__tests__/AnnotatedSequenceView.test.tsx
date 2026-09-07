@@ -73,3 +73,42 @@ describe("coordinate-level annotation view", () => {
     expect(onSelect).toHaveBeenCalledWith(annotations[2]);
   });
 });
+
+
+describe("whole-record navigation", () => {
+  it("reaches the final bases of a 200 kb record without rendering every base", () => {
+    const { container } = render(<AnnotatedSequenceView sequence={"A".repeat(200000)} annotations={[]} selected={null} circular onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Whole plasmid" }));
+    expect(screen.getByText(/Showing bases 1–200,000/)).toBeInTheDocument();
+    expect(container.querySelectorAll(".annotation-base").length).toBeLessThan(1500);
+    fireEvent.change(screen.getByLabelText("Go to base"), { target: { value: "200000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Go" }));
+    expect(screen.getByTitle("200,000: A")).toBeInTheDocument();
+    expect(screen.queryByTitle("200,001: A")).not.toBeInTheDocument();
+  });
+
+  it("rejects invalid coordinates and keeps sequence navigation usable", () => {
+    render(<AnnotatedSequenceView sequence={"A".repeat(1500)} annotations={[]} selected={null} onSelect={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Go to base"), { target: { value: "1600" } });
+    fireEvent.click(screen.getByRole("button", { name: "Go" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("1 to 1,500");
+    fireEvent.click(screen.getByRole("button", { name: "Next region" }));
+    expect(screen.getByText(/Showing bases 301–900/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Bases per row"), { target: { value: "30" } });
+    expect(screen.getByRole("combobox")).toHaveValue("30");
+  });
+
+  it("does not repeat a small circular molecule or invent strandedness", () => {
+    const feature = { name: "unstranded", type: "misc_feature", start: 0, end: 6, direction: 0, color: "#ffffff" };
+    render(<AnnotatedSequenceView sequence="AAACCCGGG" annotations={[feature]} selected={null} circular onSelect={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /unstranded strand/ })).toBeInTheDocument();
+    expect(screen.getByText(/Showing bases 1–9/)).toBeInTheDocument();
+  });
+
+  it("keeps reverse-strand codons aligned when a row splits a codon", () => {
+    const feature = { name: "reverse CDS", type: "CDS", start: 53, end: 62, direction: -1, color: "#0e6e77" };
+    render(<AnnotatedSequenceView sequence={"A".repeat(53) + "TTAGGGCAT"} annotations={[feature]} selected={null} onSelect={vi.fn()} />);
+    expect(screen.getAllByTitle("Residue 1: Met (ATG)")).toHaveLength(2);
+    expect(screen.getByTitle("Residue 2: Pro (CCC)")).toBeInTheDocument();
+  });
+});

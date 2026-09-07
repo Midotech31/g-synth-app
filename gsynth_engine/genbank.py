@@ -42,12 +42,25 @@ class Feature:
 
     @classmethod
     def from_dict(cls, entry: dict) -> Feature:
+        feature_type = str(entry.get("type") or "misc_feature")
+        qualifiers = {}
+        regulatory_class = entry.get("regulatory_class") or {
+            "RBS": "ribosome_binding_site", "promoter": "promoter", "terminator": "terminator",
+        }.get(feature_type)
+        if regulatory_class:
+            feature_type = "regulatory"
+            qualifiers["regulatory_class"] = str(regulatory_class)
+        if entry.get("inferred"):
+            qualifiers["note"] = "Computational candidate: " + str(entry.get("basis") or "function unconfirmed")
+        elif entry.get("basis"):
+            qualifiers["note"] = str(entry["basis"])
         return cls(
             name=str(entry.get("name") or entry.get("label") or ""),
-            type=str(entry.get("type") or "misc_feature"),
+            type=feature_type,
             start=int(entry.get("start", 0)),
             end=int(entry.get("end", 0)),
             direction=int(entry.get("direction", 1) or 1),
+            qualifiers=qualifiers,
         )
 
 
@@ -84,9 +97,11 @@ def _location(feature: Feature, length: int) -> str:
 
 def _qualifier(key: str, value: str) -> list[str]:
     """A wrapped /key="value" block at GenBank's 21-column indent."""
-    text = f'/{key}="{value}"'
+    escaped = " ".join(str(value).split()).replace('"', '""')
+    text = f'/{key}="{escaped}"'
     return textwrap.wrap(
-        text, width=58, initial_indent=" " * 21, subsequent_indent=" " * 21
+        text, width=79, initial_indent=" " * 21, subsequent_indent=" " * 21,
+        break_long_words=False, break_on_hyphens=False,
     ) or [" " * 21 + text]
 
 

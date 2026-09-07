@@ -8,6 +8,9 @@ import type {
   RestrictionSite,
 } from "../api/client";
 import AnnotatedSequenceView from "./AnnotatedSequenceView";
+import ExpandablePanel from "./ExpandablePanel";
+import { useDetectedFeatures } from "../hooks/useDetectedFeatures";
+import FeatureEvidence from "./FeatureEvidence";
 import AnnotationEditor from "./AnnotationEditor";
 import GelSimulation from "./GelSimulation";
 import Icon from "./Icon";
@@ -32,6 +35,9 @@ type SelectedItem = {
   direction: number;
   color: string;
   annotationIndex?: number;
+  inferred?: boolean;
+  basis?: string;
+  regulatory_class?: string;
   recognition?: string;
   cuts?: number;
   used?: boolean;
@@ -155,6 +161,9 @@ function toSelectedFeature(annotation: Annotation, annotationIndex?: number): Se
     direction: annotation.direction,
     color: annotation.color,
     annotationIndex,
+    inferred: annotation.inferred,
+    basis: annotation.basis,
+    regulatory_class: annotation.regulatory_class,
     wraps: false,
   };
 }
@@ -232,12 +241,18 @@ export default function ConstructWorkbench({
     : stage === "insert"
       ? insertSequence
       : result.plasmid;
-  const stageAnnotations = stage === "vector"
+  const baseAnnotations = stage === "vector"
     ? vector.annotations
     : stage === "insert"
       ? insertAnnotations
       : annotations;
   const stageCircular = stage === "vector" ? vector.circular : stage === "product";
+  const scan = useDetectedFeatures(stageSequence, baseAnnotations, stageCircular);
+  const [showDetected, setShowDetected] = useState(true);
+  const [showInspector, setShowInspector] = useState(true);
+  const stageAnnotations = useMemo(() => [...baseAnnotations,
+    ...(showDetected ? scan.matches.map((match) => match.annotation) : [])],
+  [baseAnnotations, showDetected, scan.matches]);
   const stageName = stage === "vector"
     ? vector.name || result.vector_name
     : stage === "insert"
@@ -282,7 +297,7 @@ export default function ConstructWorkbench({
       name: annotation.name,
       start: annotation.start,
       end: annotation.end,
-      direction: (annotation.direction === -1 ? -1 : 1) as 1 | -1,
+      direction: annotation.direction as 1 | -1 | 0,
       color: annotation.color,
     }));
     if (!showSites) return features;
@@ -304,9 +319,9 @@ export default function ConstructWorkbench({
           ? insertAnnotations[index]?.sourceIndex
           : undefined,
     ));
-    const sites = showSites ? mapSiteParts.map(toSelectedSite) : [];
+    const sites = showSites ? visibleSites.map(toSelectedSite) : [];
     return [...features, ...sites];
-  }, [insertAnnotations, mapSiteParts, showSites, stage, stageAnnotations]);
+  }, [insertAnnotations, visibleSites, showSites, stage, stageAnnotations]);
 
   const oligos = result.assembly?.oligos ?? [];
   const canExport = ligated && result.is_clonable && result.preflight?.can_export !== false;
@@ -349,7 +364,7 @@ export default function ConstructWorkbench({
   const productLockedMessage = "Ligate the compatible ends before inspecting or exporting a recombinant product.";
 
   return (
-    <section className="card construct-workbench" aria-label="Construct workbench">
+    <ExpandablePanel className="card construct-workbench" label="Construct workbench">
       <div className="workbench-head">
         <div>
           <span className="eyebrow">Construct workbench</span>
@@ -422,7 +437,13 @@ export default function ConstructWorkbench({
         ))}
       </div>
 
-      <div className="workbench-layout" role="tabpanel" aria-label={`${stageName} ${view} view`}>
+      <div className="feature-detection-toolbar">
+        <label><input type="checkbox" checked={showDetected} onChange={(event) => setShowDetected(event.target.checked)} /> Show detected candidates</label>
+        <span role="status">{scan.scanning ? "Scanning both strands…" : scan.error || `${scan.matches.length} additional candidates · review before saving`}</span>
+        <button type="button" className="btn btn-ghost" onClick={scan.rescan} disabled={scan.scanning}>Rescan</button>
+        <button type="button" className="btn btn-outline" aria-pressed={showInspector} onClick={() => setShowInspector(!showInspector)}>{showInspector ? "Hide details" : "Show details"}</button>
+      </div>
+      <div className={`workbench-layout${showInspector ? "" : " inspector-hidden"}`} data-view={view} role="tabpanel" aria-label={`${stageName} ${view} view`}>
         <div className="workbench-canvas">
           <div className="workbench-canvas-head">
             <div>
@@ -466,7 +487,8 @@ export default function ConstructWorkbench({
                   disableExternalFonts
                   onSelection={(selection) => {
                     if (selection.type !== "ANNOTATION" || selection.start === undefined || selection.end === undefined) return;
-                    const covering = clickable.filter((item) => item.start <= selection.start! && item.end >= selection.end!);
+                    const covering = clickable.filter((item) => [0, stageSequence.length].some((offset) =>
+                      item.start <= selection.start! + offset && item.end >= selection.end! + offset));
                     if (!covering.length) return;
                     setSelected(covering.reduce((smallest, item) =>
                       item.end - item.start < smallest.end - smallest.start ? item : smallest));
@@ -480,11 +502,12 @@ export default function ConstructWorkbench({
 
           {view === "sequence" && (
             <AnnotatedSequenceView
+              key={stage}
               sequence={stageSequence}
               annotations={stageAnnotations}
               selected={selected?.kind === "feature"
                 ? stageAnnotations.find((annotation) => annotation.start === selected.start && annotation.end === selected.end && annotation.name === selected.name) ?? null
-                : null}
+                : selected ? { ...selected, type: "restriction_site" } : null}
               preferredName={stage === "product" ? result.name : stageName}
               circular={stageCircular}
               onSelect={(annotation) => {
@@ -619,7 +642,7 @@ export default function ConstructWorkbench({
           )}
         </div>
 
-        <aside className="workbench-inspector" aria-label="Selection inspector">
+        <aside hidden={!showInspector} className="workbench-inspector" aria-label="Selection inspector">
           <div className="workbench-inspector-section">
             <span className="eyebrow">Current molecule</span>
             <strong>{stageName}</strong>
@@ -635,15 +658,25 @@ export default function ConstructWorkbench({
             <div className="workbench-inspector-section selection">
               <div className="selection-title"><i style={{ background: selected.color }} /><span><strong>{selected.name}</strong><small>{selected.kind === "site" ? "restriction site" : selected.type ?? "feature"}</small></span><button type="button" className="btn btn-ghost" onClick={() => setSelected(null)} aria-label="Clear selection"><Icon name="cross" size={14} /></button></div>
               <dl>
-                <div><dt>Coordinates</dt><dd>{(selected.start + 1).toLocaleString()}–{selected.end.toLocaleString()}</dd></div>
+                <div><dt>Coordinates</dt><dd>{(selected.start + 1).toLocaleString()}–{(stageCircular ? ((selected.end - 1) % stageSequence.length) + 1 : selected.end).toLocaleString()}{selected.end > stageSequence.length && stageCircular ? " (across origin)" : ""}</dd></div>
                 <div><dt>Length</dt><dd>{(selected.end - selected.start).toLocaleString()} bp</dd></div>
                 {selected.kind === "feature" ? <div><dt>Strand</dt><dd>{selected.direction === -1 ? "reverse" : selected.direction === 1 ? "forward" : "unstranded"}</dd></div> : <>
                   <div><dt>Recognition</dt><dd className="mono">{selected.recognition}</dd></div>
                   <div><dt>Frequency</dt><dd>{selected.cuts === 1 ? "unique" : `${selected.cuts} cuts`}</dd></div>
                 </>}
               </dl>
+              <FeatureEvidence annotation={selected} />
+              <button type="button" className="btn btn-outline" onClick={() => setView("sequence")}>View sequence</button>
+              {stage === "product" && selected.kind === "feature" && !baseAnnotations.some((item) => item.name === selected.name && item.start === selected.start && item.end === selected.end) && (
+                <button type="button" className="btn btn-primary" onClick={() => {
+                  const match = scan.matches.find((item) => item.annotation.name === selected.name && item.annotation.start === selected.start && item.annotation.end === selected.end);
+                  if (!match) return;
+                  updateAnnotations([...annotations, match.annotation]);
+                  setSelected(toSelectedFeature(match.annotation, annotations.length));
+                }}>Keep candidate annotation</button>
+              )}
               <div className="workbench-selected-sequence">{selectedSequence(stageSequence, selected)}</div>
-              {stage === "product" && selected.kind === "feature" && (
+              {stage === "product" && selected.kind === "feature" && baseAnnotations.some((item) => item.name === selected.name && item.start === selected.start && item.end === selected.end) && (
                 <div className="workbench-selection-actions">
                   <button type="button" className="btn btn-outline" onClick={editSelectedAnnotation}>Edit</button>
                   <button type="button" className="btn btn-danger" onClick={removeSelectedAnnotation}>Remove</button>
@@ -683,6 +716,6 @@ export default function ConstructWorkbench({
           setEditorOpen(false);
         }}
       />
-    </section>
+    </ExpandablePanel>
   );
 }

@@ -47,7 +47,7 @@ test("design proceeds through hybridization to restriction cloning", async ({ pa
   await expect(page.locator(".frame-assessment").getByText("8 nt to ATG", { exact: true })).toBeVisible();
 });
 
-test("a single-fragment design bypasses assembly and retains its annotated N terminus", async ({ page }) => {
+test("a single-fragment design bypasses assembly and retains its annotated N terminus", async ({ page }, testInfo) => {
   await createAccount(page, `single-fragment-${Date.now()}`);
   await page.getByRole("navigation", { name: "Workspace" })
     .getByRole("link", { name: "Design", exact: true }).click();
@@ -73,6 +73,24 @@ test("a single-fragment design bypasses assembly and retains its annotated N ter
     await expect(annotated.getByTitle(`Residue ${residue}: His (CAC)`, { exact: true }).first()).toBeVisible();
   }
   await expect(annotated.getByTitle("Residue 1: Tyr (TAT)", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Expand viewer", exact: true }).click();
+  const expanded = page.getByRole("dialog", { name: "Construct workbench" });
+  await expect(expanded).toBeVisible();
+  await expanded.getByRole("button", { name: "Whole plasmid" }).click();
+  await expanded.getByLabel("Go to base").fill("5400");
+  await expanded.getByRole("button", { name: "Go", exact: true }).click();
+  await expect(expanded.getByTitle(/^5,400:/)).toBeVisible();
+  await expanded.getByRole("button", { name: "Hide details" }).click();
+  await expect(expanded.getByRole("complementary", { name: "Selection inspector" })).toHaveCount(0);
+  await expect(expanded.getByTitle(/^5,400:/)).toBeInViewport();
+  await page.screenshot({ path: testInfo.outputPath("whole-plasmid-expanded.png") });
+  const results = await new AxeBuilder({ page }).include(".expandable-panel.expanded").analyze();
+  expect(results.violations.filter((v) => ["critical", "serious"].includes(v.impact ?? ""))).toEqual([]);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Expand viewer", exact: true })).toBeFocused();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
 });
 
 test("mobile navigation is complete and does not widen the viewport", async ({ page }) => {
@@ -99,7 +117,7 @@ test("authentication and home have no serious accessibility violations", async (
   expect(homeResults.violations.filter((violation) => ["critical", "serious"].includes(violation.impact ?? ""))).toEqual([]);
 });
 
-test("every scientific workspace uses the available width without page overflow", async ({ page }) => {
+test("every scientific workspace uses the available width without page overflow", async ({ page }, testInfo) => {
   await createAccount(page, `layouts-${Date.now()}`);
   const workspaces = [
     "/optimise", "/design", "/pcr", "/hybridize", "/clone", "/verify", "/align",
@@ -110,6 +128,7 @@ test("every scientific workspace uses the available width without page overflow"
     const layout = page.locator(".design-layout").first();
     await expect(layout).toBeVisible();
     expect(await layout.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(1);
+    await page.screenshot({ path: testInfo.outputPath(`${route.slice(1)}-desktop.png`), fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
 

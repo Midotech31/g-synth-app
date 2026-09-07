@@ -296,3 +296,21 @@ class TestProjectExport:
         assert api_client.get(
             reverse("project-export", args=[mine.id])
         ).status_code == 401
+
+
+@pytest.mark.django_db
+def test_candidate_evidence_survives_saving_and_genbank_reimport(auth_client, user):
+    from apps.sequences.parsing import parse_sequence_file
+    project = Project.objects.create(user=user, name='Evidence test', sequence='AAGGAGCCCCCCCATG', data={})
+    feature = {
+        'name': 'Shine-Dalgarno candidate', 'type': 'RBS', 'start': 0, 'end': 6,
+        'direction': 1, 'color': '#B8860B', 'inferred': True,
+        'basis': 'mRNA motif; function requires review.', 'regulatory_class': 'ribosome_binding_site',
+    }
+    saved = auth_client.patch(f'/api/projects/{project.id}/annotations/', {'annotations': [feature]}, format='json')
+    assert saved.status_code == 200, saved.data
+    assert saved.data['data']['annotations'][0]['inferred'] is True
+    exported = auth_client.get(reverse('project-export', args=[project.id]))
+    parsed = parse_sequence_file(exported.content, 'evidence.gb')
+    assert parsed.annotations[0].inferred is True
+    assert parsed.annotations[0].regulatory_class == 'ribosome_binding_site'

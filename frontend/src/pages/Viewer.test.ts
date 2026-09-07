@@ -26,3 +26,11 @@ describe("wrapped circular annotations", () => {
     expect(annotationAt([wrapped], 1, 2, 10)).toBe(wrapped);
   });
 });
+
+
+it("does not select a wrapped feature for a span extending past its end", () => {
+  expect(annotationAt([wrapped], 1, 7, 10)).toBeNull();
+});
+it("complements ambiguous IUPAC bases on a reverse-strand feature", () => {
+  expect(sequenceForAnnotation("ARYKBDHV", { ...wrapped, start: 0, end: 8, direction: -1 })).toBe("BDHVMRYT");
+});

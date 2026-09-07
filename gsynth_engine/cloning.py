@@ -877,6 +877,10 @@ def _nearest_upstream_feature(
     candidates: list[tuple[int, dict]] = []
     for feature in annotations:
         feature_type = str(feature.get("type", "")).lower().replace("-", "_")
+        if feature_type == "regulatory":
+            feature_type = str(feature.get("regulatory_class", "")).lower()
+            if feature_type == "ribosome_binding_site":
+                feature_type = "rbs"
         name = str(feature.get("name", "")).lower()
         if feature_type not in feature_types and not any(term in name for term in name_terms):
             continue

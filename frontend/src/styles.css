@@ -2622,3 +2622,52 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 620px) {
   .frame-checks { grid-template-columns: 1fr; }
 }
+
+/* Shared sequence exploration: wide view, bounded scrolling and readable tracks. */
+.expandable-panel { min-width: 0; }
+.expandable-panel.expanded {
+  position: fixed; inset: 1rem; z-index: 200; margin: 0; padding: 0;
+  overflow: auto; background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 10px; box-shadow: 0 0 0 100vmax rgba(11, 31, 59, 0.48);
+}
+.viewer-expand-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--line); background: var(--paper); }
+.viewer-expand-toolbar > span { font-size: 0.8rem; font-weight: 650; }
+.expanded > .viewer-expand-toolbar { position: sticky; top: 0; z-index: 20; }
+.sequence-navigation, .feature-detection-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem; padding: 0.65rem 1rem; border-bottom: 1px solid var(--line); font-size: 0.76rem; }
+.sequence-navigation label, .sequence-navigation form, .feature-detection-toolbar label { display: flex; align-items: center; gap: 0.4rem; }
+.sequence-navigation input { width: 8rem; }
+.sequence-navigation input, .sequence-navigation select { padding: 0.4rem; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); color: var(--ink); }
+.sequence-page-buttons { display: flex; gap: 0.4rem; }
+.sequence-navigation [role="alert"] { width: 100%; color: var(--danger); }
+.feature-detection-toolbar > span { flex: 1; min-width: 12rem; color: var(--muted); }
+.annotated-sequence-scroll { height: 660px; min-height: 260px; max-height: 85vh; resize: vertical; overflow: auto; padding: 0 1rem; }
+.annotation-block { min-width: 0; box-sizing: border-box; padding: 12px 0 10px; border-bottom: 1px solid var(--line); }
+.annotation-block + .annotation-block { padding-top: 12px; border-top: 0; }
+.annotation-ruler, .annotation-bases, .annotation-translation { grid-template-columns: repeat(var(--sequence-row-bases, 60), minmax(0, 1fr)); }
+.annotation-ruler .tick.major { font-size: 9px; white-space: nowrap; }
+.annotation-feature.inferred { border: 2px dashed rgba(11, 31, 59, 0.65); }
+.workbench-map-stage, .seq-stage:not(.seq-stage-annotated) { resize: vertical; overflow: auto; min-height: 300px; max-height: 85vh; }
+.workbench-layout.inspector-hidden { grid-template-columns: minmax(0, 1fr); }
+.workbench-inspector[hidden] { display: none; }
+.workbench-inspector-empty { margin: 0; }
+.workbench-inspector { align-self: start; position: sticky; top: 0; }
+.feature-evidence { margin: 0.65rem 0; padding: 0.7rem; background: var(--accent-wash); color: var(--ink-soft); font-size: 0.76rem; line-height: 1.6; }
+.feature-evidence strong { display: block; color: var(--ink); }
+.feature-evidence p + p { margin-top: 0.5rem; }
+.feature-evidence a { text-decoration: underline; }
+.expanded .viewer-layout { padding: 0.75rem; }
+@media (min-width: 721px) {
+  .expanded .workbench-head { padding: 0.4rem 0.85rem; justify-content: flex-end; }
+  .expanded .workbench-head > div:first-child { display: none; }
+  .expanded .workbench-molecules button { padding: 0.45rem 0.85rem; }
+  .expanded .workbench-molecules button strong { display: inline; margin-left: 0.5rem; }
+  .expanded .workbench-molecules button span { display: inline; }
+  .expanded .workbench-layout[data-view="sequence"] .workbench-canvas-head { display: none; }
+  .expanded .annotated-sequence-scroll { height: calc(100dvh - 450px); min-height: 260px; }
+}
+@media (max-width: 720px) {
+  .expandable-panel.expanded { inset: 0; border-radius: 0; }
+  .workbench-inspector { position: static; }
+  .sequence-navigation { align-items: flex-start; }
+  .annotated-sequence-scroll { padding: 0 0.5rem; }
+}
