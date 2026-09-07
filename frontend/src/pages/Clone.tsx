@@ -593,7 +593,7 @@ export default function Clone() {
                   <span>
                     {vectorLength === 0
                       ? "Import or paste a vector to begin."
-                      : "Set the insert and its ends, then press Check ends."}
+                      : "Set the insert and its ends, then press Simulate digestion."}
                   </span>
                 </div>
               </div>

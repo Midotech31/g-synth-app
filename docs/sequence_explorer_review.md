@@ -37,7 +37,7 @@
    Provides `ribosome_binding_site`, `promoter` and `terminator` terminology.
 
 On the plasmid DNA map, an SD annotation identifies the DNA region corresponding
- to the motif in the bacterial mRNA. “Upstream” follows the 5′→3′ transcript,
+to the motif in the bacterial mRNA. “Upstream” follows the 5′→3′ transcript,
 not increasing plasmid coordinates on both strands. An SD motif is not the
 entire RBS, and its absence does not rule out bacterial translation.
 

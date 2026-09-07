@@ -422,6 +422,7 @@ export default function AnnotatedSequenceView({
 
               <div
                 className="annotation-tracks"
+                role="group"
                 style={{ height: `${laneCount * 28}px` }}
                 aria-label={`Features across bases ${displayCoordinate(rowStart)} to ${displayCoordinate(rowEnd - 1)}`}
               >

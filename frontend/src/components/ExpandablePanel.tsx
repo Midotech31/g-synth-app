@@ -24,7 +24,7 @@ export default function ExpandablePanel({ children, label, className = "" }: {
         if (event.key === "Escape") { event.stopPropagation(); setExpanded(false); }
         if (event.key !== "Tab") return;
         const stops = [...(panel.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])]
-          .filter((element) => !element.closest('[hidden]'));
+          .filter((element) => !element.closest('[hidden]') && element.getClientRects().length > 0);
         const first = stops[0]; const last = stops[stops.length - 1];
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
         if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }

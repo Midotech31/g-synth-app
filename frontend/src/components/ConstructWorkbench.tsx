@@ -297,7 +297,7 @@ export default function ConstructWorkbench({
       name: annotation.name,
       start: annotation.start,
       end: annotation.end,
-      direction: (annotation.direction === -1 ? -1 : 1) as 1 | -1,
+      direction: annotation.direction as 1 | -1 | 0,
       color: annotation.color,
     }));
     if (!showSites) return features;
@@ -319,9 +319,9 @@ export default function ConstructWorkbench({
           ? insertAnnotations[index]?.sourceIndex
           : undefined,
     ));
-    const sites = showSites ? mapSiteParts.map(toSelectedSite) : [];
+    const sites = showSites ? visibleSites.map(toSelectedSite) : [];
     return [...features, ...sites];
-  }, [insertAnnotations, mapSiteParts, showSites, stage, stageAnnotations]);
+  }, [insertAnnotations, visibleSites, showSites, stage, stageAnnotations]);
 
   const oligos = result.assembly?.oligos ?? [];
   const canExport = ligated && result.is_clonable && result.preflight?.can_export !== false;
@@ -443,7 +443,7 @@ export default function ConstructWorkbench({
         <button type="button" className="btn btn-ghost" onClick={scan.rescan} disabled={scan.scanning}>Rescan</button>
         <button type="button" className="btn btn-outline" aria-pressed={showInspector} onClick={() => setShowInspector(!showInspector)}>{showInspector ? "Hide details" : "Show details"}</button>
       </div>
-      <div className={`workbench-layout${showInspector ? "" : " inspector-hidden"}`} role="tabpanel" aria-label={`${stageName} ${view} view`}>
+      <div className={`workbench-layout${showInspector ? "" : " inspector-hidden"}`} data-view={view} role="tabpanel" aria-label={`${stageName} ${view} view`}>
         <div className="workbench-canvas">
           <div className="workbench-canvas-head">
             <div>
@@ -487,7 +487,8 @@ export default function ConstructWorkbench({
                   disableExternalFonts
                   onSelection={(selection) => {
                     if (selection.type !== "ANNOTATION" || selection.start === undefined || selection.end === undefined) return;
-                    const covering = clickable.filter((item) => item.start <= selection.start! && item.end >= selection.end!);
+                    const covering = clickable.filter((item) => [0, stageSequence.length].some((offset) =>
+                      item.start <= selection.start! + offset && item.end >= selection.end! + offset));
                     if (!covering.length) return;
                     setSelected(covering.reduce((smallest, item) =>
                       item.end - item.start < smallest.end - smallest.start ? item : smallest));
@@ -506,7 +507,7 @@ export default function ConstructWorkbench({
               annotations={stageAnnotations}
               selected={selected?.kind === "feature"
                 ? stageAnnotations.find((annotation) => annotation.start === selected.start && annotation.end === selected.end && annotation.name === selected.name) ?? null
-                : null}
+                : selected ? { ...selected, type: "restriction_site" } : null}
               preferredName={stage === "product" ? result.name : stageName}
               circular={stageCircular}
               onSelect={(annotation) => {
@@ -657,7 +658,7 @@ export default function ConstructWorkbench({
             <div className="workbench-inspector-section selection">
               <div className="selection-title"><i style={{ background: selected.color }} /><span><strong>{selected.name}</strong><small>{selected.kind === "site" ? "restriction site" : selected.type ?? "feature"}</small></span><button type="button" className="btn btn-ghost" onClick={() => setSelected(null)} aria-label="Clear selection"><Icon name="cross" size={14} /></button></div>
               <dl>
-                <div><dt>Coordinates</dt><dd>{(selected.start + 1).toLocaleString()}–{selected.end.toLocaleString()}</dd></div>
+                <div><dt>Coordinates</dt><dd>{(selected.start + 1).toLocaleString()}–{(stageCircular ? ((selected.end - 1) % stageSequence.length) + 1 : selected.end).toLocaleString()}{selected.end > stageSequence.length && stageCircular ? " (across origin)" : ""}</dd></div>
                 <div><dt>Length</dt><dd>{(selected.end - selected.start).toLocaleString()} bp</dd></div>
                 {selected.kind === "feature" ? <div><dt>Strand</dt><dd>{selected.direction === -1 ? "reverse" : selected.direction === 1 ? "forward" : "unstranded"}</dd></div> : <>
                   <div><dt>Recognition</dt><dd className="mono">{selected.recognition}</dd></div>
@@ -665,7 +666,7 @@ export default function ConstructWorkbench({
                 </>}
               </dl>
               <FeatureEvidence annotation={selected} />
-              {selected.kind === "feature" && <button type="button" className="btn btn-outline" onClick={() => setView("sequence")}>View sequence</button>}
+              <button type="button" className="btn btn-outline" onClick={() => setView("sequence")}>View sequence</button>
               {stage === "product" && selected.kind === "feature" && !baseAnnotations.some((item) => item.name === selected.name && item.start === selected.start && item.end === selected.end) && (
                 <button type="button" className="btn btn-primary" onClick={() => {
                   const match = scan.matches.find((item) => item.annotation.name === selected.name && item.annotation.start === selected.start && item.annotation.end === selected.end);

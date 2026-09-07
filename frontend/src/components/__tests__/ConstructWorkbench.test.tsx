@@ -6,9 +6,14 @@ import ConstructWorkbench, { restrictionSitesForSequence } from "../ConstructWor
 
 vi.mock("seqviz", () => ({
   SeqViz: ({ onSelection }: { onSelection?: (selection: { type: string; start: number; end: number }) => void }) => (
+    <>
     <button type="button" onClick={() => onSelection?.({ type: "ANNOTATION", start: 4, end: 8 })}>
       Select map feature
     </button>
+    <button type="button" onClick={() => onSelection?.({ type: "ANNOTATION", start: 0, end: 3 })}>
+      Select site across origin
+    </button>
+    </>
   ),
 }));
 
@@ -107,6 +112,21 @@ function renderWorkbench(ligated: boolean, onAnnotationsChange = vi.fn()) {
 }
 
 describe("construct workbench", () => {
+  it("inspects the entire restriction site when its map segment crosses the origin", async () => {
+    const plasmid = "CTTGGGGGGGGGGAAG";
+    render(<ConstructWorkbench result={{ ...result, plasmid, length: plasmid.length,
+      restriction_sites: restrictionSitesForSequence(plasmid, true, catalogue, new Set(["HindIII"])) }}
+      vector={vector} constructName="Origin example" catalogue={catalogue} ligated
+      annotations={[]} onAnnotationsChange={vi.fn()} onExport={vi.fn()}
+      onWorksheet={vi.fn()} onSave={vi.fn()} busy={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Select site across origin" }));
+    const inspector = within(screen.getByRole("complementary", { name: "Selection inspector" }));
+    expect(inspector.getByText("14–3 (across origin)")).toBeInTheDocument();
+    expect(inspector.getAllByText("AAGCTT").length).toBeGreaterThan(0);
+    fireEvent.click(inspector.getByRole("button", { name: "View sequence" }));
+    expect(screen.getByRole("region", { name: "Coordinate-level annotated sequence" })).toBeInTheDocument();
+  });
+
   it("finds HindIII and preserves its exact recognition coordinates", () => {
     const sites = restrictionSitesForSequence("CCAAGCTTGG", false, catalogue, new Set(["HindIII"]));
     expect(sites).toHaveLength(1);

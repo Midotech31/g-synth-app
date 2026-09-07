@@ -82,6 +82,7 @@ test("a single-fragment design bypasses assembly and retains its annotated N ter
   await expect(expanded.getByTitle(/^5,400:/)).toBeVisible();
   await expanded.getByRole("button", { name: "Hide details" }).click();
   await expect(expanded.getByRole("complementary", { name: "Selection inspector" })).toHaveCount(0);
+  await expect(expanded.getByTitle(/^5,400:/)).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath("whole-plasmid-expanded.png") });
   const results = await new AxeBuilder({ page }).include(".expandable-panel.expanded").analyze();
   expect(results.violations.filter((v) => ["critical", "serious"].includes(v.impact ?? ""))).toEqual([]);
