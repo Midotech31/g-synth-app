@@ -65,12 +65,12 @@ test("a single-fragment design bypasses assembly and retains its annotated N ter
   await page.getByRole("button", { name: "Simulate digestion" }).click();
   await page.getByRole("button", { name: "Ligate compatible ends" }).click();
   await page.getByRole("tab", { name: /^Product/ }).click();
-  await page.getByRole("tab", { name: /^Annotations/ }).click();
+  await page.getByRole("tab", { name: "Sequence", exact: true }).click();
 
   const annotated = page.getByRole("region", { name: "Coordinate-level annotated sequence" });
   await expect(annotated.getByTitle("Residue 1: Met (ATG)", { exact: true })).toBeVisible();
   for (let residue = 5; residue <= 10; residue += 1) {
-    await expect(annotated.getByTitle(`Residue ${residue}: His (CAC)`, { exact: true })).toBeVisible();
+    await expect(annotated.getByTitle(`Residue ${residue}: His (CAC)`, { exact: true }).first()).toBeVisible();
   }
   await expect(annotated.getByTitle("Residue 1: Tyr (TAT)", { exact: true })).toHaveCount(0);
 });
