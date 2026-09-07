@@ -813,6 +813,7 @@ export type CloneParams = DesignParams & {
   pre_digested?: boolean;
   insert_reverse?: string;
   orf_start?: number | null;
+  insert_annotations?: Annotation[];
   vector_key?: string;
   vector?: string;
   vector_name?: string;

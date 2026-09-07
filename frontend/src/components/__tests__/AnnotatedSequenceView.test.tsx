@@ -24,6 +24,30 @@ const annotations: Annotation[] = [
 ];
 
 describe("coordinate-level annotation view", () => {
+  it("selects an exact range across sequence rows and passes it to the editor", () => {
+    const onAnnotateRange = vi.fn();
+    render(<AnnotatedSequenceView sequence={"ACGT".repeat(40)} annotations={[]} selected={null}
+      onSelect={vi.fn()} onAnnotateRange={onAnnotateRange} />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "Base 59: G" }), { key: "Enter" });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Base 63: G" }), { key: "Enter", shiftKey: true });
+    expect(screen.getByText("59–63 · 5 nt selected")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Annotate selection" }));
+    expect(onAnnotateRange).toHaveBeenCalledWith({ start: 58, end: 63 });
+    fireEvent.click(screen.getByRole("button", { name: "Clear range" }));
+    expect(screen.getByRole("button", { name: "Annotate selection" })).toBeDisabled();
+  });
+
+  it("normalizes a range selected across the circular origin", () => {
+    const onAnnotateRange = vi.fn();
+    render(<AnnotatedSequenceView sequence={"A".repeat(1000)} circular
+      annotations={[{ name: "join", type: "misc_feature", start: 950, end: 1010, direction: 1, color: "#3F7A52" }]}
+      selected={null} preferredName="join" onSelect={vi.fn()} onAnnotateRange={onAnnotateRange} />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "Base 999: A" }), { key: "Enter" });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Base 3: A" }), { key: "Enter", shiftKey: true });
+    fireEvent.click(screen.getByRole("button", { name: "Annotate selection" }));
+    expect(onAnnotateRange).toHaveBeenCalledWith({ start: 998, end: 1003 });
+  });
+
   it("keeps the preferred construct and nearby regulatory features in view", () => {
     expect(chooseAnnotationWindow(annotations, 120, null, "Insulin cassette"))
       .toEqual({ start: 0, end: 120 });

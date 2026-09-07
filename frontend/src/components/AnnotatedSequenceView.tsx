@@ -260,11 +260,30 @@ type Props = {
   preferredName?: string;
   circular?: boolean;
   onSelect: (annotation: Annotation) => void;
+  onAnnotateRange?: (range: { start: number; end: number }) => void;
 };
 
 export default function AnnotatedSequenceView({
-  sequence, annotations, selected, preferredName = "", circular = false, onSelect,
+  sequence, annotations, selected, preferredName = "", circular = false, onSelect, onAnnotateRange,
 }: Props) {
+  const [rangeAnchor, setRangeAnchor] = useState<number | null>(null);
+  const [rangeEnd, setRangeEnd] = useState<number | null>(null);
+  const dragging = useRef(false);
+  useEffect(() => {
+    const finish = () => { dragging.current = false; };
+    globalThis.addEventListener("pointerup", finish);
+    globalThis.addEventListener("pointercancel", finish);
+    return () => { globalThis.removeEventListener("pointerup", finish); globalThis.removeEventListener("pointercancel", finish); };
+  }, []);
+  useEffect(() => { setRangeAnchor(null); setRangeEnd(null); }, [sequence]);
+  const range = rangeAnchor === null || rangeEnd === null ? null : {
+    start: Math.min(rangeAnchor, rangeEnd),
+    end: Math.min(Math.max(rangeAnchor, rangeEnd) + 1, Math.min(rangeAnchor, rangeEnd) + sequence.length),
+  };
+  function selectBase(coordinate: number, extend: boolean) {
+    if (!extend || rangeAnchor === null) setRangeAnchor(coordinate);
+    setRangeEnd(coordinate);
+  }
   const [scope, setScope] = useState<"locus" | "whole">("locus");
   const [manualWindow, setManualWindow] = useState<Window | null>(null);
   const [position, setPosition] = useState("");
@@ -294,7 +313,7 @@ export default function AnnotatedSequenceView({
   useEffect(() => {
     setScrollTop(0);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
-  }, [window, rowBases]);
+  }, [window.start, window.end, rowBases]);
 
   const placedAnnotations = useMemo(
     () => placedAnnotationsForWindow(annotations, sequence.length, window, circular),
@@ -398,6 +417,15 @@ export default function AnnotatedSequenceView({
         </div>}
         {navigationError && <p role="alert">{navigationError}</p>}
       </div>
+      {onAnnotateRange && <div className="sequence-selection-toolbar" role="group" aria-label="Nucleotide selection">
+        <span>{range ? `${displayCoordinate(range.start)}–${displayCoordinate(range.end - 1)} · ${range.end - range.start} nt selected` : "Drag across bases, or click the first base then Shift-click the last."}</span>
+        <button type="button" className="btn btn-primary" disabled={!range} onClick={() => {
+          if (!range) return;
+          const start = ((range.start % sequence.length) + sequence.length) % sequence.length;
+          onAnnotateRange({ start, end: start + range.end - range.start });
+        }}>Annotate selection</button>
+        {range && <button type="button" className="btn btn-ghost" onClick={() => { setRangeAnchor(null); setRangeEnd(null); }}>Clear range</button>}
+      </div>}
       <div className="annotated-sequence-scroll" tabIndex={0} ref={scrollRef}
         aria-label="Scrollable annotated DNA" onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}>
         <div style={{ height: totalHeight, position: "relative", minWidth: rowBases * 13,
@@ -456,9 +484,30 @@ export default function AnnotatedSequenceView({
               <div className="annotation-bases" aria-label={`Sequence bases ${displayCoordinate(rowStart)} to ${displayCoordinate(rowEnd - 1)}`}>
                 {bases.map((base, index) => (
                   <span
-                    className={`annotation-base base-${base}`}
+                    className={`annotation-base base-${base}${range && rowStart + index >= range.start && rowStart + index < range.end ? " range-selected" : ""}`}
                     key={rowStart + index}
                     title={`${displayCoordinate(rowStart + index).toLocaleString()}: ${base}`}
+                    data-base-position={rowStart + index}
+                    role={onAnnotateRange ? "button" : undefined}
+                    tabIndex={onAnnotateRange ? (index === 0 ? 0 : -1) : undefined}
+                    aria-label={onAnnotateRange ? `Base ${displayCoordinate(rowStart + index)}: ${base}` : undefined}
+                    aria-pressed={onAnnotateRange ? Boolean(range && rowStart + index >= range.start && rowStart + index < range.end) : undefined}
+                    onPointerDown={onAnnotateRange ? (event) => {
+                      if (event.button !== 0) return;
+                      event.preventDefault(); dragging.current = true;
+                      selectBase(rowStart + index, event.shiftKey);
+                    } : undefined}
+                    onPointerEnter={onAnnotateRange ? () => { if (dragging.current) setRangeEnd(rowStart + index); } : undefined}
+                    onKeyDown={onAnnotateRange ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectBase(rowStart + index, event.shiftKey); }
+                      const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -rowBases, ArrowDown: rowBases }[event.key];
+                      if (step !== undefined) {
+                        event.preventDefault();
+                        const next = rowStart + index + step;
+                        const base = scrollRef.current?.querySelector<HTMLElement>(`[data-base-position="${next}"]`);
+                        if (base) { base.focus(); if (event.shiftKey) selectBase(next, true); }
+                      }
+                    } : undefined}
                   >
                     {base}
                   </span>

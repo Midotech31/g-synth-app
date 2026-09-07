@@ -1648,6 +1648,34 @@ class TestValidationAndJunctionViews:
         assert data["reading_frame"]["status"] == "pass"
         assert data["reading_frame"]["start_source"] == "declared"
 
+    def test_handoff_target_annotation_survives_save_and_export(self, auth_client):
+        from Bio import SeqIO
+
+        assembly = self.cloned(auth_client)["assembly"]
+        segment = next(s for s in assembly["ssd"]["segments"] if s["name"] == "insert")
+        payload = {
+            "sequence": assembly["construct_forward"], "insert_reverse": assembly["construct_reverse"],
+            "pre_digested": True, "orf_start": assembly["ssd"]["orf_start"],
+            "vector_key": "pET-21a", "name": "EntA",
+            "insert_annotations": [{"name": "EntA target", "type": "misc_feature", "direction": 1,
+                                    "color": "#3F7A52", "start": segment["start"], "end": segment["end"]}],
+        }
+        response = auth_client.post(reverse("design-clone"), {**payload, "save_as_project": True})
+        assert response.status_code == 200, response.data
+        data = response.data
+        target = next(a for a in data["annotations"] if a["name"] == "EntA target")
+        assert data["plasmid"][target["start"]:target["end"]] == segment["sequence"]
+        assert target in Project.objects.get(pk=data["project_id"]).data["annotations"]
+        exported = auth_client.post(reverse("design-clone-export"), payload)
+        assert exported.status_code == 200
+        record = SeqIO.read(io.StringIO(exported.content.decode()), "genbank")
+        feature = next(f for f in record.features if f.qualifiers.get("label") == ["EntA target"])
+        assert str(feature.extract(record.seq)).upper() == segment["sequence"]
+        payload["insert_annotations"][0]["end"] = len(payload["sequence"]) + 1
+        invalid = auth_client.post(reverse("design-clone"), payload)
+        assert invalid.status_code == 400
+        assert "insert_annotations" in invalid.data
+
     @pytest.mark.parametrize("declare_start", [True, False])
     def test_handoff_annotation_translates_the_same_n_terminus(self, auth_client, declare_start):
         """A duplex handoff must display Met and six His in the engine's frame."""

@@ -105,6 +105,7 @@ export function annotationFromDraft(
 type Props = {
   open: boolean;
   annotation: Annotation | null;
+  initialAnnotation?: Annotation | null;
   sequenceLength: number;
   circular: boolean;
   saving: boolean;
@@ -115,6 +116,7 @@ type Props = {
 export default function AnnotationEditor({
   open,
   annotation,
+  initialAnnotation,
   sequenceLength,
   circular,
   saving,
@@ -129,12 +131,12 @@ export default function AnnotationEditor({
 
   useEffect(() => {
     if (!open) return;
-    setDraft(draftFromAnnotation(annotation, sequenceLength));
+    setDraft(draftFromAnnotation(annotation ?? initialAnnotation ?? null, sequenceLength));
     setError("");
     const opener = document.activeElement as HTMLElement | null;
     const timer = window.setTimeout(() => firstField.current?.focus(), 0);
     return () => { window.clearTimeout(timer); if (opener?.isConnected) opener.focus(); };
-  }, [annotation, open, sequenceLength]);
+  }, [annotation, initialAnnotation, open, sequenceLength]);
 
   if (!open) return null;
 

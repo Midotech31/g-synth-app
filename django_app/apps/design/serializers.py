@@ -175,6 +175,7 @@ class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
     vector_name = serializers.CharField(max_length=200, required=False, default="")
     vector_annotations = VectorAnnotationSerializer(many=True, required=False)
     product_annotations = VectorAnnotationSerializer(many=True, required=False)
+    insert_annotations = VectorAnnotationSerializer(many=True, required=False, max_length=5000)
     vector_is_circular = serializers.BooleanField(
         default=True,
         help_text="Only circular vectors can be cloned into — a linear one "
@@ -200,6 +201,12 @@ class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        if attrs.get("insert_annotations"):
+            if not attrs.get("pre_digested"):
+                raise serializers.ValidationError({"insert_annotations": "Insert annotations require a supplied duplex."})
+            for annotation in attrs["insert_annotations"]:
+                if not 0 <= annotation["start"] < annotation["end"] <= len(attrs["sequence"]):
+                    raise serializers.ValidationError({"insert_annotations": "Feature coordinates must lie within the supplied top strand."})
         if attrs.get("pre_digested") and not attrs.get("insert_reverse"):
             raise serializers.ValidationError({
                 "insert_reverse": "Supply the cut fragment's bottom strand as "

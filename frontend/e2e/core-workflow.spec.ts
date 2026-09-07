@@ -73,6 +73,7 @@ test("a single-fragment design bypasses assembly and retains its annotated N ter
     await expect(annotated.getByTitle(`Residue ${residue}: His (CAC)`, { exact: true }).first()).toBeVisible();
   }
   await expect(annotated.getByTitle("Residue 1: Tyr (TAT)", { exact: true })).toHaveCount(0);
+  await expect(annotated.getByRole("button", { name: /^construct target, misc_feature/ }).first()).toBeVisible();
   await page.getByRole("button", { name: "Expand viewer", exact: true }).click();
   const expanded = page.getByRole("dialog", { name: "Construct workbench" });
   await expect(expanded).toBeVisible();
@@ -83,6 +84,15 @@ test("a single-fragment design bypasses assembly and retains its annotated N ter
   await expanded.getByRole("button", { name: "Hide details" }).click();
   await expect(expanded.getByRole("complementary", { name: "Selection inspector" })).toHaveCount(0);
   await expect(expanded.getByTitle(/^5,400:/)).toBeInViewport();
+  await expanded.getByRole("button", { name: /^Base 5390:/ }).click();
+  await expanded.getByRole("button", { name: /^Base 5400:/ }).click({ modifiers: ["Shift"] });
+  await expanded.getByRole("button", { name: "Annotate selection" }).click();
+  const editor = page.getByRole("dialog", { name: "Annotate a feature" });
+  await expect(editor.getByLabel("Start base")).toHaveValue("5390");
+  await expect(editor.getByLabel("End base")).toHaveValue("5400");
+  await editor.getByLabel("Feature name").fill("User-selected region");
+  await editor.getByRole("button", { name: "Add feature" }).click();
+  await expect(expanded.getByRole("button", { name: /^User-selected region, misc_feature/ })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("whole-plasmid-expanded.png") });
   const results = await new AxeBuilder({ page }).include(".expandable-panel.expanded").analyze();
   expect(results.violations.filter((v) => ["critical", "serious"].includes(v.impact ?? ""))).toEqual([]);

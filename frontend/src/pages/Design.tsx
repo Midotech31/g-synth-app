@@ -170,6 +170,12 @@ export default function Design() {
         leftEnzyme: params.left_enzyme,
         rightEnzyme: params.right_enzyme,
         orfStart: result.ssd.orf_start,
+        insertAnnotations: result.ssd.segments.map((segment) => ({
+          name: segment.name.toLowerCase() === "insert" ? `${params.name || "construct"} target` : segment.name,
+          type: "misc_feature",
+          start: segment.start, end: segment.end, direction: 1,
+          color: segmentColour(segment.name),
+        })),
         autoRun: true,
       },
     });

@@ -75,6 +75,7 @@ export default function Viewer() {
   const [status, setStatus] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [initialAnnotation, setInitialAnnotation] = useState<Annotation | null>(null);
   const [savingAnnotation, setSavingAnnotation] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [detecting, setDetecting] = useState(false);
@@ -129,6 +130,7 @@ export default function Viewer() {
   };
 
   const openNewAnnotation = () => {
+    setInitialAnnotation(null);
     setEditingIndex(null);
     setEditorOpen(true);
   };
@@ -312,6 +314,10 @@ export default function Viewer() {
                 selected={selected}
                 preferredName={project.name}
                 circular={topology === "circular"}
+                onAnnotateRange={(range) => {
+                  setInitialAnnotation({ ...range, name: "", type: "misc_feature", direction: 1, color: "#3F7A52" });
+                  setEditingIndex(null); setEditorOpen(true);
+                }}
                 onSelect={(annotation) => setSelected(annotation)}
               />
             ) : (
@@ -681,6 +687,7 @@ export default function Viewer() {
       <AnnotationEditor
         open={editorOpen}
         annotation={editingIndex === null ? null : annotations[editingIndex] ?? null}
+        initialAnnotation={initialAnnotation}
         sequenceLength={project.sequence.length}
         circular={topology === "circular"}
         saving={savingAnnotation}

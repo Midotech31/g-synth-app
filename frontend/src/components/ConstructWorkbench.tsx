@@ -207,6 +207,7 @@ export default function ConstructWorkbench({
   const [enzymeQuery, setEnzymeQuery] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [initialAnnotation, setInitialAnnotation] = useState<Annotation | null>(null);
   const [annotationHistory, setAnnotationHistory] = useState<Annotation[][]>([]);
 
   useEffect(() => {
@@ -345,6 +346,7 @@ export default function ConstructWorkbench({
   }
 
   function openNewAnnotation() {
+    setInitialAnnotation(null);
     setEditingIndex(null);
     setEditorOpen(true);
   }
@@ -510,6 +512,12 @@ export default function ConstructWorkbench({
                 : selected ? { ...selected, type: "restriction_site" } : null}
               preferredName={stage === "product" ? result.name : stageName}
               circular={stageCircular}
+              onAnnotateRange={stage === "vector" ? undefined : (range) => {
+                const offset = stage === "insert" ? result.insert_start : 0;
+                setInitialAnnotation({ name: "", type: "misc_feature", direction: 1, color: "#3F7A52",
+                  start: range.start + offset, end: range.end + offset });
+                setEditingIndex(null); setEditorOpen(true);
+              }}
               onSelect={(annotation) => {
                 const localIndex = stageAnnotations.indexOf(annotation);
                 const sourceIndex = stage === "product"
@@ -703,6 +711,7 @@ export default function ConstructWorkbench({
       <AnnotationEditor
         open={editorOpen}
         annotation={editingIndex === null ? null : annotations[editingIndex] ?? null}
+        initialAnnotation={initialAnnotation}
         sequenceLength={result.plasmid.length}
         circular
         saving={false}
@@ -712,7 +721,9 @@ export default function ConstructWorkbench({
           const index = editingIndex === null ? next.length : editingIndex;
           if (editingIndex === null) next.push(annotation); else next[editingIndex] = annotation;
           updateAnnotations(next);
-          setSelected(toSelectedFeature(annotation, index));
+          setSelected(toSelectedFeature(stage === "insert"
+            ? { ...annotation, start: annotation.start - result.insert_start, end: annotation.end - result.insert_start }
+            : annotation, index));
           setEditorOpen(false);
         }}
       />

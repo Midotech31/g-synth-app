@@ -359,7 +359,7 @@ def _validation(result: CloningResult, duplex_mismatches: list[int]) -> list[dic
     ]
 
 
-def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan) -> dict:
+def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan, insert_annotations=None) -> dict:
     """The recombinant plasmid, shaped for a map viewer.
 
     The insert is sent as one more annotation so the client can draw the
@@ -380,6 +380,13 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan) -> dict:
         cassette_annotation["translation_start"] = result.translation_start
         cassette_annotation["translation_end"] = result.insert_end
     annotations.append(cassette_annotation)
+    for annotation in insert_annotations or []:
+        moved = {**annotation, "start": result.insert_start + annotation["start"],
+                 "end": result.insert_start + annotation["end"]}
+        for key in ("translation_start", "translation_end"):
+            if annotation.get(key) is not None:
+                moved[key] = result.insert_start + annotation[key]
+        annotations.append(moved)
 
     # Preserve the cassette's internal biological meaning on the project map.
     # These coordinates come from the same SSD result that built the oligo;
@@ -1452,7 +1459,7 @@ class CloneView(APIView):
         except SequenceError as error:
             return _bad_request(error)
 
-        payload = _clone_payload(result, ssd, plan)
+        payload = _clone_payload(result, ssd, plan, data.get("insert_annotations"))
         try:
             reviewed_annotations = _reviewed_product_annotations(data, result.length)
         except SequenceError as error:
@@ -1522,7 +1529,7 @@ class CloneExportView(APIView):
                 f"{safe}.fasta", "text/plain; charset=utf-8",
             )
 
-        payload = _clone_payload(result, ssd, plan)
+        payload = _clone_payload(result, ssd, plan, data.get("insert_annotations"))
         try:
             reviewed_annotations = _reviewed_product_annotations(data, result.length)
         except SequenceError as error:
