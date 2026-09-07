@@ -137,7 +137,7 @@ export default function Clone() {
         if (cancelled) return;
         setVectors(list.vectors);
         if (!vectorLoaded) {
-          await selectVector(list.default, list.vectors);
+          await selectVector(list.default, list.vectors, Boolean(preDigested || location.state?.preDigested));
           setVectorLoaded(true);
         }
       } catch {
@@ -153,7 +153,7 @@ export default function Clone() {
   }, []);
 
   /** Switch vector, pulling its bundled sequence when it has one. */
-  async function selectVector(key: string, known: VectorSpec[] = vectors) {
+  async function selectVector(key: string, known: VectorSpec[] = vectors, preserveTransferredEnds = Boolean(preDigested)) {
     const spec = known.find((v) => v.key === key);
     const version = ++vectorRequestVersion.current;
     invalidate();
@@ -168,7 +168,7 @@ export default function Clone() {
     // Follow the vector's own cloning pair — pET-21(+) has no NdeI site, so
     // leaving the G-Synth default selected would just fail.
     const pair = spec.recommended_pairs[0]?.split("/").map((p) => p.trim());
-    if (pair?.length === 2 && !preDigested && !location.state?.preDigested) {
+    if (pair?.length === 2 && !preserveTransferredEnds) {
       setParams((current) => ({
         ...current,
         left_enzyme: pair[0],

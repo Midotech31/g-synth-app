@@ -72,6 +72,15 @@ it("submits edited vector bases and discards annotations on the previous sequenc
   expect(clone).toHaveBeenCalledWith(expect.objectContaining({ vector: "ACGTACGT", vector_annotations: [], vector_key: spec.key }));
 });
 
+it("applies vector defaults again after leaving a transferred duplex", async () => {
+  vi.spyOn(api, "vectorSequence").mockResolvedValue({ ...vector, topology: "circular" } as unknown as VectorRecord);
+  await renderPage({}, { preDigested: { top: "ACGT", bottom: "ACGT", leftEnzyme: "BamHI", rightEnzyme: "EcoRI" } });
+  fireEvent.click(screen.getByRole("button", { name: "Change insert or enzymes" }));
+  fireEvent.change(screen.getByLabelText("Backbone"), { target: { value: "other" } });
+  await waitFor(() => expect(screen.getByLabelText("5' enzyme")).toHaveValue("NdeI"));
+  expect(screen.getByLabelText("3' enzyme")).toHaveValue("XhoI");
+});
+
 it("ignores a simulation response that arrives after the enzymes change", async () => {
   let finish!: (value: CloneResult) => void;
   vi.spyOn(api, "clone").mockReturnValue(new Promise(resolve => { finish = resolve; }));
