@@ -54,3 +54,38 @@ These checks do not establish experimental regulatory activity or exhaustive
 correctness of every possible input, dependency, function and visual state.
 The motif collection remains deliberately limited to curated common elements;
 it is not a genome annotation pipeline or a universal promoter predictor.
+
+## SD context and terminator correction — 7 September 2026
+
+An additional source and sequence review found two distinct annotation problems.
+An SD-like spelling near an incidental start codon was typed as an RBS without
+an associated CDS. It is now an unassigned `misc_feature`; only a motif upstream
+of an annotated translation start is proposed as an RBS, still inferred and
+functionally unconfirmed. The evidence gives the strand, spacer, start coordinate
+and CDS association. The screen remains limited to two spellings and a 4–14 nt
+spacer; absence of a match does not exclude an RBS or translation. Sequence-only
+vector imports are reassessed against the actual insert start after cloning.
+
+The bundled pET-21 and pET-21a terminator annotations had the opposite direction
+to the asymmetric terminator sequence and expression cassette. Their strand
+metadata now agree with the existing motif detector: reverse in the source
+records, forward in the displayed recombinant. No DNA bases were changed.
+Correcting the metadata also eliminates the opposite-strand duplicate proposal.
+Previously saved or imported annotations are not silently rewritten.
+
+The 5,490 bp regression retains its RBS at 5,353–5,358 and ATG at 5,367,
+with an 8 nt spacer. Its motif near base 142 is unassigned, not the insert RBS.
+Short labels now begin with `?`; full candidate status remains in tooltips and
+accessible names, and applies in sequence and map views.
+
+Additional references checked:
+
+- [Barendt et al., 2013](https://pubmed.ncbi.nlm.nih.gov/23427812/):
+  experimental evidence for context-dependent, non-SD RBS function supports
+  distinguishing an SD motif from the broader RBS concept.
+- [Calvopina-Chavez et al., 2022](https://academic.oup.com/g3journal/article/12/6/jkac070/6555000):
+  the native T7 terminator comprises an RNA stem-loop followed by a 3′ U-rich
+  tract. This asymmetry supports the transcriptional orientation correction;
+  a terminator annotation does not promise complete termination.
+- [INSDC inference qualifiers](https://www.insdc.org/submitting-standards/inference-qualifiers/):
+  distinguish non-experimental annotation evidence from functional validation.

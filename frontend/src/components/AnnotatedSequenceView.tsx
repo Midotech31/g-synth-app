@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import type { Annotation } from "../api/client";
+import { featureLabel } from "./featureLabel";
 
 const ROW_BASES = 60;
 const WINDOW_PADDING = 160;
@@ -472,10 +473,10 @@ export default function AnnotatedSequenceView({
                         color: readableTextColour(feature.annotation.color),
                       }}
                       onClick={() => onSelect((feature.annotation as PlacedAnnotation).sourceAnnotation)}
-                      title={`${feature.annotation.name}: ${displayCoordinate(feature.annotation.start)}–${displayCoordinate(feature.annotation.end - 1)} (${feature.annotation.direction === -1 ? "reverse" : feature.annotation.direction === 1 ? "forward" : "unstranded"})`}
-                      aria-label={`${feature.annotation.name}, ${feature.annotation.type}, bases ${displayCoordinate(feature.annotation.start)} to ${displayCoordinate(feature.annotation.end - 1)}, ${feature.annotation.direction === -1 ? "reverse" : feature.annotation.direction === 1 ? "forward" : "unstranded"} strand`}
+                      title={`${feature.annotation.inferred ? "Candidate · function unconfirmed · " : ""}${feature.annotation.name}: ${displayCoordinate(feature.annotation.start)}–${displayCoordinate(feature.annotation.end - 1)} (${feature.annotation.direction === -1 ? "reverse" : feature.annotation.direction === 1 ? "forward" : "unstranded"})`}
+                      aria-label={`${feature.annotation.name}, ${feature.annotation.type}, bases ${displayCoordinate(feature.annotation.start)} to ${displayCoordinate(feature.annotation.end - 1)}, ${feature.annotation.direction === -1 ? "reverse" : feature.annotation.direction === 1 ? "forward" : "unstranded"} strand${feature.annotation.inferred ? ", candidate, function unconfirmed" : ""}`}
                     >
-                      <span aria-hidden="true">{!clippedLeft && direction} {feature.annotation.name}{clippedRight ? "…" : ""}</span>
+                      <span aria-hidden="true">{featureLabel(feature.annotation)} {!clippedLeft && direction}{clippedRight ? "…" : ""}</span>
                     </button>
                   );
                 })}
@@ -540,7 +541,7 @@ export default function AnnotatedSequenceView({
         {(["A", "C", "G", "T"] as const).map((base) => (
           <span key={base}><i className={`base-${base}`} />{base}</span>
         ))}
-        <span className="annotation-legend-note">Drag the lower edge to resize. Dashed features are detected candidates.</span>
+        <span className="annotation-legend-note">Drag the lower edge to resize. ? and dashed borders mark candidates with unconfirmed function.</span>
       </footer>
     </section>
   );
