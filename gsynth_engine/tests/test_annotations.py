@@ -156,6 +156,18 @@ def test_reverse_and_circular_sd_link_to_the_same_annotated_start():
     assert 'wrapped target' in match['basis']
 
 
+def test_overlapping_sd_spellings_prefer_the_cds_associated_match():
+    sequence = 'AAGGAGG' + 'CCCCTTG' + 'C' * 7 + 'ATGCCC'
+    matches = detect_common_features(sequence, existing=[
+        {'name': 'target', 'type': 'CDS', 'start': 21, 'end': len(sequence), 'direction': 1},
+    ])
+    sd = [m for m in matches if 'SD-like' in m['annotation']['name'] or m['annotation']['type'] == 'RBS']
+    assert len(sd) == 1
+    assert sd[0]['annotation']['type'] == 'RBS'
+    assert sd[0]['annotation']['start'] == 1
+    assert '14 nt upstream' in sd[0]['basis']
+
+
 def test_pet_recombinant_keeps_one_correctly_oriented_terminator_and_the_original_rbs():
     from gsynth_engine.cloning import clone
     from gsynth_engine.ssd import design_small_sequence

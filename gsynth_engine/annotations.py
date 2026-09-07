@@ -279,13 +279,14 @@ def detect_common_features(
     ordered = sorted(
         matches,
         key=lambda match: (
+            match["annotation"]["type"] != "RBS",
             match["annotation"]["start"],
             match["annotation"]["end"],
             match["annotation"]["name"],
         ),
     )
     # AAGGAG and AGGAGG can describe the same overlapping SD-like tract.
-    # Keep one candidate, retaining the first exact match and its own spacing.
+    # Prefer CDS-associated evidence, then the first exact match and its spacing.
     result: list[dict] = []
     for match in ordered:
         feature = match["annotation"]
@@ -300,4 +301,6 @@ def detect_common_features(
         ):
             continue
         result.append(match)
-    return result
+    return sorted(result, key=lambda match: (
+        match["annotation"]["start"], match["annotation"]["end"], match["annotation"]["name"],
+    ))
