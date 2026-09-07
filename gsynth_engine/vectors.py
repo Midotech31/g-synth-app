@@ -160,7 +160,7 @@ CATALOGUE: tuple[VectorSpec, ...] = (
         motifs=(("T7 promoter", T7_PROMOTER), ("lac operator", LAC_OPERATOR),
                 ("AmpR", AMPR)),
         aliases=("pET21a", "pET21a(+)", "pET-21a(+)"),
-        reference="Bundled from a verified laboratory reference file.",
+        reference="https://www.snapgene.com/plasmids/pet_and_duet_vectors_(novagen)/pET-21a(%2B)",
         bundled="pET-21a.json",
         supplies_translation_start=True,
         notes=(
@@ -219,7 +219,7 @@ CATALOGUE: tuple[VectorSpec, ...] = (
         summary="T7 expression with an N-terminal His-tag and a thrombin site, "
                 "plus an optional C-terminal His-tag.",
         unique_sites=("NdeI", "XhoI", "NcoI", "BamHI", "EcoRI", "HindIII", "NotI", "SacI", "SalI"),
-        recommended_pairs=("NdeI / XhoI", "NcoI / XhoI", "BamHI / XhoI", "NdeI / HindIII"),
+        recommended_pairs=("NcoI / XhoI", "NdeI / XhoI", "BamHI / XhoI", "NdeI / HindIII"),
         tags=(
             Tag("His-tag", HIS6, "N", "Whether it survives depends on where you cut."),
             Tag("thrombin site", THROMBIN_PEPTIDE, "N",
@@ -228,12 +228,13 @@ CATALOGUE: tuple[VectorSpec, ...] = (
         ),
         motifs=(("T7 promoter", T7_PROMOTER), ("lac operator", LAC_OPERATOR)),
         aliases=("pET28a", "pET28a(+)", "pET-28a(+)"),
-        reference="https://www.addgene.org/vector-database/2565/",
+        reference="https://www.snapgene.com/plasmids/pet_and_duet_vectors_(novagen)/pET-28a(%2B)",
         notes=(
             (
-                "This vector already supplies an N-terminal His-tag and a thrombin "
-                "site. Adding the same cassette to the insert gives the protein two "
-                "of each."
+                "NcoI / XhoI replaces the vector's N-terminal His-tag and thrombin "
+                "cassette with the insert cassette. NdeI or BamHI retains the "
+                "upstream vector leader; review the complete fusion and avoid "
+                "duplicating tags."
             ),
         ),
     ),
