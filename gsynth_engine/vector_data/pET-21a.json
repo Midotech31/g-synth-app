@@ -11,7 +11,7 @@
    "type": "terminator",
    "start": 25,
    "end": 73,
-   "direction": 1,
+   "direction": -1,
    "color": "#9E3D3D"
   },
   {

@@ -130,7 +130,7 @@ def _same_known_feature(
     if motif.feature_type == "RBS":
         same_name = same_name or str(existing.get("type", "")).lower() == "rbs" or (
             existing.get("regulatory_class") == "ribosome_binding_site"
-        ) or "shine" in existing_name
+        ) or "shine" in existing_name or "sd-like motif" in existing_name
     if existing.get("direction", direction) not in (0, direction):
         return False
     try:
@@ -149,30 +149,54 @@ def _same_known_feature(
     return same_name and substantially_same_span
 
 
-def _sd_context(dna: str, start: int, end: int, direction: int, circular: bool, reverse: str) -> str | None:
-    """Screen an SD-like motif upstream of a possible initiation codon.
+def _sd_context(
+    dna: str, start: int, end: int, direction: int, circular: bool,
+    reverse: str, existing: list[dict],
+) -> tuple[str, bool] | None:
+    """Separate an SD-like spelling from a candidate tied to a CDS start.
 
-    The 4–14 nt spacer is an explicit search heuristic, not a universal RBS
-    definition or an activity prediction. Coordinates remain on DNA; the
-    regulatory interaction takes place on the corresponding 5′→3′ mRNA.
+    The 4–14 nt spacer is a search heuristic, not a universal RBS definition.
+    Translation bounds take precedence over CDS boundaries (which can include
+    cloning overhangs). Coordinates identify DNA in transcript orientation.
     """
+    length = len(dna)
     oriented = dna if direction == 1 else reverse
-    boundary = end if direction == 1 else len(dna) - start
+    boundary = end if direction == 1 else length - start
+    contexts: list[tuple[str, bool]] = []
     for spacer in range(4, 15):
         codon_start = boundary + spacer
         if circular:
-            if end - start + spacer + 3 > len(dna):
+            if end - start + spacer + 3 > length:
                 continue
-            codon = "".join(oriented[(codon_start + i) % len(dna)] for i in range(3))
+            codon = "".join(oriented[(codon_start + i) % length] for i in range(3))
         else:
             codon = oriented[codon_start:codon_start + 3]
-        if codon in {"ATG", "GTG", "TTG"}:
-            return (
-                f"SD-like motif in the corresponding mRNA, {spacer} nt upstream of a possible "
-                f"{codon.replace('T', 'U')} initiation codon (5′→3′). "
-                "Candidate from a 4–14 nt spacer screen; biological function requires review."
+        if codon not in {"ATG", "GTG", "TTG"}:
+            continue
+        genomic_start = (codon_start if direction == 1 else length - 1 - codon_start) % length
+        linked = []
+        for feature in existing:
+            if str(feature.get("type", "")).lower() != "cds" or feature.get("direction") != direction:
+                continue
+            first = (
+                feature.get("translation_start", feature.get("start")) if direction == 1
+                else feature.get("translation_end", feature.get("end", 0)) - 1
             )
-    return None
+            if first is not None and int(first) % length == genomic_start:
+                linked.append(str(feature.get("name") or "unnamed CDS"))
+        context = (
+            f"SD-like motif in the corresponding mRNA, {spacer} nt upstream of a possible "
+            f"{codon.replace('T', 'U')} initiation codon (5′→3′); first codon base at DNA "
+            f"coordinate {genomic_start + 1} on the {'forward' if direction == 1 else 'reverse'} strand. "
+        )
+        context += (
+            f"Positionally associated with annotated CDS: {', '.join(linked)}. " if linked
+            else "No annotated CDS starts at this codon; this motif is unassigned. "
+        )
+        context += "Review required: the 4–14 nt spacer screen does not establish transcription or RBS activity."
+        contexts.append((context, bool(linked)))
+    # A declared CDS start is stronger positional evidence than a nearby incidental codon.
+    return next((context for context in contexts if context[1]), contexts[0] if contexts else None)
 
 
 def detect_common_features(
@@ -217,32 +241,36 @@ def detect_common_features(
                 if any(_same_known_feature(item, motif, start, end, direction, length if circular else 0) for item in existing):
                     continue
                 basis = motif.basis
+                feature_name, feature_type = motif.name, motif.feature_type
                 if motif.feature_type == "RBS":
-                    basis = _sd_context(dna, start, end, direction, circular, reverse)
-                    if basis is None:
+                    context = _sd_context(dna, start, end, direction, circular, reverse, existing)
+                    if context is None:
                         continue
+                    basis, linked = context
+                    if not linked:
+                        feature_name, feature_type = "SD-like motif (unassigned)", "misc_feature"
                     # Do not label an internal coding motif as a 5′ initiation site.
                     if any(
                         str(item.get("type", "")).lower() == "cds"
                         and item.get("direction") == direction
                         and any(
-                            int(item.get("start", 0)) + offset <= start
-                            and int(item.get("end", 0)) + offset >= end
+                            int(item.get("translation_start", item.get("start", 0))) + offset <= start
+                            and int(item.get("translation_end", item.get("end", 0))) + offset >= end
                             for offset in (-length, 0, length) if circular or offset == 0
                         ) for item in existing
                     ):
                         continue
                 matches.append({
                     "annotation": {
-                        "name": motif.name,
-                        "type": motif.feature_type,
+                        "name": feature_name,
+                        "type": feature_type,
                         "start": start,
                         "end": end,
                         "direction": direction,
                         "color": motif.color,
                         "inferred": True,
                         "basis": basis,
-                        **({"regulatory_class": "ribosome_binding_site"} if motif.feature_type == "RBS" else {}),
+                        **({"regulatory_class": "ribosome_binding_site"} if feature_type == "RBS" else {}),
                     },
                     "matched_sequence": query,
                     "basis": basis,
@@ -261,8 +289,8 @@ def detect_common_features(
     result: list[dict] = []
     for match in ordered:
         feature = match["annotation"]
-        if feature["type"] == "RBS" and any(
-            previous["annotation"]["type"] == "RBS"
+        if (feature["type"] == "RBS" or feature["name"] == "SD-like motif (unassigned)") and any(
+            (previous["annotation"]["type"] == "RBS" or previous["annotation"]["name"] == "SD-like motif (unassigned)")
             and previous["annotation"]["direction"] == feature["direction"]
             and any(
                 max(previous["annotation"]["start"] + offset, feature["start"])

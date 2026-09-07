@@ -14,6 +14,7 @@ import {
 import Icon from "../components/Icon";
 import AnnotatedSequenceView from "../components/AnnotatedSequenceView";
 import ExpandablePanel from "../components/ExpandablePanel";
+import { featureLabel } from "../components/featureLabel";
 import FeatureEvidence from "../components/FeatureEvidence";
 import AnnotationEditor from "../components/AnnotationEditor";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -171,7 +172,7 @@ export default function Viewer() {
   const seqvizAnnotations = useMemo(
     () =>
       annotations.map((a) => ({
-        name: a.name,
+        name: featureLabel(a),
         start: a.start,
         end: a.end,
         direction: a.direction as 1 | -1,

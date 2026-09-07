@@ -102,6 +102,15 @@ test("a single-fragment design bypasses assembly and retains its annotated N ter
   await editor.getByRole("button", { name: "Add feature" }).click();
   await expect(expanded.getByRole("button", { name: /^User-selected region, misc_feature/ })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("whole-plasmid-expanded.png") });
+  await expanded.getByLabel("Go to base").fill("142");
+  await expanded.getByRole("button", { name: "Go", exact: true }).click();
+  await expanded.getByRole("button", { name: "Show details" }).click();
+  const sdMotif = expanded.getByRole("button", { name: /^SD-like motif \(unassigned\), misc_feature, bases 142/ });
+  await expect(sdMotif).toHaveText(/\? SD motif/);
+  await sdMotif.click();
+  await expect(expanded.getByText(/No annotated CDS starts at this codon/)).toBeVisible();
+  await expect(expanded.getByText("Detected candidate · function unconfirmed")).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("sd-context-evidence.png") });
   const results = await new AxeBuilder({ page }).include(".expandable-panel.expanded").analyze();
   expect(results.violations.filter((v) => ["critical", "serious"].includes(v.impact ?? ""))).toEqual([]);
   await page.keyboard.press("Escape");

@@ -24,6 +24,17 @@ const annotations: Annotation[] = [
 ];
 
 describe("coordinate-level annotation view", () => {
+  it("keeps uncertainty visible at the beginning of a short SD feature", () => {
+    const motif: Annotation = { name: "SD-like motif (unassigned)", type: "misc_feature",
+      start: 10, end: 16, direction: 1, color: "#B8860B", inferred: true };
+    render(<AnnotatedSequenceView sequence={"A".repeat(100)} annotations={[motif]}
+      selected={null} onSelect={vi.fn()} />);
+    const feature = screen.getByRole("button", { name: /SD-like motif.*candidate, function unconfirmed/ });
+    expect(feature.textContent).toMatch(/^\? SD motif/);
+    expect(feature.title).toMatch(/^Candidate · function unconfirmed/);
+    expect(feature).toHaveClass("inferred");
+  });
+
   it("selects an exact range across sequence rows and passes it to the editor", () => {
     const onAnnotateRange = vi.fn();
     render(<AnnotatedSequenceView sequence={"ACGT".repeat(40)} annotations={[]} selected={null}

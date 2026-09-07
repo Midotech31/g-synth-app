@@ -10,6 +10,7 @@ import type {
 import AnnotatedSequenceView from "./AnnotatedSequenceView";
 import ExpandablePanel from "./ExpandablePanel";
 import { useDetectedFeatures } from "../hooks/useDetectedFeatures";
+import { featureLabel } from "./featureLabel";
 import FeatureEvidence from "./FeatureEvidence";
 import AnnotationEditor from "./AnnotationEditor";
 import GelSimulation from "./GelSimulation";
@@ -295,7 +296,7 @@ export default function ConstructWorkbench({
 
   const mapAnnotations = useMemo(() => {
     const features = stageAnnotations.map((annotation) => ({
-      name: annotation.name,
+      name: featureLabel(annotation),
       start: annotation.start,
       end: annotation.end,
       direction: annotation.direction as 1 | -1 | 0,

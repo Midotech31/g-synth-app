@@ -2063,6 +2063,20 @@ class TestAutomaticFeatureDetection:
         assert len(matches) == 1
         assert matches[0]['annotation']['inferred'] is True
         assert 'mRNA' in matches[0]['annotation']['basis']
+        assert matches[0]['annotation']['type'] == 'misc_feature'
+        assert 'regulatory_class' not in matches[0]['annotation']
+
+    def test_sd_with_an_annotated_start_remains_a_candidate(self, auth_client):
+        response = auth_client.post(reverse('design-features'), {
+            'sequence': 'AAGGAGCCCCCCCATGCCC', 'circular': False,
+            'annotations': [{'name': 'target', 'type': 'CDS', 'start': 13, 'end': 19,
+                             'direction': 1, 'color': '#0E6E77'}],
+        }, format='json')
+        assert response.status_code == 200, response.data
+        annotation = response.data['matches'][0]['annotation']
+        assert annotation['type'] == 'RBS'
+        assert annotation['inferred'] is True
+        assert 'annotated CDS: target' in annotation['basis']
 
     def test_anonymous_scan_is_refused(self, api_client):
         assert api_client.post(reverse('design-features'), {'sequence': 'ATG'}).status_code == 401

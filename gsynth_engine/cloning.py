@@ -829,6 +829,21 @@ def clone(
     )
     warnings.extend(_tag_warnings(tags, vector_spec, protein))
 
+    # A sequence-only import has no CDS context until its insert is placed.
+    # Assess SD candidates against that actual start on the recombinant.
+    if translation_start is not None:
+        from gsynth_engine.annotations import detect_common_features
+
+        context = [*remapped_annotations, {
+            "name": name, "type": "CDS", "start": translation_start,
+            "end": insert_end, "direction": 1,
+        }]
+        for match in detect_common_features(plasmid, circular=True, existing=context):
+            annotation = match["annotation"]
+            if (annotation["type"] == "RBS" and annotation["direction"] == 1
+                    and 4 <= (translation_start - annotation["end"]) % len(plasmid) <= 14):
+                remapped_annotations.append(annotation)
+
     reading_frame = _assess_reading_frame(
         plasmid,
         insert_start=insert_start,
