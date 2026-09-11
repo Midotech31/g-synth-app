@@ -278,7 +278,7 @@ export default function Optimise() {
                   onChange={(e) => set("sequence", e.target.value)}
                   rows={7}
                   className="mono"
-                  style={{ fontSize: "0.78rem" }}
+                  style={{ fontSize: "1rem" }}
                   aria-describedby="opt-seq-count"
                 />
                 <span className="label" id="opt-seq-count">

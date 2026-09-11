@@ -397,7 +397,7 @@ export default function Verify() {
                     onChange={(e) => setReads(e.target.value)}
                     rows={7}
                     className="mono"
-                    style={{ fontSize: "0.74rem" }}
+                    style={{ fontSize: "1rem" }}
                     placeholder={">T7-F\nGATCC...\n>T7-R\nCTAGG..."}
                     aria-describedby={error ? "reads-hint verify-error" : "reads-hint"}
                   />

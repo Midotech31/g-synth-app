@@ -49,7 +49,7 @@ export default function InsertForm({
           onChange={(e) => onChange("sequence", e.target.value)}
           rows={6}
           className="mono"
-          style={{ fontSize: "0.8rem" }}
+          style={{ fontSize: "1rem" }}
         />
         <span className="label">
           {params.sequence.replace(/[^ACGTacgt]/g, "").length} nt entered

@@ -485,7 +485,7 @@ export default function Clone() {
                     onChange={(e) => setVectorField("sequence", e.target.value)}
                     rows={5}
                     className="mono"
-                    style={{ fontSize: "0.76rem" }}
+                    style={{ fontSize: "1rem" }}
                     placeholder="Paste the vector sequence, or import a file above."
                   />
                 </div>
@@ -533,7 +533,7 @@ export default function Clone() {
                   strand geometry with the vector before enabling ligation.{" "}
                   <button
                     className="btn btn-ghost"
-                    style={{ padding: "0.1rem 0.4rem", fontSize: "0.8rem" }}
+                    style={{ padding: "0.1rem 0.4rem", fontSize: "1rem" }}
                     onClick={() => {
                       setPreDigested(null);
                       invalidate();

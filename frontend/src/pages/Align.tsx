@@ -358,7 +358,7 @@ export default function Align({ initialTool = "alignment" }: { initialTool?: Too
                   }}
                   rows={6}
                   className="mono"
-                  style={{ fontSize: "0.76rem" }}
+                  style={{ fontSize: "1rem" }}
                   aria-describedby="a-count"
                 />
                 <span className="label" id="a-count">
@@ -377,7 +377,7 @@ export default function Align({ initialTool = "alignment" }: { initialTool?: Too
                   }}
                   rows={6}
                   className="mono"
-                  style={{ fontSize: "0.76rem" }}
+                  style={{ fontSize: "1rem" }}
                   aria-describedby="b-count"
                 />
                 <span className="label" id="b-count">
