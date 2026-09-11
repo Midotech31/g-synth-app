@@ -9,6 +9,6 @@ gunicorn>=22.0
 biopython>=1.83
 sbol3>=1.2,<2
 
-pytest>=8.0
+pytest>=9.1.1
 pytest-django>=4.9
 ruff>=0.6
