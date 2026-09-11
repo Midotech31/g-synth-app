@@ -20,6 +20,39 @@ from apps.sequences.parsing import (
 )
 from apps.sequences.sbol import to_sbol3
 
+
+@pytest.mark.parametrize('strand', [1, -1])
+@pytest.mark.parametrize('offset', [0, 1, 2])
+@pytest.mark.parametrize('wrapped', [False, True])
+def test_cds_frame_survives_import_export_against_biopython(strand, offset, wrapped):
+    from Bio import SeqIO
+    from Bio.SeqFeature import CompoundLocation
+
+    from gsynth_engine.genbank import to_genbank
+    sequence = Seq('ACGT' * 15)
+    record = SeqRecord(sequence, id='frame', annotations={'molecule_type': 'DNA', 'topology': 'circular'})
+    parts = [SimpleLocation(50, 60, strand=strand), SimpleLocation(0, 10, strand=strand)]
+    location = CompoundLocation(parts if strand == 1 else parts[::-1]) if wrapped else SimpleLocation(5, 25, strand=strand)
+    original = SeqFeature(location, type='CDS', qualifiers={'codon_start': [str(offset + 1)]})
+    record.features = [original]
+    expected = str(original.extract(sequence))[offset:]
+    text = io.StringIO()
+    SeqIO.write(record, text, 'genbank')
+    imported = parse_sequence_file(text.getvalue().encode(), 'frame.gb')
+    exported = to_genbank(imported.sequence, circular=True, features=imported.to_dict()['annotations'])
+    independent = SeqIO.read(io.StringIO(exported), 'genbank')
+    cds = next(f for f in independent.features if f.type == 'CDS')
+    assert str(cds.extract(independent.seq)).upper() == expected
+    assert cds.qualifiers['codon_start'] == ['1']
+
+
+def test_discontinuous_feature_is_not_silently_flattened():
+    from Bio.SeqFeature import CompoundLocation
+    record = SeqRecord(Seq('ACGT' * 15), id='split')
+    record.features = [SeqFeature(CompoundLocation([SimpleLocation(1, 5), SimpleLocation(10, 15)]), type='CDS')]
+    with pytest.raises(ParseError, match='discontinuous'):
+        _annotations_from(record)
+
 GENBANK = """LOCUS       pDEMO                    120 bp    DNA     circular SYN 01-JAN-2026
 DEFINITION  Demonstration plasmid for the G-Synth viewer.
 ACCESSION   pDEMO

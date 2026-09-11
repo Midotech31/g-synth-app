@@ -54,11 +54,17 @@ class Feature:
             qualifiers["note"] = "Computational candidate: " + str(entry.get("basis") or "function unconfirmed")
         elif entry.get("basis"):
             qualifiers["note"] = str(entry["basis"])
+        start, end = int(entry.get("start", 0)), int(entry.get("end", 0))
+        if feature_type == 'CDS' and entry.get('translation_start') is not None and entry.get('translation_end') is not None:
+            # The CDS location must describe the translated bases, not a
+            # surrounding assembly span which can start out of frame.
+            start, end = int(entry['translation_start']), int(entry['translation_end'])
+            qualifiers['codon_start'] = '1'
         return cls(
             name=str(entry.get("name") or entry.get("label") or ""),
             type=feature_type,
-            start=int(entry.get("start", 0)),
-            end=int(entry.get("end", 0)),
+            start=start,
+            end=end,
             direction=int(entry.get("direction", 1) or 1),
             qualifiers=qualifiers,
         )

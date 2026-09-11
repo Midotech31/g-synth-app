@@ -60,6 +60,8 @@ class Annotation:
     regulatory_class: str = ""
     inferred: bool = False
     basis: str = ""
+    translation_start: int | None = None
+    translation_end: int | None = None
 
 
 @dataclass
@@ -76,7 +78,7 @@ class ParsedRecord:
     def to_dict(self) -> dict:
         return {**asdict(self),
                 "annotations": [{key: value for key, value in asdict(a).items()
-                                 if key not in {"regulatory_class", "basis", "inferred"} or value}
+                                 if value is not None and (key not in {"regulatory_class", "basis", "inferred"} or value)}
                                 for a in self.annotations]}
 
 
@@ -225,12 +227,30 @@ def _annotations_from(record) -> list[Annotation]:
             is_circular
             and boundary_part is not None
             and origin_part is not None
-            and len(parts) > 1
+            and len(parts) == 2
         ):
             start = int(boundary_part.start)
             end = record_length + int(origin_part.end)
+        if len(parts) > 1 and (
+            not is_circular or len(parts) != 2 or boundary_part is None or origin_part is None
+            or sum(len(part) for part in parts) != end - start
+        ):
+            raise ParseError(
+                f"Feature '{_feature_name(feature, ftype)}' has a discontinuous location. "
+                "G-Synth cannot represent this feature faithfully as one contiguous span."
+            )
         if end <= start:
             continue
+        translation_start = translation_end = None
+        if ftype == 'CDS':
+            try:
+                offset = int(feature.qualifiers.get('codon_start', ['1'])[0]) - 1
+            except (ValueError, TypeError):
+                raise ParseError('CDS codon_start must be 1, 2 or 3.') from None
+            if offset not in (0, 1, 2) or end - start <= offset:
+                raise ParseError('CDS codon_start must identify a base inside the feature.')
+            translation_start = start + (offset if location.strand != -1 else 0)
+            translation_end = end - (offset if location.strand == -1 else 0)
         out.append(Annotation(
             name=_feature_name(feature, ftype),
             type=ftype,
@@ -240,12 +260,17 @@ def _annotations_from(record) -> list[Annotation]:
                 1 if location.strand == 1 else -1 if location.strand == -1 else 0
             ),
             color=FEATURE_COLORS.get(ftype, DEFAULT_FEATURE_COLOR),
+            translation_start=translation_start,
+            translation_end=translation_end,
             regulatory_class=str(feature.qualifiers.get("regulatory_class", [""])[0]),
             inferred=bool(feature.qualifiers.get("inference")) or any(
                 note.startswith("Computational candidate:") for note in feature.qualifiers.get("note", [])
             ),
             basis=next((note.removeprefix("Computational candidate: ") for note in feature.qualifiers.get("note", [])
-                        if note.startswith("Computational candidate:")), "")[:300],
+                        if note.startswith("Computational candidate:")),
+                       ' '.join(str(note) for note in feature.qualifiers.get('note', [])
+                                if str(note) != _feature_name(feature, ftype))
+                       or ' '.join(str(value) for value in feature.qualifiers.get('inference', [])))[:4000],
         ))
     out.sort(key=lambda a: (a.start, -(a.end - a.start)))
     return out

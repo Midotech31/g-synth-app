@@ -327,7 +327,9 @@ textarea { resize: vertical; min-height: 72px; }
 .modal h2 { font-size: 1.05rem; }
 .modal p { color: var(--ink-soft); font-size: 0.9rem; line-height: 1.55; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.35rem; flex-wrap: wrap; }
-.annotation-editor { max-width: 680px; max-height: calc(100vh - 2.5rem); overflow-y: auto; }
+.annotation-editor { max-width: 680px; max-height: calc(100dvh - 2.5rem); overflow: hidden; }
+.annotation-editor-body { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.6rem; padding-right: 0.3rem; }
+.annotation-editor .modal-actions { flex-shrink: 0; padding-top: 0.6rem; border-top: 1px solid var(--line); }
 .annotation-editor-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem;
 }
@@ -336,7 +338,9 @@ textarea { resize: vertical; min-height: 72px; }
   width: 100%; min-height: 44px; padding: 0.25rem;
   border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface);
 }
-.annotation-wrap-check { margin-top: 0.15rem; }
+.annotation-wrap-check { margin-top: 0.15rem; display: flex; align-items: flex-start; gap: 0.6rem; }
+.annotation-wrap-check input { flex: 0 0 auto; margin-top: 0.25rem; }
+.annotation-wrap-check strong, .annotation-wrap-check small { display: block; }
 @media (max-width: 560px) {
   .annotation-editor-grid { grid-template-columns: 1fr; }
   .annotation-name-field { grid-column: auto; }
