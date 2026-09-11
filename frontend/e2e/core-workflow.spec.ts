@@ -101,6 +101,11 @@ test("a single-fragment design bypasses assembly and retains its annotated N ter
   await editor.getByLabel("Feature name").fill("User-selected region");
   await editor.getByLabel("Evidence or source note (optional)").fill("Manually selected during the release workflow check.");
   await page.screenshot({ path: testInfo.outputPath("annotation-evidence-editor.png") });
+  await expect(editor.getByRole("button", { name: "Add feature" })).toBeInViewport({ ratio: 1 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(editor.getByRole("button", { name: "Add feature" })).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: testInfo.outputPath("annotation-evidence-editor-mobile.png") });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await editor.getByRole("button", { name: "Add feature" }).click();
   await expect(expanded.getByRole("button", { name: /^User-selected region, misc_feature/ })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("whole-plasmid-expanded.png") });

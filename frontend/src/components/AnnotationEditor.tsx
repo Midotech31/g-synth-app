@@ -179,6 +179,7 @@ export default function AnnotationEditor({
           onSave(result.annotation);
         }}
       >
+        <div className="annotation-editor-body">
         <h2 id={titleId}>{annotation ? "Edit feature" : "Annotate a feature"}</h2>
         <p>
           Name a new insert or describe any sequence span. Coordinates are 1-based and inclusive,
@@ -271,6 +272,7 @@ export default function AnnotationEditor({
             <span><strong>Crosses origin</strong><small>Use when the feature starts near the end and finishes near base 1.</small></span>
           </label>
         )}
+        </div>
         <div className="modal-actions">
           <button type="button" className="btn btn-outline" onClick={onCancel} disabled={saving}>
             Cancel
