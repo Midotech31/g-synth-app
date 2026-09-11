@@ -223,6 +223,9 @@ test("workspace text remains readable when enlarged", async ({ page }, testInfo)
     )).toBe(true);
     const enlarged = await page.addStyleTag({ content: "html { font-size: 200%; }" });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await page.locator(".pipeline, .rail-group-label, .core-workflow-trail").evaluateAll((elements) =>
+      elements.filter((element) => element.getClientRects().length > 0).every((element) => element.scrollWidth <= element.clientWidth),
+    )).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`${route.slice(1) || "home"}-text-200.png`), fullPage: true });
     await enlarged.evaluate((element) => element.remove());
   }
