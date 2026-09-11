@@ -1,13 +1,3 @@
-"""Tests for the study assistant endpoint.
-
-Unlike every other endpoint in this codebase, there is no engine underneath
-this one to assert an answer against — what it returns is a language
-model's text, which these tests cannot and should not try to grade. What
-they prove instead is the HTTP layer around it: auth is required, the
-request is bounded, the conversation reaches Ollama in order, and an
-Ollama that cannot be reached comes back as a clear 503 rather than a
-stack trace or a silent hang.
-"""
 from unittest.mock import patch
 
 import pytest
@@ -144,9 +134,7 @@ class TestTheAnswer:
         assert "Could not reach Ollama" in r.data["detail"]
 
     def test_real_connection_failure_is_handled(self, auth_client, settings):
-        """No mock here: nothing listens on this port, so this exercises the
-        real urllib error handling in apps.tutor.ollama rather than trusting
-        the mocked path above."""
+
         settings.OLLAMA_BASE_URL = "http://127.0.0.1:1"
         settings.OLLAMA_TIMEOUT_SECONDS = 2
         r = auth_client.post(

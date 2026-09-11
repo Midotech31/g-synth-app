@@ -1,31 +1,3 @@
-"""Pairwise alignment — comparing two sequences that are not the same thing.
-
-Distinct from `verify`, which places a sequencing read against the construct
-it is supposed to be. That one assumes near-identity and exploits it. This
-one makes no such assumption: two enterocin genes from different strains, a
-gene and the variant a supplier returned, a designed protein against its
-homologue.
-
-**Affine gaps.** One long gap is one evolutionary event; ten separate gaps
-are ten. Scoring every gap position the same makes the algorithm prefer
-scattered single-base gaps, which is biologically backwards and produces
-alignments that look wrong to anyone who reads them. Opening a gap is
-therefore expensive and extending it is cheap (Gotoh 1982).
-
-**Three modes, because the question differs.**
-
-* *global* — the whole of both, end to end. For two variants of one gene.
-* *local* — the best-matching stretch, ignoring the rest. For finding a
-  domain, or the one region two distant sequences share.
-* *semi-global* — the whole of the shorter, placed in the longer without
-  penalty at the ends. For asking where a gene sits in a plasmid, which
-  global alignment answers badly and local answers incompletely.
-
-**Protein scoring is read, not typed.** BLOSUM62 ships as data generated
-from Biopython's copy of the published matrix. A substitution matrix
-transcribed by hand is 576 chances to be quietly wrong in a way that shifts
-every alignment slightly.
-"""
 from __future__ import annotations
 
 import json
@@ -37,43 +9,36 @@ from gsynth_engine.sequence import SequenceError, clean_dna, reverse_complement
 
 DATA = Path(__file__).parent / "data"
 
-#: How much dynamic programming to allow. Two 1,500 nt genes is 2.25 M cells
-#: and about a second; beyond a few million the wait stops being reasonable
-#: and the caller is better served by a different tool.
+
 MAX_CELLS = 4_000_000
 
-#: Residues that substitute for one another readily enough to mark as
-#: similar rather than different. Grouped by the property that matters.
+
 _SIMILAR_GROUPS = (
-    "AGST",      # small
-    "ILMVF",     # hydrophobic
-    "KRH",       # basic
-    "DENQ",      # acidic and amide
-    "FYW",       # aromatic
-    "ST",        # hydroxyl
+    "AGST",
+    "ILMVF",
+    "KRH",
+    "DENQ",
+    "FYW",
+    "ST",
     "NQ",
 )
 
 
 @lru_cache(maxsize=2)
 def blosum62() -> dict[str, dict[str, int]]:
-    """The published matrix, as data rather than as a literal in this file."""
+
     record = json.loads((DATA / "blosum62.json").read_text())
     return record["scores"]
 
 
 @dataclass(frozen=True)
 class Scoring:
-    """What a match, a mismatch and a gap are worth.
 
-    Defaults are the ones EMBOSS uses for DNA, which is what most people's
-    intuition about an identity percentage was formed on.
-    """
 
     match: int = 5
     mismatch: int = -4
-    gap_open: int = 10        #: cost of starting a gap, positive
-    gap_extend: int = 1       #: cost of each further position, positive
+    gap_open: int = 10
+    gap_extend: int = 1
     matrix: dict[str, dict[str, int]] | None = None
 
     def score(self, a: str, b: str) -> int:
@@ -90,17 +55,17 @@ PROTEIN_SCORING = Scoring(match=1, mismatch=-4, gap_open=11, gap_extend=1)
 
 @dataclass
 class Alignment:
-    """Two sequences laid against each other, and how well they agree."""
 
-    top: str                  #: sequence a, with gaps
-    marks: str                #: '|' identical, ':' similar, ' ' neither
-    bottom: str               #: sequence b, with gaps
+
+    top: str
+    marks: str
+    bottom: str
     score: int
     mode: str
     identities: int
     similarities: int
     gaps: int
-    #: Where the aligned stretch sits in each input, 0-based half-open.
+
     start_a: int
     end_a: int
     start_b: int
@@ -115,23 +80,18 @@ class Alignment:
 
     @property
     def identity(self) -> float:
-        """Percentage, 0–100 to one decimal — not a 0–1 fraction.
 
-        Measured over the aligned length, so gap columns count against it.
-        The same two sequences score lower under a global alignment than a
-        local one, and comparing figures from different modes is meaningless.
-        """
         return round(100.0 * self.identities / self.length, 1) if self.length else 0.0
 
     @property
     def similarity(self) -> float:
-        """Identities plus conservative substitutions. Protein only."""
+
         if not self.length:
             return 0.0
         return round(100.0 * (self.identities + self.similarities) / self.length, 1)
 
     def rows(self, width: int = 60) -> list[dict[str, object]]:
-        """Wrapped for display, numbered in each sequence's own coordinates."""
+
         out: list[dict[str, object]] = []
         seen_a, seen_b = self.start_a, self.start_b
 
@@ -155,7 +115,7 @@ class Alignment:
         return out
 
     def to_text(self, width: int = 60) -> str:
-        """The rendering people paste into a lab notebook."""
+
         pad = len(str(max(self.end_a, self.end_b))) + 1
         lines: list[str] = []
         for row in self.rows(width):
@@ -183,20 +143,7 @@ def _clean(sequence: str, *, is_protein: bool, field_name: str) -> str:
 def _gotoh(
     a: str, b: str, scoring: Scoring, mode: str,
 ) -> tuple[str, str, int, int, int, int, int]:
-    """Affine-gap dynamic programming. Returns the two gapped strings, the
-    score, and where the alignment starts and ends in each sequence.
 
-    Three layers: `M` ends aligned, `X` ends in a gap in b, `Y` ends in a gap
-    in a. The traceback has to remember **which layer it is in**, not merely
-    which layer won at each cell. Reading the winner at every step leaves a
-    gap the moment the aligned layer scores higher there, which fragments one
-    twelve-base deletion into four — the exact thing affine penalties exist
-    to prevent.
-
-    So each cell keeps three decisions in one byte: where M came from, and
-    whether X and Y were opened or extended. One byte per cell is what makes
-    a few million cells affordable in Python.
-    """
     n, m = len(a), len(b)
     open_cost, extend = scoring.gap_open, scoring.gap_extend
     NEG = -(1 << 30)
@@ -213,12 +160,12 @@ def _gotoh(
         for j in range(1, m + 1):
             row_y[j] = -(open_cost + extend * j)
     else:
-        # Free start along b: the alignment may begin anywhere in it.
+
         for j in range(m + 1):
             row_m[j] = 0 if free_start else (0 if j == 0 else NEG)
 
     pointers: list[bytearray] = []
-    best = (0 if free_start else NEG, 0, 0, 0)      # score, i, j, layer
+    best = (0 if free_start else NEG, 0, 0, 0)
 
     for i in range(1, n + 1):
         new_m = [NEG] * (m + 1)
@@ -226,7 +173,7 @@ def _gotoh(
         new_y = [NEG] * (m + 1)
         trace = bytearray(m + 1)
 
-        if mode == "global":
+        if mode in ("global", "semi-global"):
             new_x[0] = -(open_cost + extend * i)
         elif free_start:
             new_m[0] = 0
@@ -235,7 +182,7 @@ def _gotoh(
         score_of = scoring.score
 
         for j in range(1, m + 1):
-            # ── M: the two residues are aligned ────────────────────────────
+
             up_left_m = row_m[j - 1]
             up_left_x = row_x[j - 1]
             up_left_y = row_y[j - 1]
@@ -249,10 +196,10 @@ def _gotoh(
             value = diagonal + score_of(residue, b[j - 1])
             flags = came_from
             if local and value <= 0:
-                value, flags = 0, 4                  # a fresh local start
+                value, flags = 0, 4
             new_m[j] = value
 
-            # ── X: a gap in b, running down ────────────────────────────────
+
             opened = row_m[j] - open_cost - extend
             extended = row_x[j] - extend
             if extended > opened:
@@ -261,7 +208,7 @@ def _gotoh(
             else:
                 new_x[j] = opened
 
-            # ── Y: a gap in a, running across ──────────────────────────────
+
             opened_y = new_m[j - 1] - open_cost - extend
             extended_y = new_y[j - 1] - extend
             if extended_y > opened_y:
@@ -278,19 +225,20 @@ def _gotoh(
         pointers.append(trace)
         row_m, row_x, row_y = new_m, new_x, new_y
 
-    # ── Where the alignment ends, and in which layer ───────────────────────
+
     if mode == "global":
         end_i, end_j = n, m
         layer = max(range(3), key=lambda k: (row_m, row_x, row_y)[k][m])
         score = (row_m, row_x, row_y)[layer][m]
     elif mode == "semi-global":
         end_i = n
-        end_j = max(range(m + 1), key=lambda j: row_m[j])
-        score, layer = row_m[end_j], 0
+        layer, end_j = max(((k, j) for k in range(3) for j in range(m + 1)),
+                          key=lambda cell: (row_m, row_x, row_y)[cell[0]][cell[1]])
+        score = (row_m, row_x, row_y)[layer][end_j]
     else:
         score, end_i, end_j, layer = best
 
-    # ── Traceback, staying inside a gap until it is genuinely over ─────────
+
     top_out: list[str] = []
     bottom_out: list[str] = []
     i, j = end_i, end_j
@@ -325,7 +273,7 @@ def _gotoh(
             bottom_out.append(b[j - 1])
             j -= 1
     elif mode == "semi-global":
-        # The whole of `a` is used; whatever is left of it hangs off the end.
+
         while i > 0:
             top_out.append(a[i - 1])
             bottom_out.append("-")
@@ -345,19 +293,7 @@ def align(
     scoring: Scoring | None = None,
     try_reverse: bool = True,
 ) -> Alignment:
-    """Align two sequences and report how well they agree.
 
-    Args:
-        mode: "global", "local" or "semi-global". See the module docstring —
-            the right one depends on the question.
-        try_reverse: for DNA, also try the reverse complement of `b` and keep
-            whichever scores better. A gene cloned the other way round is not
-            a different gene, and an alignment that misses that is useless.
-
-    Raises:
-        SequenceError: for empty input, an unknown mode, or a pair too large
-            to align without an unreasonable wait.
-    """
     if mode not in ("global", "local", "semi-global"):
         raise SequenceError(
             f"Unknown alignment mode {mode!r}. Use global, local or semi-global."
@@ -419,7 +355,7 @@ def align(
             "first. It is the same sequence, read the other way round."
         )
 
-    # Report positions in the caller's own numbering, not the flipped copy.
+
     if flipped:
         start_b, end_b = len(used) - end_b, len(used) - start_b
 

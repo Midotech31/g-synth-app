@@ -1,14 +1,3 @@
-"""From a design to the bench: an order sheet and a working protocol.
-
-This is where G-Synth goes further than a sequence viewer. The design is not
-the deliverable — the deliverable is the list of oligos to order and the
-steps to run once they arrive.
-
-Nothing here invents numbers. Volumes and temperatures are the standard
-conditions for annealing synthetic oligos and ligating them with T4 DNA
-ligase; anything design-specific (oligo count, overhangs, fragment order)
-comes from the :class:`ESDResult`.
-"""
 from __future__ import annotations
 
 import csv
@@ -23,7 +12,7 @@ from gsynth_engine.thermo import ANNEALING, melting_temperature
 
 @dataclass(frozen=True)
 class OligoOrder:
-    """One line of the order sheet."""
+
 
     name: str
     sequence: str
@@ -32,7 +21,7 @@ class OligoOrder:
     tm: float
     scale: str
     purification: str
-    role: str          # "forward" | "reverse"
+    role: str
     fragment: int
 
     @property
@@ -51,11 +40,7 @@ class OligoOrder:
 
 
 def _recommend_scale(length: int) -> tuple[str, str]:
-    """Synthesis scale and purification most suppliers would advise.
 
-    Longer oligos accumulate more truncated products, so past ~60 nt a
-    purification step stops those failures ending up in the ligation.
-    """
     if length <= 60:
         return "25 nmol", "Desalted"
     if length <= 100:
@@ -64,7 +49,7 @@ def _recommend_scale(length: int) -> tuple[str, str]:
 
 
 def order_sheet(plan: ESDResult, *, construct_name: str = "construct") -> list[OligoOrder]:
-    """Every oligo to order, in the order fragments will be assembled."""
+
     prefix = construct_name.strip().replace(" ", "_") or "construct"
     orders: list[OligoOrder] = []
     for fragment in plan.fragments:
@@ -88,7 +73,7 @@ def order_sheet(plan: ESDResult, *, construct_name: str = "construct") -> list[O
 
 
 def order_sheet_csv(plan: ESDResult, *, construct_name: str = "construct") -> str:
-    """The order sheet as CSV — most suppliers accept an upload in this shape."""
+
     orders = order_sheet(plan, construct_name=construct_name)
     buffer = io.StringIO()
     writer = csv.DictWriter(buffer, fieldnames=list(orders[0].as_row) if orders else [])
@@ -104,11 +89,7 @@ def bench_protocol(
     construct_name: str = "construct",
     vector: str = "pET-21a(+)",
 ) -> str:
-    """A protocol a student can follow without reading the source code.
 
-    Covers resuspension, annealing, the pairwise ligation Extended Sequence Design
-    calls for, and cloning into the cut vector.
-    """
     ssd = plan.ssd
     left, right = ssd.left_enzyme, ssd.right_enzyme
     n = plan.fragment_count
@@ -176,8 +157,7 @@ def bench_protocol(
             f"{len(fragment.reverse)} nt — {ends}")
     add("")
 
-    # The molecule itself, not a summary of it. Check this before ordering:
-    # it is the only place a wrong overhang shows as a wrong overhang.
+
     add("   HYBRIDISATION — check this before the oligos are ordered")
     add("   " + "-" * 68)
     view = construct_duplex(plan)
@@ -269,12 +249,7 @@ def cloning_worksheet(
     preflight,
     provenance: dict[str, object],
 ) -> str:
-    """A traceable, printable record linking the design to bench checks.
 
-    Reagent units and buffers remain manufacturer-specific; the worksheet
-    records design-derived molecule sizes, molar amounts and verification
-    coverage without inventing a universal restriction-digest recipe.
-    """
     lines: list[str] = []
     add = lines.append
     add(f"G-SYNTH CLONING WORKSHEET — {result.name}")

@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the four author-designated insulin-glargine traces with G-Synth.
 
-Only A Forward Seq.ab1, A Reverse Seq.ab1, B Forward Seq.ab1 and
-B Reverse Seq.ab1 are admitted. Oriented forward/reverse consensus coverage,
-identity and overlap agreement are the primary retrospective endpoints. Mott
-No post hoc quality-threshold coverage is promoted as an article endpoint
-because no trace-quality threshold was prespecified in the source experiment.
-"""
 from __future__ import annotations
 
 import argparse
@@ -77,7 +70,7 @@ def report_dict(report: VerificationReport) -> dict:
 
 
 def independent_biopython(reference: str, trace: Chromatogram) -> dict:
-    """Run an independent local alignment without quality gating."""
+
     aligner = PairwiseAligner()
     aligner.mode = "local"
     aligner.match_score = 2
@@ -151,7 +144,7 @@ def plot_consensus_evidence(
     raw_reports: dict,
     consensus_reports: dict[str, ConsensusReport],
 ) -> None:
-    """Draw complete F/R assembly coverage without elevating a post hoc gate."""
+
     import matplotlib.pyplot as plt
 
     colours = {"A": "#15803d", "C": "#1d4ed8", "G": "#111827", "T": "#b91c1c"}
@@ -187,7 +180,7 @@ def plot_consensus_evidence(
             loc="left", fontsize=9.2, fontweight="bold",
         )
 
-        # Shade only the region independently observed in both orientations.
+
         forward = [read for read in report.reads if not read.reverse_complemented]
         reverse = [read for read in report.reads if read.reverse_complemented]
         for fwd in forward:

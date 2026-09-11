@@ -3,21 +3,7 @@ import { useMemo, useState } from "react";
 import type { Duplex, DuplexSpan } from "../api/client";
 import { fragmentColour, segmentColour } from "./segmentColour";
 
-/**
- * The hybridisation view: both strands, aligned, with the overhangs showing.
- *
- * This is the last thing looked at before oligos are ordered, so it draws the
- * molecule rather than describing it. A column where a strand is absent holds
- * a space, which is exactly what a single-stranded overhang looks like — the
- * stagger at every junction is visible as geometry.
- *
- * Bases are coloured by what they are part of: the tag, a linker, the
- * cleavage site, the insert. Fragment boundaries are drawn as a rule between
- * the two strands, offset by the overhang, so the junctions read as the cuts
- * they are.
- */
 
-/** Colour lookup per column, built once per design rather than per base. */
 function colourIndex(width: number, segments: DuplexSpan[]): (string | null)[] {
   const colours: (string | null)[] = new Array(width).fill(null);
   for (const span of segments) {
@@ -27,7 +13,7 @@ function colourIndex(width: number, segments: DuplexSpan[]): (string | null)[] {
   return colours;
 }
 
-/** Which fragment owns each column, for the alternating background. */
+
 function fragmentIndex(width: number, spans: DuplexSpan[]): number[] {
   const owner: number[] = new Array(width).fill(-1);
   spans.forEach((span, index) => {
@@ -38,7 +24,7 @@ function fragmentIndex(width: number, spans: DuplexSpan[]): number[] {
 
 type Props = {
   duplex: Duplex;
-  /** Bases per line. 60 is the convention in sequence viewers. */
+
   width?: number;
 };
 
@@ -58,18 +44,14 @@ export default function DuplexView({ duplex, width = 60 }: Props) {
     [duplex.width, duplex.bottom_fragments],
   );
 
-  /**
-   * Where each strand is cut. The two sets never coincide — the distance
-   * between them is the overhang, and drawing both is what makes that
-   * visible rather than merely stated.
-   */
+
   const topCuts = useMemo(() => new Set(duplex.junctions), [duplex.junctions]);
   const bottomCuts = useMemo(
     () => new Set(duplex.bottom_fragments.slice(0, -1).map((span) => span.end)),
     [duplex.bottom_fragments],
   );
 
-  /** The columns between a pair of cuts: the overhang itself. */
+
   const overhangColumns = useMemo(() => {
     const columns = new Set<number>();
     const bottom = [...bottomCuts].sort((a, b) => a - b);

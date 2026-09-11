@@ -1,10 +1,3 @@
-"""Regression tests for the security review of commit 907990f.
-
-Each test pins one finding. They are deliberately behavioural — they boot
-the real production settings module in a subprocess, or exercise the real
-token lifecycle — rather than asserting on the contents of a settings dict,
-so they still fail if the protection is removed some other way.
-"""
 import os
 import subprocess
 import sys
@@ -17,8 +10,7 @@ from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# base.py reads BASE_DIR/.env, whose values would satisfy the very variables
-# these tests deliberately withhold. Skip rather than report a false pass.
+
 DOTENV_PRESENT = (BASE_DIR / ".env").exists()
 
 _BOOT_SNIPPET = """
@@ -41,10 +33,7 @@ _COMPLETE_PROD_ENV = {
 
 
 def boot_prod(**overrides) -> subprocess.CompletedProcess:
-    """Import config.settings.prod in a clean subprocess.
 
-    `overrides` may set a variable, or remove one by passing None.
-    """
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("DJANGO_", "ALLOWED_", "CORS_", "DATABASE_"))}
     env.update(_COMPLETE_PROD_ENV)
@@ -61,9 +50,7 @@ def boot_prod(**overrides) -> subprocess.CompletedProcess:
 
 @pytest.mark.skipif(DOTENV_PRESENT, reason="a local .env would supply the withheld variables")
 class TestProductionRefusesUnsafeConfig:
-    """Findings 1-3: prod.py claimed to fail loudly on missing config, but
-    schema-level defaults meant it silently ran with a public secret key,
-    ALLOWED_HOSTS=['*'] and an ephemeral SQLite database."""
+
 
     def test_complete_config_boots(self):
         r = boot_prod()
@@ -92,8 +79,7 @@ class TestProductionRefusesUnsafeConfig:
         assert "ALLOWED_HOSTS" in (r.stderr + r.stdout)
 
     def test_missing_database_url_is_fatal(self):
-        """Without this, prod silently falls back to SQLite on a container's
-        ephemeral disk and loses every account on redeploy."""
+
         r = boot_prod(DATABASE_URL=None)
         assert r.returncode != 0, (
             "prod booted without DATABASE_URL — it would silently use SQLite:\n"
@@ -121,9 +107,7 @@ class TestProductionRefusesUnsafeConfig:
 
 @pytest.mark.skipif(DOTENV_PRESENT, reason="a local .env would supply the withheld variables")
 def test_health_endpoint_is_exempt_from_ssl_redirect():
-    """Finding 6: SECURE_SSL_REDIRECT answered the container's own plain-HTTP
-    health probe with a 301 to https://localhost, so Docker/Render marked the
-    container unhealthy and restart-looped it."""
+
     snippet = """
 import django
 django.setup()
@@ -136,19 +120,17 @@ print("OTHER_STATUS", r2.status_code)
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("DJANGO_", "ALLOWED_", "CORS_", "DATABASE_"))}
     env.update(_COMPLETE_PROD_ENV)
-    env["DATABASE_URL"] = "sqlite:///health-probe.sqlite3"  # never queried
+    env["DATABASE_URL"] = "sqlite:///health-probe.sqlite3"
     r = subprocess.run([sys.executable, "-c", snippet], cwd=BASE_DIR, env=env,
                        capture_output=True, text=True, timeout=90)
     assert "HEALTH_STATUS 200" in r.stdout, f"health probe not exempt:\n{r.stdout}{r.stderr}"
-    # Everything else must still be redirected to HTTPS.
+
     assert "OTHER_STATUS 301" in r.stdout, f"SSL redirect disabled entirely:\n{r.stdout}"
 
 
 @pytest.mark.django_db
 class TestTokenRevocation:
-    """Finding 4: changing the password left both the old access token and
-    the old refresh token fully usable — the attacker kept access for the
-    refresh lifetime (14 days)."""
+
 
     def _login(self, api_client, email="v@example.com", password="GoodPass123"):
         api_client.post(reverse("auth-register"), {
@@ -170,7 +152,7 @@ class TestTokenRevocation:
         })
         assert r.status_code == 200
 
-        # Same token, same request — must now be refused.
+
         assert api_client.get(reverse("auth-me")).status_code == 401
 
     def test_refresh_token_dies_on_password_change(self, api_client):
@@ -209,7 +191,7 @@ class TestTokenRevocation:
 
     def test_logout_all_revokes_every_session(self, api_client):
         access_a, refresh_a = self._login(api_client, email="multi@example.com")
-        # A second device signs in with the same credentials.
+
         r = api_client.post(reverse("auth-login"),
                             {"email": "multi@example.com", "password": "GoodPass123"})
         access_b, refresh_b = r.data["access"], r.data["refresh"]
@@ -225,10 +207,9 @@ class TestTokenRevocation:
             assert api_client.post(reverse("auth-refresh"), {"refresh": token}).status_code == 401
 
     def test_token_without_version_claim_is_refused(self, api_client, user):
-        """Fail closed on tokens minted before versioning existed — and on
-        any future call site that bypasses VersionedRefreshToken."""
+
         from rest_framework_simplejwt.tokens import RefreshToken
-        token = RefreshToken.for_user(user).access_token   # deliberately unversioned
+        token = RefreshToken.for_user(user).access_token
         assert "ver" not in token.payload
         api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         assert api_client.get(reverse("auth-me")).status_code == 401
@@ -236,16 +217,10 @@ class TestTokenRevocation:
 
 @pytest.mark.django_db
 class TestThrottling:
-    """Finding 7: no throttling at all — 10/10 accounts created back to back,
-    and unlimited password guesses against login."""
+
 
     def _tighten(self, monkeypatch, **rates):
-        """Lower the limits for the duration of one test.
 
-        `SimpleRateThrottle.THROTTLE_RATES` is bound to the settings dict at
-        class-definition time, so `override_settings` alone would not reach
-        it — patch the class attribute directly.
-        """
         from rest_framework.throttling import SimpleRateThrottle
         cache.clear()
         for scope, rate in rates.items():
@@ -266,13 +241,7 @@ class TestThrottling:
     def test_the_expensive_design_endpoints_are_throttled(
         self, auth_client, monkeypatch,
     ):
-        """Optimisation, alignment and verification each cost real CPU.
 
-        Left on the default user rate, one signed-in person can ask for more
-        compute than the worker has — which on a single-process deployment
-        means the app stops answering anyone, without anything malicious
-        happening.
-        """
         self._tighten(monkeypatch, design="3/hour")
         gene = "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGG"
         codes = [
@@ -284,8 +253,7 @@ class TestThrottling:
     def test_the_scope_is_shared_across_the_design_endpoints(
         self, auth_client, monkeypatch,
     ):
-        """One budget for all of them, or the limit is trivially sidestepped
-        by spreading the load over four routes."""
+
         self._tighten(monkeypatch, design="3/hour")
         gene = "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGG"
 
@@ -297,7 +265,7 @@ class TestThrottling:
         assert spent.status_code == 429
 
     def test_reference_lookups_are_not_throttled_with_them(self, api_client):
-        """The enzyme and vector tables are lookups, not work."""
+
         for _ in range(6):
             assert api_client.get(reverse("design-enzymes")).status_code == 200
             assert api_client.get(reverse("design-vectors")).status_code == 200

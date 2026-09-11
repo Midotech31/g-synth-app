@@ -1,10 +1,3 @@
-"""Request and response shapes for the design endpoints.
-
-The engine owns the biology; these serializers only validate what the user
-sent and reshape what the engine returned. No design logic lives here — if
-you find yourself computing a sequence in this file, it belongs in
-`gsynth_engine`.
-"""
 from __future__ import annotations
 
 from rest_framework import serializers
@@ -18,15 +11,13 @@ from gsynth_engine.esd import MAX_OVERHANG, MIN_OVERHANG
 from gsynth_engine.pcr import DEFAULT_CLAMP
 from gsynth_engine.vectors import CATALOGUE, DEFAULT_VECTOR
 
-#: Every enzyme with verified cut geometry. The interface groups preferred
-#: cloning enzymes first; the API accepts the full catalogue.
 ENZYME_NAMES = sorted(ALL_ENZYMES)
 CLEAVAGE_NAMES = sorted(CLEAVAGE_SITES)
 VECTOR_KEYS = [spec.key for spec in CATALOGUE]
 
 
 class DesignRequestSerializer(serializers.Serializer):
-    """Common inputs for both SSD and assembly design."""
+
 
     sequence = serializers.CharField(
         max_length=200_000,
@@ -63,7 +54,7 @@ class DesignRequestSerializer(serializers.Serializer):
 
     @property
     def engine_kwargs(self) -> dict:
-        """Translate the validated payload into engine arguments."""
+
         data = self.validated_data
         return {
             "enzyme_pair": f"{data['left_enzyme']} / {data['right_enzyme']}",
@@ -76,7 +67,7 @@ class DesignRequestSerializer(serializers.Serializer):
 
 
 class AssemblyRequestSerializer(DesignRequestSerializer):
-    """SSD inputs plus the two knobs that control fragmentation."""
+
 
     target_oligo_length = serializers.IntegerField(
         min_value=20, max_value=300, default=90,
@@ -96,7 +87,7 @@ class AssemblyRequestSerializer(DesignRequestSerializer):
 
 
 class SaveMixin(serializers.Serializer):
-    """Opt in to persisting the design as a project."""
+
 
     save_as_project = serializers.BooleanField(default=False)
 
@@ -110,12 +101,7 @@ class SaveableAssemblyRequestSerializer(AssemblyRequestSerializer, SaveMixin):
 
 
 class VectorAnnotationSerializer(serializers.Serializer):
-    """A feature carried over from a parsed vector file.
 
-    Deliberately permissive about extra keys: the client sends back whatever
-    the parser gave it, and dropping fields here would quietly lose colours
-    and types on the way to the recombinant map.
-    """
 
     name = serializers.CharField(max_length=200, required=False, default="")
     type = serializers.CharField(max_length=60, required=False, default="misc_feature")
@@ -153,13 +139,8 @@ class VectorAnnotationSerializer(serializers.Serializer):
 
 
 class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
-    """Design an insert and clone it into a vector, in one call.
 
-    The insert is designed from the same inputs as /assembly/, so the two
-    endpoints cannot disagree about what is being cloned.
-    """
 
-    #: Either name a catalogue vector, or supply a sequence — not neither.
     vector_key = serializers.ChoiceField(
         choices=VECTOR_KEYS, required=False, allow_blank=True,
         default=DEFAULT_VECTOR.key,
@@ -181,12 +162,12 @@ class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
         help_text="Only circular vectors can be cloned into — a linear one "
                   "cut twice leaves the backbone in two pieces.",
     )
-    #: Design the full Extended Sequence Design, or just the SSD duplex.
+
     fragment = serializers.BooleanField(
         default=True,
         help_text="False clones the SSD duplex directly, without fragmenting it.",
     )
-    #: Ligate a supplied pre-digested duplex without adding new terminal sites.
+
     pre_digested = serializers.BooleanField(default=False)
     orf_start = serializers.IntegerField(
         min_value=0,
@@ -231,13 +212,7 @@ class CloneRequestSerializer(AssemblyRequestSerializer, SaveMixin):
 
 
 def resolve_vector(data: dict) -> tuple[str, str, list[dict], object]:
-    """Work out which vector to cut, from a key, a sequence, or both.
 
-    Returns (sequence, name, annotations, spec). A supplied sequence always
-    wins over the bundled one — a lab's own copy of a backbone is the one on
-    their bench — but it is still checked against the catalogue entry, so a
-    substitution is caught rather than silently cloned into.
-    """
     from gsynth_engine import vectors as catalogue
     from gsynth_engine.annotations import detect_common_features
 
@@ -247,7 +222,7 @@ def resolve_vector(data: dict) -> tuple[str, str, list[dict], object]:
 
     if supplied:
         sequence = supplied
-        # An unnamed sequence may still be recognisable.
+
         spec = spec or catalogue.identify(supplied)
     else:
         record = catalogue.sequence_of(spec.key) if spec else None
@@ -281,7 +256,7 @@ class FeatureDetectionSerializer(serializers.Serializer):
 
 
 class OptimiseRequestSerializer(serializers.Serializer):
-    """Rewrite a gene for a host, keeping the protein identical."""
+
 
     sequence = serializers.CharField(
         max_length=200_000,
@@ -299,7 +274,7 @@ class OptimiseRequestSerializer(serializers.Serializer):
         help_text="Turn off for an insert destined for a C-terminal vector "
                   "tag, where a stop codon would silently remove the tag.",
     )
-    #: The cloning pair, so the optimiser removes sites that would break it.
+
     avoid_enzymes = serializers.ListField(
         child=serializers.ChoiceField(choices=ENZYME_NAMES),
         required=False, default=list, max_length=12,
@@ -314,7 +289,7 @@ class OptimiseRequestSerializer(serializers.Serializer):
     gc_window = serializers.IntegerField(min_value=20, max_value=200, default=50)
     max_repeat = serializers.IntegerField(min_value=8, max_value=40, default=15)
     avoid_rare = serializers.BooleanField(default=True)
-    #: Reference genes to measure the usage table against, when the CAI matters.
+
     reference_genes = serializers.ListField(
         child=serializers.CharField(max_length=100_000),
         required=False, default=list, max_length=200,
@@ -329,14 +304,14 @@ class OptimiseRequestSerializer(serializers.Serializer):
 
 
 class LigationRequestSerializer(serializers.Serializer):
-    """How much of each thing goes in the tube."""
+
 
     vector_length = serializers.IntegerField(min_value=1, max_value=1_000_000)
     insert_length = serializers.IntegerField(min_value=1, max_value=1_000_000)
     vector_ng = serializers.FloatField(min_value=0.01, max_value=100_000, default=50.0)
     ends = serializers.ChoiceField(choices=["5'", "3'", "blunt"], default="5'")
     total_volume_uL = serializers.FloatField(min_value=1, max_value=1000, default=20.0)
-    #: Left empty, the recommendation for the kind of ends is used.
+
     ratios = serializers.ListField(
         child=serializers.FloatField(min_value=0.01, max_value=100),
         required=False, default=list, max_length=8,
@@ -344,7 +319,7 @@ class LigationRequestSerializer(serializers.Serializer):
 
 
 class PrimerRequestSerializer(serializers.Serializer):
-    """Sequencing primers that read across a region."""
+
 
     template = serializers.CharField(max_length=2_000_000)
     target_start = serializers.IntegerField(min_value=0)
@@ -369,10 +344,10 @@ class PrimerRequestSerializer(serializers.Serializer):
 
 
 class VerifyRequestSerializer(serializers.Serializer):
-    """Compare sequencing reads to the design."""
+
 
     design = serializers.CharField(max_length=2_000_000)
-    #: Named so a report can say which trace disagreed.
+
     reads = serializers.DictField(child=serializers.CharField(max_length=100_000))
     circular = serializers.BooleanField(default=True)
     trim = serializers.IntegerField(min_value=0, max_value=200, default=30)
@@ -381,7 +356,7 @@ class VerifyRequestSerializer(serializers.Serializer):
     region_start = serializers.IntegerField(min_value=0, required=False, allow_null=True)
     region_end = serializers.IntegerField(min_value=0, required=False, allow_null=True)
 
-    #: DictField has no max_length, so the cap is enforced here.
+
     MAX_READS = 64
 
     def validate(self, attrs):
@@ -395,16 +370,11 @@ class VerifyRequestSerializer(serializers.Serializer):
 
 
 class TraceUploadSerializer(serializers.Serializer):
-    """Sanger trace files, compared against a design.
 
-    A trace carries what the letters cannot: how much to believe each base.
-    Files arrive as multipart because ABIF and SCF traces are binary — base64 in JSON
-    would inflate a 400 kB trace to 550 kB for no gain.
-    """
 
     design = serializers.CharField(max_length=2_000_000)
-    #: Bounded, because a chromatogram is a fixed shape and anything far larger is
-    #: either the wrong file or someone probing for a memory limit.
+
+
     traces = serializers.ListField(
         child=serializers.FileField(max_length=255, allow_empty_file=False),
         min_length=1, max_length=32,
@@ -416,7 +386,7 @@ class TraceUploadSerializer(serializers.Serializer):
     region_start = serializers.IntegerField(min_value=0, required=False, allow_null=True)
     region_end = serializers.IntegerField(min_value=0, required=False, allow_null=True)
 
-    #: A 1.2 kb read is about 400 kB. Ten times that is not a trace.
+
     MAX_TRACE_BYTES = 4 * 1024 * 1024
 
     def validate_traces(self, files):
@@ -431,7 +401,7 @@ class TraceUploadSerializer(serializers.Serializer):
 
 
 class AlignRequestSerializer(serializers.Serializer):
-    """Compare two sequences that are not assumed to be the same thing."""
+
 
     first = serializers.CharField(max_length=200_000)
     second = serializers.CharField(max_length=200_000)
@@ -439,7 +409,7 @@ class AlignRequestSerializer(serializers.Serializer):
         choices=["global", "local", "semi-global"], default="global",
     )
     is_protein = serializers.BooleanField(default=False)
-    #: A gene cloned the other way round is not a different gene.
+
     try_reverse = serializers.BooleanField(default=True)
     match = serializers.IntegerField(default=5, min_value=1, max_value=20)
     mismatch = serializers.IntegerField(default=-4, min_value=-20, max_value=0)
@@ -448,7 +418,7 @@ class AlignRequestSerializer(serializers.Serializer):
 
 
 class HybridizationRequestSerializer(serializers.Serializer):
-    """Two oligonucleotide strands, each entered in vendor 5′→3′ order."""
+
 
     first = serializers.CharField(max_length=200_000)
     second = serializers.CharField(max_length=200_000)
@@ -465,12 +435,7 @@ class HybridizationRequestSerializer(serializers.Serializer):
 
 
 class PcrRequestSerializer(serializers.Serializer):
-    """A PCR, conventional or with cloning tails.
 
-    The enzymes are optional and travel together: naming one alone cannot
-    open both ends of a product, and the engine refuses it. `null` is
-    accepted as well as omission so the interface can clear a choice.
-    """
 
     template = serializers.CharField(max_length=200_000)
     target_start = serializers.IntegerField(min_value=0, default=0)
@@ -480,7 +445,7 @@ class PcrRequestSerializer(serializers.Serializer):
                                           allow_null=True, default=None)
     right_enzyme = serializers.ChoiceField(choices=ENZYME_NAMES, required=False,
                                            allow_null=True, default=None)
-    # Restrict terminal clamp length to practical oligonucleotide synthesis.
+
     clamp = serializers.IntegerField(min_value=0, max_value=20, default=DEFAULT_CLAMP)
     keep_frame = serializers.BooleanField(default=False)
     start_codon_mode = serializers.ChoiceField(

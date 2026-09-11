@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build deterministic publication figures from G-Synth evidence and UI captures."""
+
 
 from __future__ import annotations
 

@@ -1,11 +1,10 @@
-"""Top-level URL routes."""
 from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
 
 
 def health(_request):
-    """Liveness probe used by Docker HEALTHCHECK, Render, load balancers."""
+
     return JsonResponse({"status": "ok", "service": "gsynth-api"})
 
 

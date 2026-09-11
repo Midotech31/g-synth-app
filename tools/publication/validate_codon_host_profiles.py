@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create machine-readable evidence for the bundled host profiles."""
+
 from __future__ import annotations
 
 import hashlib

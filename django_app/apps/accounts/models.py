@@ -1,11 +1,10 @@
-"""Custom user model — email as the login identifier, no separate username."""
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
-    """Manager that normalises the email + hashes the password."""
+
 
     use_in_migrations = True
 
@@ -32,7 +31,7 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-    """G-Synth user account."""
+
 
     email = models.EmailField(unique=True, db_index=True)
     name = models.CharField(max_length=255, blank=True, default="")
@@ -40,7 +39,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
 
-    # Credential revision embedded in access and refresh tokens.
+
     token_version = models.PositiveIntegerField(default=0)
 
     objects = UserManager()
@@ -60,7 +59,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.name or self.email.split("@")[0]
 
     def revoke_all_tokens(self) -> int:
-        """Invalidate access tokens and blacklist outstanding refresh tokens."""
+
         from rest_framework_simplejwt.token_blacklist.models import (
             BlacklistedToken,
             OutstandingToken,

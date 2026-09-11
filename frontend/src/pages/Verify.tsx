@@ -18,14 +18,6 @@ import ReferenceAlignment from "../components/ReferenceAlignment";
 import TraceView from "../components/TraceView";
 import { useWorkspaceState } from "../state/WorkspaceStateContext";
 
-/**
- * The end of the workflow: you built it, now check it is what you designed.
- *
- * All three tools on this page operate on one saved construct, because that
- * is how they are used — the ligation ratios, the primers to order, and the
- * reads that come back are all about the same molecule. Making the user
- * paste it three times would be the wrong shape.
- */
 
 type Tab = "reads" | "primers" | "ligation";
 
@@ -38,7 +30,7 @@ export type ProjectCapabilities = {
   circular: boolean;
 };
 
-/** Derive workflow capabilities from explicit metadata, never sequence length. */
+
 export function projectCapabilities(project: Project | null): ProjectCapabilities {
   const insertStart = project?.data.insert_start;
   const insertEnd = project?.data.insert_end;
@@ -96,7 +88,7 @@ export default function Verify() {
     }
   }, []);
 
-  /** The insert span enables primers; ligation additionally needs a backbone. */
+
   const {
     insertStart,
     insertEnd,
@@ -106,7 +98,7 @@ export default function Verify() {
     circular,
   } = projectCapabilities(project);
 
-  /** One FASTA-ish blob in, named reads out. Bare sequence is one read. */
+
   function parseReads(text: string): Record<string, string> {
     const out: Record<string, string> = {};
     const blocks = text.split(/^>/m).filter((b) => b.trim());
@@ -132,9 +124,8 @@ export default function Verify() {
     setBusy(true);
     setError("");
     try {
-      // A trace carries the confidence of every base; letters do not. When
-      // both are given the traces win — there is no reason to discard the
-      // one piece of evidence that separates a mutation from a bad call.
+
+
       const common = {
         design: project.sequence,
         circular,
@@ -183,7 +174,7 @@ export default function Verify() {
     }
   }
 
-  /** A primer set is ordered, not read on screen. */
+
   async function exportPrimers(filetype: "csv" | "fasta") {
     if (!project || !hasRegion) return;
     const safe = project.name.replace(/\s+/g, "_").slice(0, 20) || "seq";
@@ -224,7 +215,7 @@ export default function Verify() {
     }
   }
 
-  /** Each tab answers its own question, so each has its own verdict. */
+
   function verdict(): string {
     if (tab === "reads") {
       if (!report) return "";
@@ -292,7 +283,7 @@ export default function Verify() {
         {error && <div className="notice notice-error" role="alert" id="verify-error">{error}</div>}
 
         <div className="design-layout verify-layout">
-          {/* ── Pick the construct ─────────────────────────────────────── */}
+
           <div className="card">
             <div className="card-head"><h2>Construct</h2></div>
             <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
@@ -378,9 +369,8 @@ export default function Verify() {
                     type="file"
                     accept=".ab1,.scf,application/octet-stream"
                     multiple
-                    // "Add an ABIF or SCF trace, or paste the bases" is a complaint
-                    // about these two fields; it is attached to them so it is
-                    // read when either is reached, not only when it appears.
+
+
                     aria-describedby={error ? "traces-hint verify-error" : "traces-hint"}
                     onChange={(e) => {
                       setTraceFiles(Array.from(e.target.files ?? []));
@@ -407,7 +397,7 @@ export default function Verify() {
                     onChange={(e) => setReads(e.target.value)}
                     rows={7}
                     className="mono"
-                    style={{ fontSize: "0.74rem" }}
+                    style={{ fontSize: "1rem" }}
                     placeholder={">T7-F\nGATCC...\n>T7-R\nCTAGG..."}
                     aria-describedby={error ? "reads-hint verify-error" : "reads-hint"}
                   />
@@ -464,7 +454,7 @@ export default function Verify() {
             </div>
           </div>
 
-          {/* ── Results ────────────────────────────────────────────────── */}
+
           <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
             <div
               className="seg-toggle"

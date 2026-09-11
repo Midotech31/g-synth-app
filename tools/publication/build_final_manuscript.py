@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the G-Synth manuscript and Supporting Information."""
+
 
 from __future__ import annotations
 
@@ -330,7 +330,7 @@ def add_figure(
     width: float = 6.6,
     minimum_ppi: int = 300,
 ) -> None:
-    """Insert a raster figure without exceeding its publication-quality width."""
+
     alt_text = caption.split(". ", 1)[-1]
     with Image.open(path) as image:
         width = min(width, image.width / minimum_ppi)
@@ -359,7 +359,7 @@ def add_figure(
 
 
 def add_figure_legend_list(doc: Document) -> None:
-    """Append the complete figure legend and alt-text list."""
+
     doc.add_heading("Figure Legends and Alt Text", level=1)
     for caption, alt_text in getattr(doc, "_gsynth_figure_legends", []):
         add_text(doc, caption, bold_lead=caption.split(".", 1)[0] + ".")
@@ -378,7 +378,7 @@ def add_reference_list(doc: Document, references: list[str]) -> None:
 
 
 def main_references(primary: dict) -> list[str]:
-    """Return the experimental and software references."""
+
     return primary["references"] + [
         "Hillson, N. J.; Rosengarten, R. D.; Keasling, J. D. j5 DNA Assembly Design Automation Software. ACS Synth. Biol. 2012, 1, 14–21. https://doi.org/10.1021/sb2000116.",
         "Haines, M. C.; Carling, B.; Marshall, J.; et al. basicsynbio and the BASIC SEVA Collection: Software and Vectors for an Established DNA Assembly Method. Synth. Biol. 2022, 7, ysac023. https://doi.org/10.1093/synbio/ysac023.",

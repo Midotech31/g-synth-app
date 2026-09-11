@@ -1,4 +1,3 @@
-"""Conventional and restriction-cloning PCR primer design."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -20,32 +19,32 @@ from gsynth_engine.thermo import PCR, melting_temperature
 
 START_CODON_MODES = ("use_site", "keep_both")
 
-#: Annealing-region length bounds.
+
 MIN_ANNEAL: int = 18
 MAX_ANNEAL: int = 30
 
-#: Target melting temperature and accepted deviation.
+
 TARGET_TM: float = 60.0
 TM_TOLERANCE: float = 3.0
 
-#: Maximum accepted Tm difference within a primer pair.
+
 MAX_TM_DIFFERENCE: float = 5.0
 
-#: Terminal clamp length used for restriction-site cleavage.
+
 DEFAULT_CLAMP: int = 6
 
-#: Validated clamp sequence without supported restriction sites.
+
 _CLAMP_BASES: str = "GGAGGTGAAGACAGTAACTG"
 
-#: Annealing-temperature offset from the lower primer Tm.
+
 TA_OFFSET: float = 5.0
 
-#: Maximum proposed annealing temperature.
+
 MAX_TA: float = 72.0
 
 
 def _clamp_of(length: int) -> str:
-    """Clamp bases for a tail, taken from the validated terminal run."""
+
     if length <= 0:
         return ""
     return _CLAMP_BASES[:length]
@@ -53,23 +52,22 @@ def _clamp_of(length: int) -> str:
 
 @dataclass(frozen=True)
 class PcrPrimer:
-    """PCR primer with separate 5′ tail and template-annealing region."""
+
 
     name: str
     sequence: str
-    #: The 5' addition. Empty for conventional PCR.
+
     tail: str
-    #: The 3' portion that binds the template.
+
     anneals: str
-    direction: int          #: 1 forward, -1 reverse
-    #: Footprint of the annealing portion on the template, top-strand
-    #: coordinates, half-open and 0-based. A reverse primer's footprint is
-    #: still written left-to-right on the top strand.
+    direction: int
+
+
     start: int
     end: int
-    #: Tm of the annealing portion under PCR conditions. This sets Ta.
+
     tm: float
-    #: Tm of the whole oligo, which applies from the third cycle onwards.
+
     tm_full: float
     gc: float
     enzyme: str | None = None
@@ -86,12 +84,7 @@ class PcrPrimer:
 
     @property
     def has_gc_clamp(self) -> bool:
-        """A G or C among the last two bases.
 
-        The 3' end is the end the polymerase extends from; a run of A/T there
-        breathes open and primes poorly. Three or more G/C is the opposite
-        problem and is warned about separately.
-        """
         return any(base in "GC" for base in self.anneals[-2:])
 
     @property
@@ -110,24 +103,24 @@ class PcrPrimer:
 
 @dataclass
 class PcrResult:
-    """A designed reaction: the two primers, the product, and the verdict."""
+
 
     forward: PcrPrimer
     reverse: PcrPrimer
-    #: The amplicon's top strand, tails included.
+
     product: str
-    #: The stretch of template between the primers' outer edges, without
-    #: tails — what conventional PCR would have produced.
+
+
     amplified_region: str
     template_start: int
     template_end: int
-    #: Suggested annealing temperature, from the lower annealing Tm.
+
     annealing_temperature: float
-    #: Present only for a cloning design.
+
     left_enzyme: str | None = None
     right_enzyme: str | None = None
     digest: Digest | None = None
-    #: Where the reading frame starts in the digested insert, when asked for.
+
     insert_orf_start: int | None = None
     problems: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -138,33 +131,22 @@ class PcrResult:
 
     @property
     def is_clean(self) -> bool:
-        """No problems — this reaction can be run and its product cut.
 
-        Warnings are not consulted: a primer with a middling GC clamp is
-        worth knowing about and is still worth ordering, whereas an enzyme
-        that cuts inside the gene is not a reaction to optimise.
-        """
         return not self.problems
 
     @property
     def insert(self) -> str:
-        """The insert as it goes into the ligation."""
+
         return self.digest.top if self.digest else self.amplified_region
 
 
 def _tm(sequence: str) -> float:
-    """Tm under the PCR reaction, rounded the way the interface shows it."""
+
     return round(melting_temperature(sequence, conditions=PCR), 1)
 
 
 def _self_complementarity(sequence: str) -> int:
-    """Longest run where the oligo's 3' end pairs with itself elsewhere.
 
-    A primer whose 3' end is complementary to its own body forms a hairpin
-    or a primer-dimer, and both consume primer that should be extending the
-    template. Only the 3' end is checked, because that is the end that gets
-    extended — an internal match stalls but does not produce a product.
-    """
     seq = sequence.upper()
     tail_3 = seq[-6:]
     if len(tail_3) < 4:
@@ -173,20 +155,14 @@ def _self_complementarity(sequence: str) -> int:
     best = 0
     for size in range(4, len(partner) + 1):
         probe = partner[-size:]
-        # Exclude the 3' end matching itself, which is not a real duplex.
+
         if probe in seq[: len(seq) - size]:
             best = size
     return best
 
 
 def _cross_dimer(forward: str, reverse: str) -> int:
-    """Longest 3'-end complementarity between the two primers.
 
-    When one primer's 3' end pairs with the other's, the pair extends each
-    other into a short product that then amplifies far better than the
-    template does — the reaction fills with primer-dimer and the band of
-    interest never appears.
-    """
     best = 0
     for size in range(4, 9):
         if len(forward) < size or len(reverse) < size:
@@ -199,7 +175,7 @@ def _cross_dimer(forward: str, reverse: str) -> int:
 
 
 def _primer_warnings(anneals: str, *, label: str) -> list[str]:
-    """What is wrong with one annealing region, said in reaction terms."""
+
     notes: list[str] = []
     gc = gc_content(anneals)
 
@@ -246,13 +222,7 @@ def _primer_warnings(anneals: str, *, label: str) -> list[str]:
 def _pick_anneal(
     template: str, *, start: int, direction: int,
 ) -> tuple[str, int, int]:
-    """Choose the annealing region from one end of the target.
 
-    Walks lengths from MIN_ANNEAL upward and keeps the one whose Tm is
-    nearest TARGET_TM, preferring a G/C at the 3' end where the choice is
-    otherwise close. Returns the region as it binds, plus its footprint on
-    the top strand.
-    """
     best: tuple[float, str, int, int] | None = None
 
     for length in range(MIN_ANNEAL, MAX_ANNEAL + 1):
@@ -265,13 +235,13 @@ def _pick_anneal(
             lo, hi = start - length, start
             if lo < 0:
                 break
-            # A reverse primer is written 5'→3' in its own direction, so it
-            # is the reverse complement of the top strand it covers.
+
+
             region = reverse_complement(template[lo:hi])
 
         penalty = abs(_tm(region) - TARGET_TM)
-        # A 3' G/C is worth about a degree of Tm accuracy: it buys priming
-        # efficiency that Tm alone does not express.
+
+
         if not any(base in "GC" for base in region[-2:]):
             penalty += 1.0
 
@@ -290,7 +260,7 @@ def _pick_anneal(
 
 
 def _site_of(enzyme: str) -> str:
-    """The recognition sequence, or a message naming what is available."""
+
     entry = ALL_ENZYMES.get(enzyme)
     if entry is None:
         raise SequenceError(
@@ -308,7 +278,7 @@ def _resolve_custom_primer(
     direction: int,
     allow_tail: bool,
 ) -> tuple[str, str, int, int]:
-    """Split an entered oligo into its 5′ addition and 3′ template match."""
+
     primer = clean_dna(sequence)
     if not primer:
         raise SequenceError("Enter both primer sequences before revalidating them.")
@@ -358,34 +328,7 @@ def design_pcr(
     forward_primer: str | None = None,
     reverse_primer: str | None = None,
 ) -> PcrResult:
-    """Design a PCR, with or without cloning tails, and simulate it.
 
-    With neither enzyme named this is conventional PCR: two primers that
-    copy `template[target_start:target_end]` and give back exactly that.
-    Name both enzymes and each primer gains a tail, so the product carries
-    the sites and can be cut into an insert.
-
-    Args:
-        target_start / target_end: the region to amplify, half-open and
-            0-based. `target_end` defaults to the end of the template.
-        left_enzyme / right_enzyme: as they will sit on the *product*, left
-            first. Both or neither.
-        clamp: bases placed outside each site so the enzyme can cut. Fewer
-            than the default is accepted and warned about, because the digest
-            is what turns the product into an insert.
-        keep_frame: pad the left tail so the amplified region stays in frame
-            with the vector's reading frame downstream of the site. Only
-            meaningful for an N-terminal fusion.
-        start_codon_mode: when the left restriction site supplies an ``ATG``
-            and the selected region also begins with ``ATG``, ``use_site``
-            omits the template codon so the protein starts with one
-            methionine. ``keep_both`` preserves both codons deliberately.
-
-    Returns:
-        A :class:`PcrResult`. Check `is_clean` before ordering: an enzyme
-        that cuts inside the region is reported as a problem rather than
-        raised, so the interface can show what is wrong with the choice.
-    """
     working = clean_dna(template)
     if not working:
         raise SequenceError("Enter a template sequence to amplify.")
@@ -425,11 +368,7 @@ def design_pcr(
     problems: list[str] = []
     warnings: list[str] = []
 
-    # NdeI's CATATG is the common case: the recognition site already contains
-    # the translation start. The recommended primer therefore anneals after
-    # a template-leading ATG. Keeping that codon as well changes the
-    # expressed protein to Met-Met, so it is an explicit opt-in rather than
-    # the default.
+
     effective_start = target_start
     left_site = _site_of(left_enzyme) if left_enzyme is not None else ""
     supplies_atg = (
@@ -508,8 +447,7 @@ def design_pcr(
             left_site_at = clamp
             reverse_site_at = clamp
 
-        # Where the digest will cut, so frame can be measured on the insert
-        # rather than on the product — they differ by the stub that falls off.
+
         left_cut_offset = clamp + int(ALL_ENZYMES[left_enzyme]["cut_top"])  # type: ignore[arg-type]
         if supplies_atg and template_supplies_atg and start_codon_mode == "keep_both":
             warnings.append(
@@ -520,10 +458,8 @@ def design_pcr(
             )
 
         if keep_frame and not supplies_atg and not custom_primers:
-            # The vector supplies the ATG upstream, so the region must sit a
-            # whole number of codons from the insert's own 5' end. Anchoring
-            # on the product's end instead would be out by the stub the
-            # digest removes.
+
+
             padding = (len(fwd_tail) - left_cut_offset) % 3
             padding = (3 - padding) % 3
             fwd_tail += "A" * padding
@@ -545,16 +481,10 @@ def design_pcr(
     forward_seq = fwd_tail + fwd_anneal
     reverse_seq = rev_tail + rev_anneal
 
-    # ── The product ─────────────────────────────────────────────────────
-    # Top strand: the forward primer as written, the template between the
-    # primers' inner edges, then the reverse primer's complement. Built from
-    # the primers rather than assembled from the design, so that what is
-    # reported is what those two oligos would actually produce.
+
     product = fwd_tail + region + reverse_complement(rev_tail)
 
-    # Validate the molecule that will actually be digested, not just the
-    # template region. Clamp/site and site/insert boundaries can create an
-    # overlapping recognition sequence even when the original gene is clean.
+
     if left_enzyme is not None and right_enzyme is not None:
         right_site = _site_of(right_enzyme)
         expected = {
@@ -601,7 +531,7 @@ def design_pcr(
     warnings.extend(fwd_warnings)
     warnings.extend(rev_warnings)
 
-    # Ta from the annealing portions, which is what binds in cycle one.
+
     annealing_temperature = round(min(min(forward.tm, reverse.tm) - TA_OFFSET, MAX_TA), 1)
 
     if abs(forward.tm - reverse.tm) > MAX_TM_DIFFERENCE:
@@ -629,18 +559,14 @@ def design_pcr(
         problems=problems, warnings=warnings,
     )
 
-    # ── The digest ──────────────────────────────────────────────────────
+
     if left_enzyme is not None and right_enzyme is not None and not problems:
         result.digest = digest_linear(
             product, left_enzyme=left_enzyme, right_enzyme=right_enzyme,
         )
         if keep_frame:
-            # Anchored on whichever ATG actually starts translation. With an
-            # enzyme like NdeI that is the one inside the site, and the
-            # region follows it in frame; with any other enzyme the vector
-            # supplies it upstream and the frame begins where the region
-            # does. `clone()` is what checks this against the real vector —
-            # here there is no vector to check against.
+
+
             region_at = len(fwd_tail) - result.digest.trimmed_left
             if supplies_atg:
                 retained, _ = left_remainders(left_enzyme)
@@ -659,14 +585,7 @@ def design_pcr(
 
 
 def _check_frame(result: PcrResult, region: str) -> None:
-    """Warn when an in-frame request cannot be honoured by the region itself.
 
-    Measured on the amplified region, not on the insert. The insert carries a
-    single-stranded overhang at each end that is not part of any codon, so its
-    length is almost never a multiple of three — testing that instead would
-    fire on every well-formed design, and a warning that always fires is one
-    the reader learns to skip past.
-    """
     if len(region) % 3:
         result.warnings.append(
             f"The amplified region is {len(region)} bases, which is not a "

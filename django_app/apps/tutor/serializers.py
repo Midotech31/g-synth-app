@@ -1,4 +1,3 @@
-"""Validated request shape for the optional study assistant."""
 from __future__ import annotations
 
 from rest_framework import serializers

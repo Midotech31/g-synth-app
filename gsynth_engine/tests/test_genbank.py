@@ -1,11 +1,3 @@
-"""Tests for GenBank and FASTA output.
-
-Writing a format is easy to do almost right, and almost right is worse than
-wrong: a LOCUS line whose columns are off by two produces a record that
-parses without complaint and comes back linear. So the tests here do not
-check that the text looks plausible — they parse it back with Biopython, an
-implementation that had no part in writing it, and compare.
-"""
 from __future__ import annotations
 
 import io
@@ -30,11 +22,8 @@ FEATURES = [
 
 
 def parse(text: str):
-    """Read a record back with an independent parser."""
+
     return SeqIO.read(io.StringIO(text), "genbank")
-
-
-# ── The round trip ──────────────────────────────────────────────────────────
 
 
 class TestRoundTrip:
@@ -47,7 +36,7 @@ class TestRoundTrip:
         assert record.name == "pGS-EntA"
 
     def test_circular_topology_survives(self):
-        """The failure this file exists to prevent: a plasmid read as linear."""
+
         record = parse(to_genbank(SEQUENCE, name="plasmid", circular=True))
         assert record.annotations["topology"] == "circular"
 
@@ -65,7 +54,7 @@ class TestRoundTrip:
             assert int(read.location.end) == written["end"]
 
     def test_features_keep_their_strand(self):
-        """A resistance gene on the wrong strand is nonsense on the map."""
+
         record = parse(to_genbank(SEQUENCE, features=FEATURES))
         drawn = [f for f in record.features if f.type != "source"]
         assert drawn[0].location.strand == 1
@@ -89,12 +78,9 @@ class TestRoundTrip:
         assert "EntA in pET-21a(+)" in record.description
 
 
-# ── Real payloads ───────────────────────────────────────────────────────────
-
-
 class TestRealConstructs:
     def test_a_recombinant_plasmid_round_trips(self):
-        """The output that matters: what the user opens in SnapGene."""
+
         record = vectors.sequence_of("pET-21a")
         design = design_small_sequence(
             "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGC", enzyme_pair="NdeI / XhoI"
@@ -137,12 +123,9 @@ class TestRealConstructs:
         assert str(parse(text).seq).upper() == record["sequence"]
 
 
-# ── Edge cases ──────────────────────────────────────────────────────────────
-
-
 class TestEdges:
     def test_a_feature_across_the_origin_becomes_a_join(self):
-        """On a circle a feature can end past the last base."""
+
         text = to_genbank(
             SEQUENCE, circular=True,
             features=[{"name": "wrap", "start": 55, "end": 65, "direction": 1}],
@@ -153,7 +136,7 @@ class TestEdges:
         assert len(wrapped.location.parts) == 2
 
     def test_an_empty_feature_is_skipped(self):
-        """Zero-length features come from clipping and draw as artefacts."""
+
         record = parse(
             to_genbank(SEQUENCE, features=[{"name": "gone", "start": 10, "end": 10}])
         )
@@ -170,7 +153,7 @@ class TestEdges:
         assert str(record.seq).upper() == SEQUENCE
 
     def test_output_is_the_same_every_time(self):
-        """Someone will diff two exports; a clock in the file defeats that."""
+
         first = to_genbank(SEQUENCE, name="x", features=FEATURES)
         second = to_genbank(SEQUENCE, name="x", features=FEATURES)
         assert first == second
@@ -186,9 +169,6 @@ class TestEdges:
 
     def test_an_empty_sequence_still_produces_a_record(self):
         assert to_genbank("", name="empty").endswith("//\n")
-
-
-# ── FASTA ───────────────────────────────────────────────────────────────────
 
 
 class TestFasta:
@@ -207,8 +187,7 @@ class TestFasta:
         assert all(len(line) <= 70 for line in lines[1:])
 
     def test_every_oligo_becomes_one_entry(self):
-        """Suppliers take a FASTA upload; retyping thirty names is where
-        transcription errors come from."""
+
         oligos = [
             {"Name": "F1_F", "Sequence (5'->3')": "ATGCATGC"},
             {"Name": "F1_R", "Sequence (5'->3')": "GCATGCAT"},

@@ -1,4 +1,3 @@
-"""Tests for FASTA, GenBank and SnapGene upload parsing."""
 import io
 import json
 import struct
@@ -79,7 +78,7 @@ GGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTAC
 
 
 def _snapgene_pet21a() -> bytes:
-    """Build a portable SnapGene sample from the bundled pET-21a record."""
+
     path = Path(__file__).resolve().parents[2] / "gsynth_engine/vector_data/pET-21a.json"
     record = json.loads(path.read_text(encoding="utf-8"))
 
@@ -145,7 +144,7 @@ class TestGenBankParsing:
         assert "rrnB T1" in by_name
 
         promoter = by_name["T7 promoter"]
-        # GenBank 1..20 is 1-based inclusive → 0-based half-open [0, 20)
+
         assert (promoter.start, promoter.end) == (0, 20)
         assert promoter.direction == 1
         assert promoter.color.startswith("#")
@@ -186,7 +185,7 @@ class TestFastaParsing:
         rec = parse_sequence_file(FASTA, "pFASTA.fasta")
         assert rec.name == "pFASTA"
         assert rec.length == 120
-        assert rec.topology == "linear"      # FASTA carries no topology
+        assert rec.topology == "linear"
         assert rec.annotations == []
         assert "some description" in rec.description
 
@@ -290,8 +289,7 @@ class TestParseEndpoint:
 
 @pytest.mark.django_db
 class TestSnapGeneImport:
-    """A vector arrives from the supplier as .dna. Asking someone to convert
-    it first is asking them to use another program to use this one."""
+
 
     def payload(self, name="pET-21a.dna"):
         return SimpleUploadedFile(
@@ -299,13 +297,13 @@ class TestSnapGeneImport:
         )
 
     def test_a_snapgene_file_is_recognised_by_its_bytes(self):
-        """These arrive renamed as often as not."""
+
         raw = _snapgene_pet21a()
         assert detect_format(raw, "pET-21a.dna") == "snapgene"
         assert detect_format(raw, "whatever.txt") == "snapgene"
 
     def test_it_parses_with_its_features(self, auth_client):
-        """The reason to accept the format at all: GenBank-grade annotation."""
+
         response = auth_client.post(
             reverse("sequence-parse"), {"file": self.payload()}, format="multipart",
         )
@@ -317,8 +315,7 @@ class TestSnapGeneImport:
         assert {"AmpR", "lacI", "T7 promoter", "6xHis"} <= names
 
     def test_features_survive_for_every_format_that_has_them(self, auth_client):
-        """The guard used to test the format name rather than the record, so
-        a SnapGene file came back with its features silently dropped."""
+
         response = auth_client.post(
             reverse("sequence-parse"), {"file": self.payload()}, format="multipart",
         )

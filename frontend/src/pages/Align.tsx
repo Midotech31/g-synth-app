@@ -17,7 +17,7 @@ import { useWorkspaceState } from "../state/WorkspaceStateContext";
 const MODES = [
   { key: "global", label: "Whole of both", hint: "Two variants of one gene" },
   { key: "local", label: "Best stretch", hint: "The one region they share" },
-  { key: "semi-global", label: "Shorter in longer", hint: "Where a gene sits in a plasmid" },
+  { key: "semi-global", label: "First in second", hint: "Align all of the first sequence within the second" },
 ] as const;
 
 const SAMPLE_A = "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGGTATATTGGAAATAATGGAGCACATATGGGA";
@@ -358,7 +358,7 @@ export default function Align({ initialTool = "alignment" }: { initialTool?: Too
                   }}
                   rows={6}
                   className="mono"
-                  style={{ fontSize: "0.76rem" }}
+                  style={{ fontSize: "1rem" }}
                   aria-describedby="a-count"
                 />
                 <span className="label" id="a-count">
@@ -377,7 +377,7 @@ export default function Align({ initialTool = "alignment" }: { initialTool?: Too
                   }}
                   rows={6}
                   className="mono"
-                  style={{ fontSize: "0.76rem" }}
+                  style={{ fontSize: "1rem" }}
                   aria-describedby="b-count"
                 />
                 <span className="label" id="b-count">

@@ -20,7 +20,7 @@ function style(span: Span, length: number) {
   };
 }
 
-/** Construct-coordinate overview: coverage, gaps and each placed read. */
+
 export default function CoverageMap({ report }: { report: VerifyReport }) {
   const length = report.design_length;
   if (!length) return null;

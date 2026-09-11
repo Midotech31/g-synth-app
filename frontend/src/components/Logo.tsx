@@ -1,9 +1,7 @@
-/** Responsive vector brand mark. */
-
 type MarkProps = {
-  /** Rendered width in px. Chooses the compact cut on its own below 40. */
+
   size?: number;
-  /** Force one cut or the other when the automatic choice is wrong. */
+
   compact?: boolean;
   className?: string;
 };
@@ -12,7 +10,7 @@ const NAVY = "#0b2545";
 const MID = "#1b5c86";
 const TEAL = "#34a0bd";
 
-/** Mark height for a given width, so callers can reserve the right space. */
+
 export const MARK_RATIO = 121 / 80;
 
 export function LogoMark({ size = 40, compact, className }: MarkProps) {
@@ -71,20 +69,14 @@ export function LogoMark({ size = 40, compact, className }: MarkProps) {
 }
 
 type LogoProps = {
-  /** Width of the mark; the wordmark is sized from it. */
+
   size?: number;
-  /** Drop the "Gene Synthesis Designer" line, for tight chrome. */
+
   tagline?: boolean;
   className?: string;
 };
 
-/**
- * Mark and wordmark locked together.
- *
- * The wordmark is set in the app's own type rather than traced into paths:
- * it stays selectable and searchable, it restyles with the rest of the
- * interface, and it costs nothing to ship.
- */
+
 export function Logo({ size = 40, tagline = true, className }: LogoProps) {
   return (
     <span

@@ -21,18 +21,10 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import LiveStatus from "../components/LiveStatus";
 import PreflightPanel from "../components/PreflightPanel";
 
-/**
- * Find the annotation a map click landed on.
- *
- * SeqViz's onSelection reports the range clicked, not which annotation it
- * belongs to — a plasmid drawn at a few hundred pixels per thousand bases
- * routinely has several features under one click. The smallest annotation
- * containing the click point is the one a person meant: a 20 bp site inside
- * a 700 bp CDS is what the cursor was actually over.
- */
+
 const COMPLEMENT: Record<string, string> = { A: "T", T: "A", G: "C", C: "G", R: "Y", Y: "R", S: "S", W: "W", K: "M", M: "K", B: "V", V: "B", D: "H", H: "D", N: "N" };
 
-/** A reverse-strand feature is read 5'→3' opposite to how it is stored. */
+
 function reverseComplement(seq: string): string {
   return seq
     .toUpperCase()
@@ -192,7 +184,7 @@ export default function Viewer() {
     return () => { cancelled = true; };
   }, [project?.id, project?.updated_at]);
 
-  // SeqViz wants its own shape; keep the mapping in one place.
+
   const seqvizAnnotations = useMemo(
     () =>
       annotations.map((a) => ({
@@ -206,14 +198,13 @@ export default function Viewer() {
   );
 
   useEffect(() => {
-    // A circular view of a linear fragment is misleading — follow the record.
+
     if (project?.data?.topology === "linear") setMode("linear");
   }, [project]);
 
   useEffect(() => {
-    // Set a render after the record lands, not with it: a live region that
-    // arrives already holding its sentence is never announced, only one
-    // already on the page whose contents then change.
+
+
     if (project && announcedProjectId.current !== project.id) {
       announcedProjectId.current = project.id;
       setStatus(
@@ -246,7 +237,7 @@ export default function Viewer() {
   }
 
   const topology = project.data?.topology ?? "linear";
-  // Normalize GC values across supported project payloads.
+
   const gc = project.data?.gc_content
     ?? project.data?.construct_gc
     ?? project.data?.gc
@@ -254,7 +245,7 @@ export default function Viewer() {
       ? 100 * (project.sequence.match(/[GC]/gi)?.length ?? 0) / project.sequence.length
       : undefined);
 
-  // Restore the complete saved design payload.
+
   const payload = (project.data ?? {}) as Record<string, unknown>;
   const preflight = payload.preflight as PreflightReport | undefined;
   const provenance = (project.provenance ?? payload.provenance) as Partial<Provenance> | undefined;
@@ -347,10 +338,7 @@ export default function Viewer() {
               />
             ) : (
               <SeqViz
-              /* The full construct name is already the page heading. SeqViz
-                 places its name inside the circular map where it can collide
-                 with dense feature labels, so the centre is reserved for the
-                 base-pair count. */
+
               name=""
               seq={project.sequence}
               annotations={seqvizAnnotations}
@@ -358,9 +346,8 @@ export default function Viewer() {
               showComplement
               showIndex
               disableExternalFonts
-              // Clicking a feature in the map selects it here too, so one
-              // click either shows the same detail — an annotation is one
-              // fact, not two independent views of it.
+
+
               onSelection={(sel) => {
                 if (sel.type !== "ANNOTATION" || sel.start === undefined || sel.end === undefined) {
                   return;
@@ -370,9 +357,8 @@ export default function Viewer() {
                 );
                 if (hit) setSelected(hit);
               }}
-              // The reverse direction: picking a feature from the list
-              // highlights its span on the map, because "which one is that"
-              // is the question a list of coordinates cannot answer alone.
+
+
               highlights={
                 selected ? [{ start: selected.start, end: selected.end, color: selected.color }] : []
               }
@@ -521,10 +507,7 @@ export default function Viewer() {
               )}
             </div>
 
-            {/* Clicking a feature — here or on the map itself — has to show
-                something, or "interactive" is just a highlight with no
-                content behind it. This is that content: what the feature
-                is, where it sits, and the bases it actually spans. */}
+
             {selected && (
               <div className="card feature-detail">
                 <div className="card-head">

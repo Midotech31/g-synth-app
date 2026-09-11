@@ -96,7 +96,7 @@ export function annotationFromDraft(
     annotation.basis = unchangedSpan ? previous.basis : "Annotation edited; sequence evidence and biological function require review.";
   } else if (unchangedSpan && previous?.basis) annotation.basis = previous.basis;
   const note = draft.basis?.trim();
-  if (note && (!previous?.inferred || unchangedSpan)) annotation.basis = note;
+  if (note && (!previous?.inferred || unchangedSpan || note !== previous.basis?.trim())) annotation.basis = note;
   if (!previous && !note) annotation.basis = "Manually assigned annotation; biological function has not been verified by G-Synth.";
   if (previous?.type === draft.type && previous.regulatory_class) annotation.regulatory_class = previous.regulatory_class;
   if (draft.type === "RBS") annotation.regulatory_class = "ribosome_binding_site";

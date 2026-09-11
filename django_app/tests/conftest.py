@@ -1,4 +1,3 @@
-"""Shared pytest fixtures."""
 import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
@@ -31,12 +30,7 @@ def other_user(db):
 
 @pytest.fixture
 def auth_client(api_client, user):
-    """APIClient pre-authenticated as `user`.
 
-    Mints via VersionedRefreshToken, the same path the login endpoint uses —
-    a bare `RefreshToken.for_user()` would omit the `ver` claim and the
-    request would be (correctly) rejected.
-    """
     from apps.accounts.tokens import VersionedRefreshToken
     token = str(VersionedRefreshToken.for_user(user).access_token)
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")

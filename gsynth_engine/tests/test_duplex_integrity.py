@@ -1,14 +1,3 @@
-"""Every enzyme must produce a duplex that actually anneals.
-
-A single stored pair of "what's left after the cut" values per enzyme is
-insufficient because what the forward and reverse oligos must carry depends on whether the
-enzyme sits at the left or the right end of the insert. The stored values
-happened to be right for NdeI-as-left and XhoI-as-right — the validated
-default pair — and wrong for everything else, which produced duplexes with a
-mismatch at the junction. The oligos would not have annealed cleanly.
-
-These tests check the property directly, for every enzyme, in both roles.
-"""
 import pytest
 
 from gsynth_engine.constants import RESTRICTION_ENZYMES, left_remainders, overhang
@@ -20,10 +9,7 @@ ENZYMES = sorted(RESTRICTION_ENZYMES)
 
 
 def duplex_layout(result):
-    """Lay the two oligos against each other and return the paired region.
 
-    Returns (offset, top, bottom_in_top_sense).
-    """
     forward_remainder, reverse_remainder = left_remainders(result.left_enzyme)
     offset = len(forward_remainder) - len(reverse_remainder)
     return offset, result.forward, reverse_complement(result.reverse)
@@ -60,11 +46,7 @@ def test_right_position_duplex_anneals_without_mismatch(enzyme):
 
 @pytest.mark.parametrize("enzyme", ENZYMES)
 def test_ligation_restores_the_recognition_site(enzyme):
-    """The point of the remainders: the site must reappear after ligation.
 
-    The vector supplies whatever the insert does not, so remainder + counter-
-    remainder must rebuild the recognition sequence exactly.
-    """
     site = str(RESTRICTION_ENZYMES[enzyme]["recognition"])
     top_cut = int(RESTRICTION_ENZYMES[enzyme]["cut_top"])  # type: ignore[call-overload]
     forward_remainder, _ = left_remainders(enzyme)
@@ -74,7 +56,7 @@ def test_ligation_restores_the_recognition_site(enzyme):
 
 @pytest.mark.parametrize("enzyme", ENZYMES)
 def test_overhang_matches_the_cut_geometry(enzyme):
-    """A 5' overhang means the top is cut before the bottom, and vice versa."""
+
     top_cut = int(RESTRICTION_ENZYMES[enzyme]["cut_top"])      # type: ignore[call-overload]
     bottom_cut = int(RESTRICTION_ENZYMES[enzyme]["cut_bottom"])  # type: ignore[call-overload]
     sequence, kind = overhang(enzyme)
@@ -87,7 +69,7 @@ def test_overhang_matches_the_cut_geometry(enzyme):
 
 
 def test_ndei_xhoi_overhangs_are_the_documented_ones():
-    """The validated pair, stated explicitly so a table edit cannot drift."""
+
     assert overhang("NdeI") == ("TA", "5'")
     assert overhang("XhoI") == ("TCGA", "5'")
     assert left_remainders("NdeI") == ("TATG", "CA")

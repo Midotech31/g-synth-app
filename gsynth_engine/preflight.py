@@ -1,4 +1,3 @@
-"""One preflight contract for PCR, assembly, cloning and verification."""
 from __future__ import annotations
 
 from gsynth_engine.diagnostics import PreflightCheck, PreflightReport, make_report
@@ -250,7 +249,7 @@ def cloning_preflight(result, *, duplex_mismatches: list[int] | None = None) -> 
 
 
 def verification_state(report) -> str:
-    """Stable five-state sequencing verdict used by API and interface."""
+
     if report.is_verified:
         return "fully_verified"
     if report.differences:
@@ -290,5 +289,5 @@ def verification_preflight(report) -> PreflightReport:
         ),
     ]
     result = make_report("verification", checks)
-    # State is a workflow fact rather than a sixth verdict vocabulary.
+
     return result

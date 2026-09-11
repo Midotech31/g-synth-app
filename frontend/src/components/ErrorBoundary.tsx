@@ -1,23 +1,9 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
-/**
- * The last thing between a rendering fault and a blank page.
- *
- * React unmounts the whole tree when a render throws, so without this one bad
- * value — a NaN coordinate reaching the plasmid map, an undefined array from a
- * response shape that changed — takes the entire workspace with it, including
- * whatever design was on screen and unsaved. What the reader sees instead is a
- * page that says which part failed and offers the two things that actually
- * recover: try the view again, or go back to the workspace.
- *
- * Deliberately a class. Error boundaries have no hook equivalent — there is no
- * `useErrorBoundary`, and `componentDidCatch` is the only way to intercept a
- * descendant's render error.
- */
 
 type Props = {
   children: ReactNode;
-  /** Names the part that failed, so the message is specific. */
+
   area?: string;
 };
 
@@ -31,8 +17,8 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    // Kept: the stack is the only record of what happened, and a lab machine
-    // is not going to have a session replay to consult afterwards.
+
+
     console.error("Render failed:", error, info.componentStack);
   }
 
@@ -76,8 +62,7 @@ export default class ErrorBoundary extends Component<Props, State> {
               <button className="btn btn-primary" onClick={this.reset}>
                 Try again
               </button>
-              {/* A full load, not a route change: the fault may have left state
-                  that a re-render would walk straight back into. */}
+
               <button className="btn btn-outline" onClick={() => { window.location.href = "/"; }}>
                 Back to workspace
               </button>

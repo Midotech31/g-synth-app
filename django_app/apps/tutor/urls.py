@@ -1,4 +1,3 @@
-"""Tutor routes — mounted under /api/tutor/ in config.urls."""
 from django.urls import path
 
 from apps.tutor.views import TutorStatusView, TutorView

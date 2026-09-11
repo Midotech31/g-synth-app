@@ -1,10 +1,3 @@
-"""Tests for the order sheet and the bench protocol.
-
-What matters here is that the paperwork agrees with the design: every oligo
-in the plan appears in the order sheet exactly once, and the protocol names
-the right fragments, junctions and enzymes. A protocol that quietly
-disagrees with the oligos is worse than no protocol.
-"""
 import csv
 import io
 
@@ -75,7 +68,7 @@ class TestBenchProtocol:
         assert "pET-21a(+)" in text
 
     def test_covers_the_steps_that_make_it_work(self, plan):
-        """Phosphorylation and slow cooling are the two steps people skip."""
+
         text = bench_protocol(plan)
         assert "PHOSPHORYLATION" in text
         assert "5' phosphate" in text
@@ -90,7 +83,7 @@ class TestBenchProtocol:
         assert plan.construct_forward[:40] in stripped
 
     def test_shows_the_duplex_before_the_ordering_step(self, plan):
-        """The protocol is what reaches the bench, so the check goes in it."""
+
         text = bench_protocol(plan)
         assert "HYBRIDISATION" in text
 
@@ -106,11 +99,11 @@ class TestBenchProtocol:
         drawn = "".join(
             ch for ch in text[start:stop] if ch in "ACGT"
         )
-        # The top strand, read straight out of the drawing.
+
         assert plan.construct_forward[:40] in drawn
 
     def test_states_the_tm_model_and_its_conditions(self, plan):
-        """A Tm on an order sheet with no conditions is not actionable."""
+
         text = bench_protocol(plan)
         assert "SantaLucia" in text
         assert "Na" in text
@@ -121,7 +114,7 @@ class TestBenchProtocol:
         assert "Single fragment" in text
 
     def test_surfaces_design_warnings(self):
-        """A warning that only exists in the object helps nobody at the bench."""
+
         plan = design_extended_sequence(INSERT, enzyme_pair="NdeI / XhoI")
         plan.warnings.append("Test warning about the design")
         assert "Test warning about the design" in bench_protocol(plan)

@@ -45,7 +45,7 @@ export default function Dashboard() {
       setUploading(true);
       setError("");
       try {
-        // Parse on the server (biopython), then persist what came back.
+
         const record = await api.parseFile(file);
         const project = await api.createProject({
           name: record.name,
@@ -85,9 +85,8 @@ export default function Dashboard() {
       await api.deleteProject(project.id);
       setProjects((current) => current.filter((p) => p.id !== project.id));
       setAnnouncement(`Deleted “${project.name}”.`);
-      // The button that opened the question went with the card, so there is
-      // nothing to hand focus back to. The heading of the list they are
-      // still in is the nearest honest place to leave them.
+
+
       heading.current?.focus();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not delete that project.");
@@ -189,8 +188,7 @@ export default function Dashboard() {
                     <span>{formatDate(project.updated_at)}</span>
                   </span>
                 </Link>
-                {/* Read out of context — in a list of every button on the
-                    page — "Delete" alone does not say what of. */}
+
                 <div className="foot">
                   <Link
                     to={`/projects/${project.id}`}

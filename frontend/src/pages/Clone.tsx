@@ -48,7 +48,7 @@ type Vector = {
   sequence: string;
   annotations: Annotation[];
   circular: boolean;
-  /** Set when the sequence came from the catalogue rather than an import. */
+
   bundled: boolean;
 };
 
@@ -61,10 +61,7 @@ const EMPTY_VECTOR: Vector = {
   bundled: false,
 };
 
-/** An insert that arrived from the PCR page already cut. Both strands are
- *  carried because the stagger between them is the overhang: from one strand
- *  alone half the geometry is invisible, and an insert cut for a different
- *  enzyme pair would look correct. */
+
 type PreDigested = {
   top: string;
   bottom: string;
@@ -127,8 +124,7 @@ export default function Clone() {
     invalidate();
   }, [location.state?.preDigested, invalidate, setParams, setPreDigested]);
 
-  // Load the vector list, then the default vector's own sequence, so the
-  // page is usable without importing anything.
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -147,12 +143,12 @@ export default function Clone() {
     return () => {
       cancelled = true;
     };
-    // Capture the restored flag once per mount. Updating it after the first
-    // catalogue load must not fetch the same catalogue a second time.
+
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Switch vector, pulling its bundled sequence when it has one. */
+
   async function selectVector(key: string, known: VectorSpec[] = vectors, preserveTransferredEnds = Boolean(preDigested)) {
     const spec = known.find((v) => v.key === key);
     const version = ++vectorRequestVersion.current;
@@ -165,8 +161,7 @@ export default function Clone() {
       return;
     }
 
-    // Follow the vector's own cloning pair — pET-21(+) has no NdeI site, so
-    // leaving the G-Synth default selected would just fail.
+
     const pair = spec.recommended_pairs[0]?.split("/").map((p) => p.trim());
     if (pair?.length === 2 && !preserveTransferredEnds) {
       setParams((current) => ({
@@ -214,7 +209,7 @@ export default function Clone() {
     setVectorLoading(false);
     setVector((current) => ({
       ...current, [key]: value,
-      // Editing bases invalidates imported coordinates and the catalogue shortcut.
+
       ...(key === "sequence" ? { bundled: false, annotations: [] } : {}),
     }));
     invalidate();
@@ -237,8 +232,8 @@ export default function Clone() {
       const record = await api.parseFile(file);
       if (vectorRequestVersion.current !== version) return;
       setVector((current) => ({
-        // Keep the catalogue entry selected: the imported sequence is then
-        // checked against it, which is how a substitution gets caught.
+
+
         key: current.key,
         name: record.name || file.name,
         sequence: record.sequence,
@@ -274,15 +269,12 @@ export default function Clone() {
     }
   }
 
-  /** The exact molecule represented by the current inputs. Clone, save and
-   * export all use this builder so a PCR-derived insert cannot silently turn
-   * back into the ordinary insert form on one of those paths. */
+
   function clonePayload(saveAsProject = false, includeReviewedAnnotations = false): CloneParams {
     return {
       ...params,
-      // A cut PCR product is an insert, not a gene: designing one around it
-      // would add a second set of sites and tags outside ends that are already
-      // sticky.
+
+
       ...(preDigested
         ? {
             sequence: preDigested.top,
@@ -295,8 +287,8 @@ export default function Clone() {
           }
         : {}),
       vector_key: vector.key,
-      // A bundled sequence is already on the server; sending it back would
-      // just be a megabyte of round trip.
+
+
       vector: vector.bundled ? "" : vector.sequence,
       vector_name: vector.name,
       vector_annotations: vector.bundled ? undefined : vector.annotations,
@@ -309,7 +301,7 @@ export default function Clone() {
     };
   }
 
-  /** Take the plasmid out of G-Synth: GenBank keeps the features. */
+
   async function exportPlasmid(filetype: "genbank" | "fasta" | "sbol3") {
     const safe = (params.name || "construct").replace(/\s+/g, "_");
     try {
@@ -493,7 +485,7 @@ export default function Clone() {
                     onChange={(e) => setVectorField("sequence", e.target.value)}
                     rows={5}
                     className="mono"
-                    style={{ fontSize: "0.76rem" }}
+                    style={{ fontSize: "1rem" }}
                     placeholder="Paste the vector sequence, or import a file above."
                   />
                 </div>
@@ -541,7 +533,7 @@ export default function Clone() {
                   strand geometry with the vector before enabling ligation.{" "}
                   <button
                     className="btn btn-ghost"
-                    style={{ padding: "0.1rem 0.4rem", fontSize: "0.8rem" }}
+                    style={{ padding: "0.1rem 0.4rem", fontSize: "1rem" }}
                     onClick={() => {
                       setPreDigested(null);
                       invalidate();

@@ -1,4 +1,3 @@
-"""Design routes — mounted under /api/design/ in config.urls."""
 from django.urls import path
 
 from apps.design.views import (

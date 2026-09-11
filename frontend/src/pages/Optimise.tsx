@@ -33,7 +33,7 @@ const DEFAULTS: OptimiseParams = {
   avoid_rare: true,
 };
 
-/** Enzymes worth offering here: the ones a construct is usually cut with. */
+
 const COMMON = ["NdeI", "XhoI", "BamHI", "EcoRI", "HindIII", "NotI", "SalI", "SacI", "XbaI", "NcoI"];
 
 export default function Optimise() {
@@ -278,7 +278,7 @@ export default function Optimise() {
                   onChange={(e) => set("sequence", e.target.value)}
                   rows={7}
                   className="mono"
-                  style={{ fontSize: "0.78rem" }}
+                  style={{ fontSize: "1rem" }}
                   aria-describedby="opt-seq-count"
                 />
                 <span className="label" id="opt-seq-count">
@@ -301,8 +301,7 @@ export default function Optimise() {
 
               <div className="field">
                 <span className="field-label" id="avoid-label">Keep these sites out</span>
-                {/* Each chip stays pressed or not; without saying so, the
-                    selected set is visible only as a colour. */}
+
                 <div className="enzyme-chips" role="group" aria-labelledby="avoid-label">
                   {COMMON.map((name) => (
                     <button

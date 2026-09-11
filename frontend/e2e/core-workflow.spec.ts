@@ -166,11 +166,12 @@ test("every scientific workspace uses the available width without page overflow"
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
 
-  for (const width of [390, 320]) {
+  for (const width of [768, 390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     for (const route of workspaces) {
       await page.goto(route);
       await expect(page.locator(".design-layout").first()).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`${route.slice(1)}-${width}.png`), fullPage: true });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     }
   }
@@ -207,4 +208,25 @@ test("edited cloning primers are revalidated before cloning", async ({ page }) =
 
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations.filter((violation) => ["critical", "serious"].includes(violation.impact ?? ""))).toEqual([]);
+});
+
+test("workspace text remains readable when enlarged", async ({ page }, testInfo) => {
+  await createAccount(page, `readability-${Date.now()}`);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  for (const route of ["/", "/learn", "/design", "/clone", "/verify", "/align"]) {
+    await page.goto(route);
+    await expect(page.locator("main")).toBeVisible();
+    expect(await page.locator(".note, .field-hint, .field > label, .card small").evaluateAll((elements) =>
+      elements.filter((element) => element.getClientRects().length > 0).every((element) =>
+        parseFloat(getComputedStyle(element).fontSize) >= 14,
+      ),
+    )).toBe(true);
+    const enlarged = await page.addStyleTag({ content: "html { font-size: 200%; }" });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await page.locator(".pipeline, .rail-group-label, .core-workflow-trail").evaluateAll((elements) =>
+      elements.filter((element) => element.getClientRects().length > 0).every((element) => element.scrollWidth <= element.clientWidth),
+    )).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`${route.slice(1) || "home"}-text-200.png`), fullPage: true });
+    await enlarged.evaluate((element) => element.remove());
+  }
 });

@@ -1,25 +1,11 @@
 import { useCallback, useEffect, useId, useRef } from "react";
 
-/**
- * The question asked before something irreversible happens.
- *
- * This replaced `window.confirm`, which is announced by the browser rather
- * than by the page: it cannot say *which* project is about to go, it stops
- * every other script while it waits, and on some screen readers it is read
- * out with no indication that the surrounding page is now inert. Deleting a
- * design is not recoverable from the interface, so the one moment that
- * stands between a person and losing it should be the part that behaves.
- *
- * Focus moves in, is held inside while the question is open, and goes back
- * to the button that asked it — a keyboard user who declines ends up where
- * they were rather than at the top of the document.
- */
 
 type Props = {
   open: boolean;
-  /** Names the thing, not the operation: "Delete “pGS-EntA”?" */
+
   title: string;
-  /** What happens if they say yes, and whether it can be undone. */
+
   body: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
@@ -49,13 +35,10 @@ export default function ConfirmDialog({
   useEffect(() => {
     if (!open) return;
 
-    // Whatever had focus is where the question was asked from, and where the
-    // answer has to leave the user. A trigger that the answer itself removes
-    // from the page — the delete button on the card being deleted — cannot
-    // be returned to; the caller moves focus somewhere that still exists.
+
     opener.current = document.activeElement as HTMLElement | null;
-    // The declining option takes focus, not the destructive one: the cost of
-    // a stray Enter here is a design that no longer exists.
+
+
     declineButton.current?.focus();
 
     return () => {
@@ -73,8 +56,7 @@ export default function ConfirmDialog({
       }
       if (event.key !== "Tab") return;
 
-      // Tab off either end wraps, so the rest of the page cannot be reached
-      // while a question about it is unanswered.
+
       const stops = Array.from(
         panel.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [],
       );
@@ -99,8 +81,8 @@ export default function ConfirmDialog({
   return (
     <div
       className="modal-backdrop"
-      // Clicking away is the same answer as Cancel, but only when the click
-      // began outside: a drag that starts on the text must not dismiss it.
+
+
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onCancel();
       }}

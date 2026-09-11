@@ -1,21 +1,14 @@
 import type { Catalogue, DesignParams } from "../api/client";
 import EnzymePicker from "./EnzymePicker";
 
-/**
- * The insert controls, shared by the design and cloning pages.
- *
- * Both pages design the same cassette from the same inputs; keeping one form
- * means they cannot drift into offering different options for what is
- * supposed to be the same operation.
- */
 
 type Props = {
   params: DesignParams;
   catalogue: Catalogue | null;
   onChange: <K extends keyof DesignParams>(key: K, value: DesignParams[K]) => void;
-  /** Hide the fragmentation controls where they do not apply. */
+
   showFragmentation?: boolean;
-  /** Guided mode keeps validated defaults and exposes only core choices. */
+
   expert?: boolean;
   idPrefix?: string;
 };
@@ -56,7 +49,7 @@ export default function InsertForm({
           onChange={(e) => onChange("sequence", e.target.value)}
           rows={6}
           className="mono"
-          style={{ fontSize: "0.8rem" }}
+          style={{ fontSize: "1rem" }}
         />
         <span className="label">
           {params.sequence.replace(/[^ACGTacgt]/g, "").length} nt entered

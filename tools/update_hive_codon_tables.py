@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild G-Synth's bundled codon-usage snapshot from FDA HIVE-CUTs.
 
-The generated JSON is deliberately committed to the repository.  Runtime
-optimisation must not depend on a changing web service, while this script
-makes the provenance and transformation reproducible.  RefSeq genomic
-species aggregates are preferred.  GenBank is used only when the pinned HIVE
-snapshot has no RefSeq table for the requested taxon.
-"""
 from __future__ import annotations
 
 import argparse

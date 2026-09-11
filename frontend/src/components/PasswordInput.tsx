@@ -9,7 +9,7 @@ type Props = {
   placeholder?: string;
 };
 
-/** Password field with an explicit, keyboard-accessible visibility control. */
+
 export default function PasswordInput({
   id,
   label,

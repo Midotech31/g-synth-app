@@ -21,8 +21,8 @@ authors:
 
 repository-code: "https://github.com/Midotech31/g-synth-app"
 license: MIT
-version: 1.0.0
-date-released: "2026-08-29"
+version: 1.1.0
+date-released: "2026-09-11"
 
 abstract: >-
   G-Synth automates a laboratory gene synthesis and cloning workflow: codon

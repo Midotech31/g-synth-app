@@ -1,4 +1,3 @@
-"""Local development settings."""
 from datetime import timedelta
 
 from .base import *  # noqa: F401, F403
@@ -6,7 +5,7 @@ from .base import *  # noqa: F401, F403
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
-# Local frontend origins
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:3000",
@@ -14,16 +13,16 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOW_ALL_ORIGINS = True
 
-# Extended local session lifetime
+
 SIMPLE_JWT = {**SIMPLE_JWT, "ACCESS_TOKEN_LIFETIME": timedelta(hours=8)}  # noqa: F405
 
-# Development static-file backend does not require collectstatic.
+
 STORAGES = {
     **STORAGES,  # noqa: F405
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
 
-# Console logging
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

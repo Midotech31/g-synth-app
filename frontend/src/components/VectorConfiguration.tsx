@@ -1,7 +1,6 @@
 import type { CloneResult, VectorSpec } from "../api/client";
 
-/** Catalogue attributes describe the source vector. Only a simulation can
- * determine which features survive the selected cuts in the recombinant. */
+
 export default function VectorConfiguration({ spec, leftEnzyme, rightEnzyme, result, bundled, loading }: {
   spec: VectorSpec | null;
   leftEnzyme: string;

@@ -1,14 +1,3 @@
-"""Conservative recognition of common sequence features.
-
-This module deliberately reports *exact motif matches*, not inferred biological
-function.  A matching T7 promoter motif is useful evidence for annotation, but
-it does not prove that the promoter is active in a particular construct or
-host.  Callers therefore present these results for review before saving them.
-
-Coordinates follow the engine convention: zero-based, half-open.  For a
-circular record, ``end`` may be greater than the sequence length when a motif
-crosses the origin.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,7 +13,7 @@ from gsynth_engine.sequence import SequenceError, clean_dna, reverse_complement,
 
 @dataclass(frozen=True)
 class CommonMotif:
-    """One curated exact DNA spelling and its proposed map annotation."""
+
 
     name: str
     sequence: str
@@ -104,7 +93,7 @@ COMMON_MOTIFS: tuple[CommonMotif, ...] = (
 
 
 def _occurrences(haystack: str, needle: str) -> list[int]:
-    """Return overlapping occurrences, including tandem repeated motifs."""
+
     positions: list[int] = []
     start = 0
     while True:
@@ -118,12 +107,7 @@ def _occurrences(haystack: str, needle: str) -> list[int]:
 def _same_known_feature(
     existing: dict, motif: CommonMotif, start: int, end: int, direction: int, length: int,
 ) -> bool:
-    """Suppress a proposal already covered by the same named feature.
 
-    Imported records often include two flanking bases around a canonical
-    core.  Requiring identical coordinates would therefore propose a duplicate
-    lac operator inside an annotation that already says ``lac operator``.
-    """
     existing_name = str(existing.get("name", "")).casefold().replace("×", "x")
     motif_name = motif.name.casefold().replace("×", "x")
     same_name = bool(existing_name) and (motif_name in existing_name or existing_name in motif_name)
@@ -142,9 +126,8 @@ def _same_known_feature(
         max(0, min(existing_end + offset, end) - max(existing_start + offset, start))
         for offset in (-length, 0, length)
     )
-    # Imported feature boundaries commonly include or omit one flanking base.
-    # A same-named feature covering at least 80% of the exact motif is already
-    # the user's annotation; proposing a second bar would add noise, not truth.
+
+
     substantially_same_span = overlap / max(1, end - start) >= 0.8
     return same_name and substantially_same_span
 
@@ -153,12 +136,7 @@ def _sd_context(
     dna: str, start: int, end: int, direction: int, circular: bool,
     reverse: str, existing: list[dict],
 ) -> tuple[str, bool] | None:
-    """Separate an SD-like spelling from a candidate tied to a CDS start.
 
-    The 4–14 nt spacer is a search heuristic, not a universal RBS definition.
-    Translation bounds take precedence over CDS boundaries (which can include
-    cloning overhangs). Coordinates identify DNA in transcript orientation.
-    """
     length = len(dna)
     oriented = dna if direction == 1 else reverse
     boundary = end if direction == 1 else length - start
@@ -196,7 +174,7 @@ def _sd_context(
         )
         context += "Review required: the 4–14 nt spacer screen does not establish transcription or RBS activity."
         contexts.append((context, bool(linked)))
-    # A declared CDS start is stronger positional evidence than a nearby incidental codon.
+
     return next((context for context in contexts if context[1]), contexts[0] if contexts else None)
 
 
@@ -206,12 +184,7 @@ def detect_common_features(
     circular: bool = False,
     existing: list[dict] | None = None,
 ) -> list[dict]:
-    """Return reviewable exact matches to the curated common-motif library.
 
-    Both strands are searched.  Palindromic motifs are emitted once, and a
-    circular search reports a wrapped coordinate only once at its true start.
-    Existing features with the same name that cover the match are omitted.
-    """
     dna = clean_dna(sequence)
     if not dna or set(dna) - set("ACGTRYSWKMBDHVN"):
         raise SequenceError("Feature detection requires a non-empty DNA sequence using IUPAC base codes.")
@@ -230,11 +203,7 @@ def detect_common_features(
         strands = ((1, motif_dna), (-1, reverse_complement(motif_dna)))
         for direction, query in strands:
             for start in _occurrences(searchable, query):
-                if start >= length:
-                    continue
                 end = start + len(query)
-                if not circular and end > length:
-                    continue
                 key = (motif.name, start, end)
                 if key in seen:
                     continue
@@ -250,7 +219,7 @@ def detect_common_features(
                     basis, linked = context
                     if not linked:
                         feature_name, feature_type = "SD-like motif (unassigned)", "misc_feature"
-                    # Do not label an internal coding motif as a 5′ initiation site.
+
                     if any(
                         str(item.get("type", "")).lower() == "cds"
                         and item.get("direction") == direction
@@ -286,8 +255,8 @@ def detect_common_features(
             match["annotation"]["name"],
         ),
     )
-    # AAGGAG and AGGAGG can describe the same overlapping SD-like tract.
-    # Prefer CDS-associated evidence, then the first exact match and its spacing.
+
+
     result: list[dict] = []
     for match in ordered:
         feature = match["annotation"]

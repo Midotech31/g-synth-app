@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]';
 
-/** Expand the existing viewer without losing its sequence, zoom or selection. */
+
 export default function ExpandablePanel({ children, label, className = "" }: {
   children: ReactNode; label: string; className?: string;
 }) {

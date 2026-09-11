@@ -1,54 +1,26 @@
-"""Biological constants used by the G-Synth design engine.
-
-These values are the G-Synth standard cassette. They are reproduced exactly
-as specified — the golden tests depend on them, and changing one changes the
-oligos the lab orders.
-"""
 from __future__ import annotations
 
 from typing import Final
 
 from gsynth_engine.enzyme_table import ENZYME_TABLE
 
-# ── Standard purification / cleavage cassette ────────────────────────────────
-HIS_TAG: Final[str] = "CACCACCACCACCACCAC"          # 6× His
-LEFT_LINKER: Final[str] = "GGTTCTTCT"               # flexible Gly-Ser-Ser
-RIGHT_LINKER: Final[str] = "TCTTCTGGT"              # flexible Ser-Ser-Gly
+HIS_TAG: Final[str] = "CACCACCACCACCACCAC"
+LEFT_LINKER: Final[str] = "GGTTCTTCT"
+RIGHT_LINKER: Final[str] = "TCTTCTGGT"
 
 CLEAVAGE_SITES: Final[dict[str, str]] = {
-    "Thrombin":     "CTGGTGCCGCGTGGTTCT",           # LVPR/GS
-    "TEV":          "GAAAACCTGTATTTTCAGGGC",        # ENLYFQ/G
-    # Factor Xa recognises the translated IEGR peptide, not one mandatory
-    # nucleotide sequence. Keep the E. coli-compatible GAA/GGT/CGT codons;
-    # this spelling avoids the rare synonymous AGG arginine codon.
-    # This exact release convention is pinned in test_ssd_golden.py.
-    "Factor Xa":    "ATCGAAGGTCGT",                 # IEGR/
-    "PreScission":  "CTGGAAGTGCTGTTCCAGGGCCCA",     # LEVLFQ/GP
-    "Enterokinase": "GATGACGATGACAAG",              # DDDDK/
+    "Thrombin":     "CTGGTGCCGCGTGGTTCT",
+    "TEV":          "GAAAACCTGTATTTTCAGGGC",
+
+
+    "Factor Xa":    "ATCGAAGGTCGT",
+    "PreScission":  "CTGGAAGTGCTGTTCCAGGGCCCA",
+    "Enterokinase": "GATGACGATGACAAG",
     "SUMO":         "CTGCAGGACTCAGAGG",
-    "HRV 3C":       "CTGGAAGTTCTGTTCCAGGGGCCC",     # LEVLFQ/GP
+    "HRV 3C":       "CTGGAAGTTCTGTTCCAGGGGCCC",
 }
 
-# ── Restriction enzymes ──────────────────────────────────────────────────────
-# One source of truth per enzyme: the recognition site and where the two
-# strands are cut inside it. `cut_top` / `cut_bottom` are offsets from the
-# start of the site, in top-strand coordinates.
-#
-#     NdeI   CA^TATG   cut_top = 2, cut_bottom = 4  → 5'-TA overhang
-#     XhoI   C^TCGAG   cut_top = 1, cut_bottom = 5  → 5'-TCGA overhang
-#     KpnI   GGTAC^C   cut_top = 5, cut_bottom = 1  → 3'-GTAC overhang
-#     SmaI   CCC^GGG   cut_top = cut_bottom = 3     → blunt
-#
-# What each oligo must carry is *derived* from these (see `left_remainders`
-# and `right_remainders`) rather than stored, because it differs depending on
-# whether the enzyme sits at the left or the right end of the insert. Storing
-# a single pair per enzyme silently produces
-# mismatched duplexes for every enzyme except the validated NdeI/XhoI pair.
-#
-# NdeI is the important special case: its site CATATG *contains* the ATG
-# start codon, so the forward oligo carries "TATG" — the T completes CATATG
-# once ligated, and the A of the 5'-TA overhang is also the A of the ATG.
-# A separate ATG must therefore never be added for NdeI.
+
 RESTRICTION_ENZYMES: Final[dict[str, dict[str, object]]] = {
     "NdeI":    {"recognition": "CATATG",   "cut_top": 2, "cut_bottom": 4},
     "XhoI":    {"recognition": "CTCGAG",   "cut_top": 1, "cut_bottom": 5},
@@ -72,8 +44,6 @@ RESTRICTION_ENZYMES: Final[dict[str, dict[str, object]]] = {
 }
 
 
-#: Every enzyme G-Synth can reason about. The curated definitions set the
-#: preferred names and verified cut coordinates while retaining all aliases.
 ALL_ENZYMES: Final[dict[str, dict[str, object]]] = {
     **{name: dict(spec) for name, spec in ENZYME_TABLE.items()},
     **{
@@ -88,12 +58,7 @@ def _rc(sequence: str) -> str:
 
 
 def left_remainders(enzyme: str) -> tuple[str, str]:
-    """What each oligo carries when this enzyme is at the LEFT end.
 
-    Returns (forward_prefix, reverse_suffix): the forward oligo starts with
-    the first, the reverse oligo ends with the second. The insert is the
-    right-hand piece of the cut, so it keeps everything after the cut.
-    """
     info = ALL_ENZYMES[enzyme]
     site: str = info["recognition"]           # type: ignore[assignment]
     top: int = info["cut_top"]                # type: ignore[assignment]
@@ -102,24 +67,13 @@ def left_remainders(enzyme: str) -> tuple[str, str]:
 
 
 def supplies_start_codon(enzyme: str) -> bool:
-    """Whether the LEFT insert remainder ends in a complete start codon.
 
-    Merely containing ``ATG`` in the recognition sequence is not enough.
-    Bases before the top-strand cut are discarded, while bases between an
-    internal ``ATG`` and the insert shift the coding frame.  A site supplies
-    the initiator only when the top-strand piece retained by the insert ends
-    exactly in ``ATG``.
-    """
     forward, _reverse = left_remainders(enzyme)
     return forward.endswith("ATG")
 
 
 def right_remainders(enzyme: str) -> tuple[str, str]:
-    """What each oligo carries when this enzyme is at the RIGHT end.
 
-    Returns (forward_suffix, reverse_prefix). The insert is the left-hand
-    piece of the cut, so it keeps everything before the cut.
-    """
     info = ALL_ENZYMES[enzyme]
     site: str = info["recognition"]           # type: ignore[assignment]
     top: int = info["cut_top"]                # type: ignore[assignment]
@@ -128,10 +82,7 @@ def right_remainders(enzyme: str) -> tuple[str, str]:
 
 
 def overhang(enzyme: str) -> tuple[str, str]:
-    """The sticky end this enzyme leaves: (sequence, "5'" | "3'" | "blunt").
 
-    Sequence is given in top-strand sense.
-    """
     info = ALL_ENZYMES[enzyme]
     site: str = info["recognition"]           # type: ignore[assignment]
     top: int = info["cut_top"]                # type: ignore[assignment]
@@ -141,7 +92,7 @@ def overhang(enzyme: str) -> tuple[str, str]:
     lo, hi = min(top, bottom), max(top, bottom)
     return site[lo:hi], ("5'" if top < bottom else "3'")
 
-#: Pairs routinely used for pET cloning, offered first in the UI.
+
 COMMON_ENZYME_PAIRS: Final[tuple[str, ...]] = (
     "NdeI / XhoI",
     "NdeI / EcoRI",

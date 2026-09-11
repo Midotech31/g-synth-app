@@ -1,4 +1,3 @@
-"""Project CRUD, and — crucially — user isolation."""
 import pytest
 from django.urls import reverse
 
@@ -233,7 +232,7 @@ class TestEditableAnnotations:
 
 @pytest.mark.django_db
 class TestUserIsolation:
-    """A user must never see or touch another user's projects."""
+
 
     def test_list_excludes_other_users_projects(self, auth_client, user, other_user):
         Project.objects.create(user=other_user, name="hidden")
@@ -255,7 +254,7 @@ class TestUserIsolation:
 
 @pytest.mark.django_db
 class TestProjectExport:
-    """Saved work that cannot be taken out is not really saved."""
+
 
     def test_a_project_exports_as_genbank(self, auth_client, user):
         project = Project.objects.create(
@@ -325,7 +324,7 @@ class TestProjectExport:
         assert response.content.decode().startswith(">insert")
 
     def test_export_is_scoped_to_the_owner(self, auth_client, other_user):
-        """The same rule as every other project endpoint."""
+
         theirs = Project.objects.create(
             user=other_user, name="theirs", module="ssd", sequence="ATG",
         )

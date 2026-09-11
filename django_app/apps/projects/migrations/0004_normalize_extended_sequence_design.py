@@ -1,5 +1,3 @@
-"""Normalize previously stored project identifiers to the public ESD name."""
-
 from django.db import migrations
 
 LEGACY_MODULE = "merzoug_assembly"

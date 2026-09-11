@@ -1,10 +1,3 @@
-"""Design endpoints — a thin HTTP layer over `gsynth_engine`.
-
-Every view here follows the same shape: validate the request, call the
-engine, translate a `SequenceError` into a 400 the user can act on, and
-serialise the result. The biology stays in the engine, which is where the
-tests are.
-"""
 from __future__ import annotations
 
 from django.http import HttpResponse
@@ -92,12 +85,12 @@ from gsynth_engine.verify import ConsensusReport, assemble_consensus, verify
 
 
 def _bad_request(error: SequenceError) -> Response:
-    """Engine errors are already written for the user — pass them through."""
+
     return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 def _gel_simulation(title: str, lanes: list[dict], fragment_sizes: list[int]) -> dict:
-    """A plotting-ready prediction, explicitly not an experimental image."""
+
     return {
         "title": title,
         "prediction_only": True,
@@ -112,7 +105,7 @@ def _gel_simulation(title: str, lanes: list[dict], fragment_sizes: list[int]) ->
 
 
 def _provenance(workflow: str, data: dict, output: str, *, vector: str = "") -> dict:
-    """Timestamped reproducibility record for responses, saves and exports."""
+
     from django.utils import timezone
 
     return build_provenance(
@@ -156,11 +149,7 @@ def _ssd_payload(result: SSDResult) -> dict:
 
 
 def _duplex_payload(view: DuplexView) -> dict:
-    """The hybridisation view, as coordinates the client draws from.
 
-    Sent as two padded strings plus spans rather than as pre-wrapped lines,
-    so the browser can re-wrap to its own width without asking again.
-    """
     return {
         "top": view.top,
         "bottom": view.bottom,
@@ -192,11 +181,8 @@ def _assembly_payload(plan: ESDResult, construct_name: str) -> dict:
         "construct_reverse": plan.construct_reverse,
         "construct_length": plan.construct_length,
         "construct_gc": round(gc_content(plan.construct_forward), 1),
-        # Zero-based, end-exclusive coordinates let the saved linear design
-        # flow directly into sequencing-primer and read verification tools.
-        # There is deliberately no backbone_length here: this is an assembly
-        # cassette, not yet a cloned plasmid, so a ligation mass calculation
-        # would otherwise mistake the cassette for the vector backbone.
+
+
         "insert_start": insert.start,
         "insert_end": insert.end,
         "topology": "linear",
@@ -205,8 +191,8 @@ def _assembly_payload(plan: ESDResult, construct_name: str) -> dict:
         "overhang_length": plan.overhang_length,
         "longest_oligo": plan.longest_oligo,
         "junction_overhangs": plan.junction_overhangs,
-        # Measured off the assembled fragments, not copied from the design:
-        # this is what the vector will actually be offered.
+
+
         "terminal_ends": [
             {"side": side, "enzyme": enzyme, "overhang": sequence, "kind": kind}
             for side, enzyme, (sequence, kind) in (
@@ -239,30 +225,21 @@ def _assembly_payload(plan: ESDResult, construct_name: str) -> dict:
         "oligos": [order.as_row for order in order_sheet(plan, construct_name=construct_name)],
         "ssd": _ssd_payload(plan.ssd),
         "duplex": _duplex_payload(construct_duplex(plan)),
-        # Tm is meaningless without the reaction it refers to.
+
         "tm_conditions": {
             "name": ANNEALING.name,
             "summary": ANNEALING.summary,
             "model": "Nearest-neighbour (SantaLucia 1998)",
         },
         "warnings": plan.warnings,
-        # Empty means: re-ligating these oligos reproduces the design exactly.
+
         "verification": plan.verify(),
         "preflight": assembly_preflight(plan).to_dict(),
     }
 
 
-#: Enzymes worth marking on a recombinant map — every one with verified cut
-#: geometry, because "does anything else cut here" is the question that decides
-#: whether a diagnostic digest will work.
 def _restriction_annotations(plasmid: str, highlight: tuple[str, ...]) -> list[dict]:
-    """Every catalogued restriction occurrence as a filterable map feature.
 
-    The client defaults to single-cutters plus the cloning pair because every
-    four-base cutter at once is visual noise.  Returning the complete set is
-    still essential: an explicit “all sites” choice must actually show all
-    sites, rather than pretending a multi-cutter does not exist.
-    """
     out: list[dict] = []
     for enzyme in sorted(ALL_ENZYMES):
         sites = find_sites(plasmid, enzyme, circular=True)
@@ -282,21 +259,15 @@ def _restriction_annotations(plasmid: str, highlight: tuple[str, ...]) -> list[d
                 "cuts": len(sites),
                 "used": used,
                 "recognition": site,
-                # A circular molecule has no beginning, so a site can straddle
-                # position 0. The coordinates stay honest and say so, rather
-                # than being clamped into a feature that is not the site.
+
+
                 "wraps": end > len(plasmid),
             })
     return out
 
 
 def _validation(result: CloningResult, duplex_mismatches: list[int]) -> list[dict]:
-    """The checks, each stated as a claim that passed or did not.
 
-    One banner collapses a dozen distinct questions into a colour. Listing
-    them separately means a design that fails on orientation and a design
-    that fails on a duplicated site do not look alike.
-    """
     junctions_ok = all(j.site_regenerated for j in result.junctions)
     ends_ok = not any("does not match" in p for p in result.problems)
     duplex_problems = [problem for problem in result.problems if "do not pair" in problem]
@@ -360,11 +331,7 @@ def _validation(result: CloningResult, duplex_mismatches: list[int]) -> list[dic
 
 
 def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan, insert_annotations=None) -> dict:
-    """The recombinant plasmid, shaped for a map viewer.
 
-    The insert is sent as one more annotation so the client can draw the
-    whole plasmid from a single list, rather than special-casing it.
-    """
     annotations = list(result.annotations)
     cassette_annotation = {
         "name": result.name,
@@ -374,8 +341,8 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan, insert_an
         "direction": 1,
         "color": "#0E6E77",
     }
-    # Duplex handoffs have no SSD object. Use the same origin as the engine's
-    # protein so cohesive-end bases cannot shift the displayed codon frame.
+
+
     if result.translation_start is not None and result.protein:
         cassette_annotation["translation_start"] = result.translation_start
         cassette_annotation["translation_end"] = result.insert_end
@@ -388,10 +355,7 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan, insert_an
                 moved[key] = result.insert_start + annotation[key]
         annotations.append(moved)
 
-    # Preserve the cassette's internal biological meaning on the project map.
-    # These coordinates come from the same SSD result that built the oligo;
-    # they are not re-detected from motifs, so a repeated His or linker motif
-    # cannot make an annotation jump to the wrong occurrence.
+
     segment_colours = {
         "overhang": "#C97634",
         "start codon": "#9E3D3D",
@@ -487,8 +451,8 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan, insert_an
                 for frame_check in result.reading_frame.checks
             ],
         },
-        # Every pET cassette reads on the minus strand of the supplier's
-        # numbering, so this is the normal case rather than a warning.
+
+
         "reversed_insert": result.reversed_insert,
         "tags": [
             {
@@ -514,8 +478,8 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan, insert_an
             for junction in result.junctions
         ],
         "orfs": open_reading_frames(result.plasmid, minimum_codons=40)[:5],
-        # Each seam drawn as the two ends that made it, so "the overhangs
-        # match" can be checked rather than believed.
+
+
         "junction_views": [
             {
                 "name": view.name,
@@ -555,23 +519,17 @@ def _clone_payload(result: CloningResult, ssd: SSDResult | None, plan, insert_an
             result, duplex_mismatches=duplex_mismatches,
         ).to_dict(),
         "warnings": result.warnings,
-        # Empty when all cloning checks pass.
+
         "problems": result.problems,
         "is_clonable": result.is_clonable,
-        # Pre-digested inserts have no generated SSD payload.
+
         "insert": _ssd_payload(ssd) if ssd is not None else None,
         "assembly": _assembly_payload(plan, result.name) if plan else None,
     }
 
 
 def _reviewed_product_annotations(data: dict, sequence_length: int) -> list[dict] | None:
-    """Validate optional user-reviewed features against the product molecule.
 
-    The request serializer checks each feature's shape. Product length only
-    exists after cloning, so coordinate bounds are enforced here before the
-    list can enter a saved project or GenBank export. Circular origin-crossing
-    features may extend once beyond ``sequence_length``.
-    """
     annotations = data.get("product_annotations")
     if annotations is None:
         return None
@@ -591,7 +549,7 @@ def _reviewed_product_annotations(data: dict, sequence_length: int) -> list[dict
 
 
 def _spec_payload(spec) -> dict:
-    """One catalogue entry, as the dropdown needs it."""
+
     return {
         "key": spec.key,
         "name": spec.name,
@@ -609,7 +567,7 @@ def _spec_payload(spec) -> dict:
         ],
         "notes": list(spec.notes),
         "reference": spec.reference,
-        # Without a sequence the user has to import their own copy first.
+
         "has_sequence": spec.has_sequence,
         "supplies_translation_start": spec.supplies_translation_start,
         "expression_capable": spec.expression_capable,
@@ -618,7 +576,7 @@ def _spec_payload(spec) -> dict:
 
 
 def _vector_payload(spec, sequence: str) -> dict:
-    """Which vector was cut, and whether the sequence matches what it claims."""
+
     if spec is None:
         return {"recognised": False, "check": None, "spec": None}
 
@@ -638,11 +596,7 @@ def _vector_payload(spec, sequence: str) -> dict:
 
 
 class VectorCatalogueView(APIView):
-    """GET /api/design/vectors/ — the backbones G-Synth knows about.
 
-    Public, like the enzyme table: it is reference data, and the cloning page
-    needs it to build its dropdown before anything has been designed.
-    """
 
     permission_classes = (AllowAny,)
 
@@ -654,7 +608,7 @@ class VectorCatalogueView(APIView):
 
 
 class VectorSequenceView(APIView):
-    """GET /api/design/vectors/<key>/ — a bundled sequence and its features."""
+
 
     permission_classes = (AllowAny,)
 
@@ -689,7 +643,7 @@ def _optimisation_payload(result: OptimisationResult) -> dict:
         "rare_codons_before": result.rare_codons_before,
         "rare_codons_after": result.rare_codons_after,
         "changed_codons": result.changed_codons,
-        # Empty problems means the gene can be built and cut as asked.
+
         "problems": result.problems,
         "warnings": result.warnings,
         "is_clean": result.is_clean,
@@ -701,7 +655,7 @@ def _optimisation_payload(result: OptimisationResult) -> dict:
 
 
 class CodonHostCatalogueView(APIView):
-    """GET /api/design/codon-hosts/ — reproducible bundled host profiles."""
+
 
     permission_classes = (AllowAny,)
 
@@ -736,12 +690,7 @@ class CodonHostCatalogueView(APIView):
 
 
 class OptimiseView(APIView):
-    """POST /api/design/optimise/ — rewrite a gene for the expression host.
 
-    The protein is invariant; everything else is negotiable. Pass the cloning
-    enzymes in `avoid_enzymes` so the result does not carry a site that would
-    make the construct impossible to cut.
-    """
 
     throttle_scope = "design"
 
@@ -800,13 +749,7 @@ class OptimiseView(APIView):
 
 
 class AlignView(APIView):
-    """POST /api/design/align/ — compare two sequences.
 
-    Separate from verification, which assumes the read is the construct and
-    exploits that. This makes no such assumption: two genes from different
-    strains, a design against what a supplier returned, a protein against
-    its homologue.
-    """
 
     throttle_scope = "design"
 
@@ -856,7 +799,7 @@ class AlignView(APIView):
 
 
 class HybridizationView(APIView):
-    """POST /api/design/hybridize/ — physical antiparallel strand pairing."""
+
 
     throttle_scope = "design"
 
@@ -921,11 +864,7 @@ class HybridizationView(APIView):
 
 
 class PrimerExportView(APIView):
-    """POST /api/design/primers/export/?filetype=csv|fasta
 
-    A primer set is ordered, not read on screen. CSV goes into a supplier's
-    spreadsheet; FASTA into the ones that take an upload.
-    """
 
     throttle_scope = "design"
 
@@ -964,7 +903,7 @@ class PrimerExportView(APIView):
 
 
 class LigationView(APIView):
-    """Return a practical series of insert-to-vector ligation ratios."""
+
 
     def post(self, request):
         serializer = LigationRequestSerializer(data=request.data)
@@ -1008,7 +947,7 @@ class LigationView(APIView):
 
 
 class SequencingPrimerView(APIView):
-    """POST /api/design/primers/ — primers that read across a region."""
+
 
     throttle_scope = "design"
 
@@ -1066,8 +1005,8 @@ def _difference_payload(d) -> dict:
         "to_residue": d.to_residue,
         "silent": d.silent,
         "description": d.description,
-        # None when the read came as letters. False means the trace does not
-        # support it — noise, not a mutation.
+
+
         "quality": d.quality,
         "confident": d.confident,
         "read_index": d.read_index,
@@ -1108,15 +1047,7 @@ def _consensus_payload(report: ConsensusReport) -> dict:
 
 
 class TraceVerifyView(APIView):
-    """POST /api/design/verify/traces/ — the reads, with their peaks.
 
-    The same comparison as `/verify/`, except the reads arrive as ABIF or SCF
-    chromatogram files.
-    That buys two things the letters cannot give: the ends are trimmed by
-    quality rather than by a fixed count, and every difference is returned
-    with the confidence of the base that produced it — plus the slice of
-    trace around it, so the drawing can show the peak that was called.
-    """
 
     throttle_scope = "design"
     parser_classes = [MultiPartParser, FormParser]
@@ -1170,8 +1101,7 @@ class TraceVerifyView(APIView):
         except SequenceError as error:
             return _bad_request(error)
 
-        # The peaks around each difference, so it can be looked at rather
-        # than taken on trust. Only these windows travel, never whole traces.
+
         windows = []
         tracks = []
         for read in report.reads:
@@ -1224,7 +1154,7 @@ class TraceVerifyView(APIView):
 
 
 class VerifyView(APIView):
-    """POST /api/design/verify/ — do the reads say you built the design?"""
+
 
     throttle_scope = "design"
 
@@ -1256,7 +1186,7 @@ class VerifyView(APIView):
             "coverage": report.coverage,
             "gaps": report.gaps,
             "fully_covered": report.fully_covered,
-            # Verification requires agreement over the complete requested region.
+
             "is_verified": report.is_verified,
             "verification_state": verification_state(report),
             "preflight": preflight.to_dict(),
@@ -1283,11 +1213,7 @@ class VerifyView(APIView):
 
 
 class EnzymeCatalogueView(APIView):
-    """GET /api/design/enzymes/ — what the UI needs to build its dropdowns.
 
-    Public: it is a reference table, and the sign-up screen may want to show
-    it before anyone has an account.
-    """
 
     permission_classes = (AllowAny,)
 
@@ -1300,13 +1226,12 @@ class EnzymeCatalogueView(APIView):
                 "name": name,
                 "aliases": aliases,
                 "recognition": ALL_ENZYMES[name]["recognition"],
-                # Preferred cloning enzymes are offered first.
+
                 "common": name in RESTRICTION_ENZYMES,
                 "overhang": sequence,
                 "overhang_type": kind,
-                # This is derived from the retained top-strand remainder.
-                # An ATG elsewhere in the recognition site may be cut away
-                # or followed by frame-shifting bases.
+
+
                 "supplies_start_codon": supplies_start_codon(name),
             })
         return Response({
@@ -1321,7 +1246,7 @@ class EnzymeCatalogueView(APIView):
 
 
 class SSDDesignView(APIView):
-    """POST /api/design/ssd/ — one insert, two oligos."""
+
 
     throttle_scope = "design"
 
@@ -1356,7 +1281,7 @@ class SSDDesignView(APIView):
 
 
 class ExtendedSequenceDesignView(APIView):
-    """POST /api/design/assembly/ — one insert, an ordered set of oligo pairs."""
+
 
     throttle_scope = "design"
 
@@ -1393,7 +1318,7 @@ class ExtendedSequenceDesignView(APIView):
 
 
 def _run_clone(data: dict, engine_kwargs: dict):
-    """Build exactly one cloning result for preview, export and worksheet."""
+
     if data.get("pre_digested"):
         plan = None
         ssd = None
@@ -1436,13 +1361,7 @@ def _run_clone(data: dict, engine_kwargs: dict):
 
 
 class CloneView(APIView):
-    """POST /api/design/clone/ — design an insert and put it in a vector.
 
-    Returns the recombinant plasmid: sequence, junctions, the protein that
-    will be expressed, and the vector's annotations at their new coordinates.
-    A design that cannot be cloned comes back with `problems` filled in and
-    HTTP 200 — the user needs to see what does not fit, not an error page.
-    """
 
     throttle_scope = "design"
 
@@ -1494,15 +1413,14 @@ def _attachment(text: str, filename: str, content_type: str) -> HttpResponse:
 
 
 def _today() -> str:
-    """GenBank's date field. Taken here rather than in the engine, so the
-    engine's own output stays byte-identical between runs."""
+
     from django.utils import timezone
 
     return timezone.now().strftime("%d-%b-%Y").upper()
 
 
 class CloneExportView(APIView):
-    """POST /api/design/clone/export/?filetype=genbank|fasta|sbol3."""
+
 
     throttle_scope = "design"
 
@@ -1563,7 +1481,7 @@ class CloneExportView(APIView):
 
 
 class CloneWorksheetView(APIView):
-    """POST /api/design/clone/worksheet/ — printable release-to-bench record."""
+
 
     throttle_scope = "design"
 
@@ -1613,12 +1531,7 @@ class CloneWorksheetView(APIView):
 
 
 class ConstructExportView(APIView):
-    """POST /api/design/assembly/export/ — construct and oligo sequences.
 
-    `filetype=oligos` gives one FASTA entry per oligo, which is what a supplier
-    accepts as an upload. Retyping thirty oligo names into a web form is
-    where transcription errors come from.
-    """
 
     throttle_scope = "design"
 
@@ -1702,7 +1615,7 @@ class ConstructExportView(APIView):
 
 
 class OrderSheetView(APIView):
-    """POST /api/design/assembly/order-sheet/ — the oligo list as CSV."""
+
 
     throttle_scope = "design"
 
@@ -1725,7 +1638,7 @@ class OrderSheetView(APIView):
 
 
 class ProtocolView(APIView):
-    """POST /api/design/assembly/protocol/ — the bench protocol as text."""
+
 
     throttle_scope = "design"
 
@@ -1748,13 +1661,7 @@ class ProtocolView(APIView):
 
 
 def _primer_payload(primer) -> dict:
-    """One primer, with both Tm figures kept distinct.
 
-    `tm` is the annealing portion and is what the annealing temperature was
-    derived from; `tm_full` is the whole oligo and only applies once the tail
-    has been copied. Collapsing them into one number is what makes a tailed
-    primer look like it should anneal ten degrees hotter than it does.
-    """
     return {
         "name": primer.name,
         "sequence": primer.sequence,
@@ -1781,12 +1688,7 @@ def _end_payload(end) -> dict:
 
 
 class PcrView(APIView):
-    """POST /api/design/pcr/ — design a PCR and simulate its product.
 
-    With no enzymes this is conventional PCR. Name a pair and each primer
-    gains a tail carrying a site, the product is cut, and the insert that
-    comes back is ready for `clone()`.
-    """
 
     throttle_scope = "design"
 
@@ -1866,7 +1768,7 @@ class PcrView(APIView):
 
 
 class FeatureDetectionView(APIView):
-    """Read-only sequence annotation proposals for unsaved molecules."""
+
 
     def post(self, request):
         serializer = FeatureDetectionSerializer(data=request.data)

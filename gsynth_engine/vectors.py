@@ -1,37 +1,3 @@
-"""The vector catalogue — what you are cloning into.
-
-A cloning strategy is only half a design. The other half is the backbone:
-what promoter drives it, what tags it already carries, whether the enzymes
-you picked cut it once, and what your protein will look like once the
-vector's own contributions are translated too.
-
-**Which entries carry a sequence.** A vector ships with one only when it came
-from an authoritative supplier or laboratory reference file and passes
-`validate` against its own entry. Everything else is
-metadata, and the user supplies the sequence once from their own copy.
-
-That restraint is deliberate. A transcription error in 5 000 bases is
-invisible and would silently poison every design made against it. And
-working labs run modified backbones: a pET-21 with a swapped promoter is
-still the vector on their bench, and an "official" copy that quietly
-disagreed with it would be worse than no copy at all.
-
-What the catalogue always does is *check*. `validate` compares a supplied
-sequence against the entry — length, the enzymes that must cut exactly once,
-the promoter and operator that must be there — so pasting pET-28a while
-pET-21 is selected is caught immediately. The two are both 5 369 bp, so
-length alone would not have caught it.
-
-**Tags are declared as peptides, not as DNA.** Whether a vector's C-terminal
-His-tag ends up on your protein depends on the reading frame and on whether
-your insert carries its own stop codon — questions answered by translating
-the recombinant plasmid, not by looking for a codon string. Peptide motifs
-also survive the codon differences between vector generations, and between a
-supplier's vector and a lab's own version of it.
-
-References for the metadata: Novagen/Merck pET System Manual (TB055),
-supplier product pages, and the Addgene vector database.
-"""
 from __future__ import annotations
 
 import json
@@ -42,43 +8,30 @@ from pathlib import Path
 from gsynth_engine.constants import ALL_ENZYMES
 from gsynth_engine.sequence import clean_dna
 
-#: Where bundled sequences live. A vector earns a place here only when its
-#: sequence came from an authoritative file — a supplier's or a lab's own
-#: verified sequence record — and passes `validate` against its own entry.
 DATA = Path(__file__).parent / "vector_data"
 
-#: Non-coding elements whose sequence is standard across every vector that
-#: carries them, so they are safe to match at the DNA level.
+
 T7_PROMOTER = "TAATACGACTCACTATAG"
 LAC_OPERATOR = "GGAATTGTGAGCGGATAACAATT"
 T7_TERMINATOR = "CTAGCATAACCCCTTGGGGCCTCTAAACGGGTCTTGAGGGGTTTTTTG"
 
-#: A stretch from the middle of bla, taken from the verified pET-21 file.
-#: pET-21(+) and pET-28a(+) are both 5 369 bp; the resistance marker is what
-#: tells them apart, so identification cannot rely on length.
+
 AMPR = "CGTTGTTGCCATTGCTGCAGGCATCGTGGTGTCACG"
 
 
 @dataclass(frozen=True)
 class Tag:
-    """Something the vector adds to your protein, as a peptide.
 
-    `motif` is matched against the translated product, so it is independent
-    of the vector's codon usage and of whatever the lab has changed. `end`
-    says where the vector places it, which decides what has to be true for
-    it to appear: an N-terminal tag needs the frame to start upstream of the
-    insert, a C-terminal one needs the insert *not* to stop.
-    """
 
     name: str
     motif: str
-    end: str          #: "N" or "C"
+    end: str
     note: str = ""
 
 
 @dataclass(frozen=True)
 class VectorSpec:
-    """One catalogue entry. Metadata and checks — never a sequence."""
+
 
     key: str
     name: str
@@ -88,36 +41,28 @@ class VectorSpec:
     host: str = "E. coli"
     supplier: str = ""
     summary: str = ""
-    #: Enzymes that must cut exactly once. Anything else is not this vector.
+
     unique_sites: tuple[str, ...] = ()
-    #: Enzyme pairs the vector is designed to be cloned with, best first.
+
     recommended_pairs: tuple[str, ...] = ()
     tags: tuple[Tag, ...] = ()
-    #: DNA motifs that must be present, as (name, sequence).
+
     motifs: tuple[tuple[str, str], ...] = ()
     aliases: tuple[str, ...] = ()
     reference: str = ""
     notes: tuple[str, ...] = ()
-    #: File under `vector_data/`, when the sequence ships with the engine.
+
     bundled: str = ""
-    #: Whether the vector puts a ribosome binding site and a start codon
-    #: upstream of the cloning region. False means the insert must.
+
+
     supplies_translation_start: bool = True
-    #: False for propagation/sequencing backbones that are not intended to
-    #: express the cloned insert. Their insert frame is reported as not
-    #: applicable rather than incorrectly confirmed or rejected.
+
+
     expression_capable: bool = True
 
     @property
     def has_sequence(self) -> bool:
-        """This backbone ships with its own verified sequence.
 
-        False does not mean the vector is unusable — it means the sequence
-        must be imported and will be checked against this entry. Only
-        sequences from an authoritative file are bundled, because a
-        transcription error in 5 000 bases is invisible and would poison
-        every design made against the backbone.
-        """
         return bool(self.bundled)
 
     @property
@@ -132,7 +77,6 @@ THROMBIN_PEPTIDE = "LVPRGS"
 T7_TAG_PEPTIDE = "MASMTGGQQMG"
 
 
-#: Ordered: the first entry is what the app offers by default.
 CATALOGUE: tuple[VectorSpec, ...] = (
     VectorSpec(
         key="pET-21a",
@@ -349,11 +293,7 @@ DEFAULT_VECTOR = CATALOGUE[0]
 
 @cache
 def sequence_of(key: str) -> dict | None:
-    """The bundled sequence and features for a vector, or None.
 
-    Returns the same shape the file parser produces, so a bundled vector and
-    an imported one are interchangeable everywhere downstream.
-    """
     spec = get(key)
     if spec is None or not spec.bundled:
         return None
@@ -374,7 +314,7 @@ BY_KEY: dict[str, VectorSpec] = {spec.key: spec for spec in CATALOGUE}
 
 
 def get(key: str) -> VectorSpec | None:
-    """Look a vector up by key, name or alias — case- and dash-insensitive."""
+
     wanted = _normalise(key)
     for spec in CATALOGUE:
         candidates = {spec.key, spec.name, *spec.aliases}
@@ -389,7 +329,7 @@ def _normalise(text: str) -> str:
 
 @dataclass
 class VectorCheck:
-    """What a supplied sequence does and does not match."""
+
 
     spec: VectorSpec
     length: int
@@ -400,22 +340,13 @@ class VectorCheck:
 
     @property
     def matches(self) -> bool:
-        """No problems means this really is the vector that was selected."""
+
         return not self.problems
 
 
 def validate(sequence: str, spec: VectorSpec, *, length_tolerance: int = 0) -> VectorCheck:
-    """Check a supplied sequence against a catalogue entry.
 
-    Length and the promoter/operator motifs are the load-bearing checks: a
-    sequence of the right length carrying the right promoter is the vector it
-    claims to be, and one that is 74 bases short is pET-28a pretending.
-
-    Site counts are reported as notes rather than problems. A lab that has
-    knocked out one site in its own working copy has not stopped using the
-    vector, but it does need to know before it picks that enzyme.
-    """
-    from gsynth_engine.cloning import find_sites  # local: cloning imports us
+    from gsynth_engine.cloning import find_sites
 
     seq = clean_dna(sequence)
     check = VectorCheck(spec=spec, length=len(seq))
@@ -443,10 +374,7 @@ def validate(sequence: str, spec: VectorSpec, *, length_tolerance: int = 0) -> V
                 f"is either a different vector or a modified copy."
             )
 
-    # The enzymes the vector is meant to be cloned with. One of those missing
-    # entirely is not a modified copy — it is a different vector. This is what
-    # separates pET-21(+) from pET-28a(+), which share a length and a promoter
-    # and differ by having NdeI at all.
+
     essential = {
         enzyme
         for pair in spec.recommended_pairs
@@ -474,14 +402,7 @@ def validate(sequence: str, spec: VectorSpec, *, length_tolerance: int = 0) -> V
 
 
 def identify(sequence: str) -> VectorSpec | None:
-    """Work out which catalogue vector a sequence is, or None.
 
-    An exact match against a bundled sequence is certain, so it wins. Failing
-    that, length and motifs together have to single one entry out: pET-21(+)
-    and pET-28a(+) are both 5 369 bp with the same promoter, and returning
-    the first of the two would be a guess dressed up as an answer. When more
-    than one entry fits, this returns None and lets the user choose.
-    """
     seq = clean_dna(sequence)
     if not seq:
         return None

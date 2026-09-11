@@ -1,4 +1,3 @@
-"""Client for an optional local Ollama service."""
 from __future__ import annotations
 
 import json
@@ -9,11 +8,11 @@ from django.conf import settings
 
 
 class OllamaError(Exception):
-    """Ollama could not be reached or refused the request."""
+    pass
 
 
 def ask(question: str, history: list[dict]) -> str:
-    """Send one bounded conversation turn to the configured model."""
+
     messages = [*history, {"role": "user", "content": question}]
 
     body = json.dumps({

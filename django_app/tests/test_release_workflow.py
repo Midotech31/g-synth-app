@@ -1,11 +1,3 @@
-"""Release gate for the complete in-silico design-to-sequencing handoff.
-
-Unit tests cover each calculation in depth.  This test deliberately crosses
-the HTTP boundaries a bench user crosses: clone design, saved provenance,
-sequencing-primer design, and final read placement against the exact released
-plasmid.  It is a digital validation gate, not evidence of a wet-lab run.
-"""
-
 import pytest
 from django.urls import reverse
 
@@ -17,7 +9,7 @@ ENTA_FIXTURE = (
 
 
 def _circular_read(sequence: str, start: int, end: int) -> str:
-    """Return a Sanger-like window with non-matching terminal noise."""
+
     body = "".join(sequence[index % len(sequence)] for index in range(start, end))
     return "A" * 30 + body + "T" * 30
 

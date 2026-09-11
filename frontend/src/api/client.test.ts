@@ -1,4 +1,3 @@
-/** API session refresh, error propagation, and request tests. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ApiError, DesignParams } from "./client";
@@ -13,10 +12,7 @@ const REFRESH_KEY = "gsynth.refresh";
 const calls: Call[] = [];
 let client: Client;
 
-/**
- * Only the parts of `Response` the client touches. jsdom ships no fetch, and
- * a hand-built body keeps each test's wire content where the test can see it.
- */
+
 function reply(status: number, body: string | null = null): Response {
   return {
     status,
@@ -38,7 +34,7 @@ function serve(handler: Handler): void {
   });
 }
 
-/** `request` sends a plain object; the download helpers send a `Headers`. */
+
 function header(init: RequestInit, name: string): string | null {
   const headers = init.headers;
   if (!headers) return null;
@@ -49,8 +45,7 @@ function header(init: RequestInit, name: string): string | null {
 const isRefresh = (url: string) => url.endsWith("/api/auth/refresh/");
 const refreshCalls = () => calls.filter((call) => isRefresh(call.url));
 
-/** Let every queued continuation run: these tests assert on what the client
- *  has done once it can do no more without the server. */
+
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function deferred(): { promise: Promise<void>; release: () => void } {
@@ -61,8 +56,7 @@ function deferred(): { promise: Promise<void>; release: () => void } {
   return { promise, release };
 }
 
-/** The rejection itself, so its status and fields can be read — `rejects`
- *  alone would only prove that something went wrong. */
+
 async function rejection(promise: Promise<unknown>): Promise<ApiError> {
   const error = await promise.then(
     () => {
@@ -74,7 +68,7 @@ async function rejection(promise: Promise<unknown>): Promise<ApiError> {
   return error as ApiError;
 }
 
-/** API_BASE is read once at module load, so the module is re-imported. */
+
 async function loadClient(base = ""): Promise<Client> {
   vi.stubEnv("VITE_API_BASE", base);
   vi.resetModules();
@@ -123,8 +117,8 @@ describe("tokenStore", () => {
   });
 
   it("keeps the refresh token when only the access token is replaced", () => {
-    // A server with rotation switched off returns no new refresh token, and
-    // discarding the old one would end the session at the first refresh.
+
+
     client.tokenStore.save({ access: "access-1", refresh: "refresh-1" });
 
     client.tokenStore.saveAccess("access-2");
@@ -209,8 +203,8 @@ describe("error bodies", () => {
   });
 
   it("survives a proxy's HTML error page instead of reporting a parse error", async () => {
-    // A gateway between the SPA and Django answers in HTML. "Unexpected token
-    // <" sends the user hunting through their sequence for the fault.
+
+
     serve(() => reply(502, "<html><body>502 Bad Gateway</body></html>"));
 
     const error = await rejection(client.api.catalogue());
@@ -259,9 +253,8 @@ describe("refresh on 401", () => {
   });
 
   it("answers three simultaneous expiries with one refresh, not three", async () => {
-    // The rotation is the reason: refreshes two and three would present a
-    // token the first has already spent, and the server would end the session
-    // of someone who did nothing but open a page that loads three things.
+
+
     client.tokenStore.save({ access: "stale", refresh: "refresh-1" });
     const gate = deferred();
     serve(async (url, init) => {
@@ -280,9 +273,7 @@ describe("refresh on 401", () => {
       client.api.getProject(7),
     ]);
 
-    // Judged while the refresh is still open: all three have met their 401
-    // and queued behind the same promise. Releasing first would let the latch
-    // clear and the count would pass without proving anything.
+
     await flush();
     expect(refreshCalls()).toHaveLength(1);
     expect(calls).toHaveLength(4);
@@ -292,7 +283,7 @@ describe("refresh on 401", () => {
 
     expect(refreshCalls()).toHaveLength(1);
     expect(calls).toHaveLength(7);
-    // Every one of the three is replayed, with the token the refresh returned.
+
     const replays = calls.slice(4);
     expect(replays.map((call) => call.url).sort()).toEqual(
       ["/api/auth/me/", "/api/projects/", "/api/projects/7/"].sort(),
@@ -315,8 +306,8 @@ describe("refresh on 401", () => {
     });
 
     await client.api.me();
-    // The second token expires in its turn; a latch that never reopened would
-    // strand every request from here on against a token known to be dead.
+
+
     localStorage.setItem(ACCESS_KEY, "stale-again");
     issued = 0;
     await client.api.me();
@@ -339,8 +330,8 @@ describe("refresh on 401", () => {
     expect(error.message).toBe("Your session has expired. Please sign in again.");
     expect(localStorage.getItem(ACCESS_KEY)).toBeNull();
     expect(localStorage.getItem(REFRESH_KEY)).toBeNull();
-    // Not replayed: a request sent again with a token just proven dead only
-    // costs another round trip.
+
+
     expect(calls).toHaveLength(2);
   });
 
@@ -372,8 +363,8 @@ describe("refresh on 401", () => {
   });
 
   it("does not refresh on failures that are not about the token", async () => {
-    // A 403 on someone else's project is not an expiry. Refreshing on every
-    // error rotates the token for no reason and hides the real cause.
+
+
     client.tokenStore.save({ access: "access-1", refresh: "refresh-1" });
     serve(() => json(403, { detail: "You do not have permission to perform this action." }));
 
@@ -385,8 +376,8 @@ describe("refresh on 401", () => {
   });
 
   it("sends no Authorization header on the endpoints that need no account", async () => {
-    // The enzyme catalogue is public. A stale token attached to it would 401
-    // a page that has no session to refresh.
+
+
     localStorage.setItem(ACCESS_KEY, "stale");
     serve(() => json(200, { enzymes: [], common_pairs: [], cleavage_sites: [] }));
 
@@ -408,8 +399,8 @@ describe("refresh on 401", () => {
 
 describe("API_BASE", () => {
   it("strips trailing slashes, so the path never doubles one", async () => {
-    // `${BASE}//api/...` reaches Django as a URL nothing routes: every page
-    // of the workspace fails at once, and the build that caused it looks fine.
+
+
     client = await loadClient("https://api.gsynth.test///");
     serve(() => json(200, { enzymes: [], common_pairs: [], cleavage_sites: [] }));
 
@@ -473,8 +464,8 @@ describe("session endpoints", () => {
   });
 
   it("signs out locally even when the server cannot be told", async () => {
-    // Otherwise a sign-out on a dropped connection leaves the session live on
-    // a shared bench machine.
+
+
     client.tokenStore.save({ access: "access-1", refresh: "refresh-1" });
     serve(() => json(500, { detail: "Blacklist unavailable." }));
 
@@ -482,15 +473,15 @@ describe("session endpoints", () => {
 
     expect(localStorage.getItem(ACCESS_KEY)).toBeNull();
     expect(localStorage.getItem(REFRESH_KEY)).toBeNull();
-    // The refresh token goes with the request so the server can blacklist it.
+
     expect(JSON.parse(String(calls[0].init.body))).toEqual({ refresh: "refresh-1" });
   });
 });
 
 describe("multipart uploads", () => {
   it("sets no Content-Type on a trace upload, so the browser writes the boundary", async () => {
-    // With a Content-Type of our own the boundary is missing and DRF rejects
-    // the request — which reads, in the interface, as a bad .ab1 file.
+
+
     client.tokenStore.save({ access: "access-1", refresh: "refresh-1" });
     serve(() => json(200, { differences: [] }));
 
@@ -506,10 +497,10 @@ describe("multipart uploads", () => {
     expect(form.get("design")).toBe("ATGGGCAGC");
     expect(form.getAll("traces")).toHaveLength(2);
     expect(form.get("trim_quality")).toBe("20");
-    // `circular: false` has to travel. Dropped as falsy, a linear design is
-    // compared as a circle and the ends stop matching.
+
+
     expect(form.get("circular")).toBe("false");
-    // Omitted keys stay omitted rather than arriving as the string "null".
+
     expect(form.get("coding_start")).toBeNull();
   });
 
@@ -589,8 +580,8 @@ describe("file downloads", () => {
   const revoke = vi.fn();
 
   beforeEach(() => {
-    // jsdom parses URLs but keeps no blob registry, so the two static methods
-    // the save helper uses have to be supplied.
+
+
     URL.createObjectURL = vi.fn(() => "blob:gsynth/1");
     URL.revokeObjectURL = revoke;
     revoke.mockClear();
@@ -607,8 +598,8 @@ describe("file downloads", () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
       this: HTMLAnchorElement,
     ) {
-      // Read at click time: an anchor clicked before it is attached does
-      // nothing in Firefox, and nothing is exactly what it looks like.
+
+
       clicked.push({ href: this.href, download: this.download, attached: this.isConnected });
     });
 
@@ -621,8 +612,8 @@ describe("file downloads", () => {
   });
 
   it("throws rather than saving the server's error page as a GenBank file", async () => {
-    // A .gb file holding an HTML 500 opens in SnapGene as an empty sequence,
-    // and the failure is blamed on the design.
+
+
     client.tokenStore.save({ access: "access-1", refresh: "refresh-1" });
     serve(() => reply(500, "<html><body>Server Error</body></html>"));
 

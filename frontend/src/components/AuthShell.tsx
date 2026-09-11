@@ -35,7 +35,7 @@ type Props = {
   footer: ReactNode;
 };
 
-/** Shared, evidence-led entry point for sign-in and registration. */
+
 export default function AuthShell({ eyebrow, title, description, children, footer }: Props) {
   return (
     <div className="auth">

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract the insulin-glargine experimental record and admissible figures."""
+
 
 from __future__ import annotations
 

@@ -47,6 +47,7 @@ django_app/prodcheck.sqlite3
 .coverage.*
 htmlcov/
 coverage.xml
+coverage.json
 
 # Packaging artefacts
 *.egg-info/

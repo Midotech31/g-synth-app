@@ -1,9 +1,3 @@
-"""Deterministic generated cases for invariants hand-picked examples miss.
-
-The seed is reported by pytest through the parametrization, so every failure
-is reproducible. These tests deliberately vary sequence content and length
-while asserting molecular round trips, not implementation details.
-"""
 from __future__ import annotations
 
 import random
@@ -20,7 +14,7 @@ from gsynth_engine.verify import verify
 
 
 def site_free_dna(length: int, seed: int) -> str:
-    """Grow DNA that cannot accidentally complete a supported enzyme site."""
+
     rng = random.Random(seed)
     sites = [str(info["recognition"]) for info in RESTRICTION_ENZYMES.values()]
     sites += [reverse_complement(site) for site in sites]
@@ -66,10 +60,10 @@ def test_generated_assemblies_reconstruct_both_strands(seed: int):
 @pytest.mark.parametrize(
     ("left", "right"),
     [
-        ("NdeI", "XhoI"),       # two 5' ends
-        ("KpnI", "SacI"),       # two 3' ends
-        ("NdeI", "KpnI"),       # mixed polarity
-        ("EcoRV", "SmaI"),      # blunt ends
+        ("NdeI", "XhoI"),
+        ("KpnI", "SacI"),
+        ("NdeI", "KpnI"),
+        ("EcoRV", "SmaI"),
         ("BamHI", "EcoRI"),
         ("ApaI", "PstI"),
     ],

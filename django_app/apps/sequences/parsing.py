@@ -1,27 +1,18 @@
-"""Sequence file parsing — FASTA and GenBank in, viewer-ready JSON out.
-
-The browser receives annotations already shaped for SeqViz
-(`name/start/end/direction/color`), so the frontend does no biology and no
-coordinate arithmetic — the two places this kind of code usually goes wrong.
-
-Coordinates are 0-based, half-open (Python/Biopython convention), which is
-also what SeqViz expects.
-"""
 from __future__ import annotations
 
 import io
+import re
 from dataclasses import asdict, dataclass, field
 
 import sbol3
 from Bio import SeqIO
 from Bio.SeqFeature import SeqFeature
 
-from apps.sequences.sbol import ROLE_FEATURES, read_sbol3
+from apps.sequences.sbol import ROLE_FEATURES, feature_metadata, read_sbol3
 
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024   # 10 MB
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
-# Feature types we surface, with the colours the viewer draws them in.
-# Anything not listed is still shown, in the neutral fallback colour.
+
 FEATURE_COLORS: dict[str, str] = {
     "CDS":           "#0E6E77",
     "gene":          "#2A9D8F",
@@ -40,22 +31,22 @@ FEATURE_COLORS: dict[str, str] = {
 }
 DEFAULT_FEATURE_COLOR = "#5D6B7A"
 
-# Features that carry no useful visual information for a plasmid map.
+
 SKIPPED_FEATURE_TYPES = frozenset({"source"})
 
 
 class ParseError(ValueError):
-    """Raised when a file cannot be read as FASTA or GenBank."""
+    pass
 
 
 @dataclass
 class Annotation:
-    """One drawable feature, already in SeqViz's shape."""
+
     name: str
     type: str
     start: int
     end: int
-    direction: int          # 1 forward, -1 reverse, 0 unstranded
+    direction: int
     color: str
     regulatory_class: str = ""
     inferred: bool = False
@@ -70,9 +61,9 @@ class ParsedRecord:
     description: str
     sequence: str
     length: int
-    topology: str           # "circular" | "linear"
-    gc_content: float       # percent, 1 decimal
-    source_format: str      # "fasta" | "genbank" | "snapgene" | "sbol3"
+    topology: str
+    gc_content: float
+    source_format: str
     annotations: list[Annotation] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -82,19 +73,11 @@ class ParsedRecord:
                                 for a in self.annotations]}
 
 
-#: A SnapGene file opens with a length-prefixed block whose first byte is 9.
-#: Sniffing the bytes rather than the extension matters because these arrive
-#: renamed as often as not.
 SNAPGENE_MAGIC = b"\x09\x00\x00\x00\x0e"
 
 
 def detect_format(text: str | bytes, filename: str = "") -> str:
-    """Sniff the format from the content first, filename second.
 
-    Content wins because files get renamed, and a GenBank record saved as
-    `.txt` is still a GenBank record. SnapGene's own format is binary, so it
-    is checked before anything tries to decode the bytes as text.
-    """
     lower = filename.lower()
 
     if isinstance(text, bytes):
@@ -147,26 +130,50 @@ def _record_from_sbol(content: str, source_format: str, filename: str) -> Parsed
     sequence = sequence_object.elements.upper()
     annotations: list[Annotation] = []
     for feature in component.features:
+        if not isinstance(feature, sbol3.SequenceFeature):
+            continue
         ranges = [location for location in feature.locations if isinstance(location, sbol3.Range)]
         if not ranges:
             continue
-        ranges.sort(key=lambda location: location.order or 0)
-        if len(ranges) > 1 and ranges[0].end == len(sequence) and ranges[1].start == 1:
-            start = ranges[0].start - 1
-            end = len(sequence) + ranges[1].end
-        else:
-            start = min(location.start for location in ranges) - 1
-            end = max(location.end for location in ranges)
+        if any(str(location.sequence) != sequence_object.identity or not 1 <= location.start <= location.end <= len(sequence) for location in ranges):
+            raise ParseError('SBOL feature locations must refer to the selected sequence within its bounds.')
+        orientations = {location.orientation or feature.orientation for location in ranges}
+        if len(orientations) != 1:
+            raise ParseError('Mixed-strand SBOL features cannot be displayed as one contiguous span.')
+        start, end = ranges[0].start - 1, ranges[0].end
+        if len(ranges) > 1:
+            boundary = next((part for part in ranges if part.end == len(sequence)), None)
+            origin = next((part for part in ranges if part.start == 1), None)
+            if (sbol3.SO_CIRCULAR not in component.types or len(ranges) != 2 or boundary is None or origin is None
+                    or boundary is origin or origin.end >= boundary.start):
+                raise ParseError('Discontinuous SBOL features cannot be displayed as one contiguous span.')
+            start, end = boundary.start - 1, len(sequence) + origin.end
+        metadata = feature_metadata(feature)
         role = next((value for value in feature.roles if value in ROLE_FEATURES), "")
-        feature_type = ROLE_FEATURES.get(role, "misc_feature")
+        feature_type = str(metadata.get('type') or ROLE_FEATURES.get(role, "misc_feature"))
         orientation = ranges[0].orientation or feature.orientation
+        color = str(metadata.get('color') or FEATURE_COLORS.get(feature_type, DEFAULT_FEATURE_COLOR))
+        if not re.fullmatch(r'#[0-9a-fA-F]{6}', color):
+            raise ParseError('SBOL feature color must be a six-digit hexadecimal color.')
+        translation_start, translation_end = metadata.get('translation_start'), metadata.get('translation_end')
+        if translation_start is not None or translation_end is not None:
+            if (type(translation_start) is not int or type(translation_end) is not int
+                    or not start <= translation_start < translation_end <= end):
+                raise ParseError('SBOL coding bounds must lie inside the feature.')
+        if type(metadata.get('inferred', False)) is not bool:
+            raise ParseError('SBOL candidate status must be boolean.')
         annotations.append(Annotation(
-            name=(feature.name or feature.display_id or feature_type)[:80],
+            name=(feature.name or feature.display_id or feature_type)[:200],
             type=feature_type,
             start=start,
             end=end,
-            direction=-1 if orientation == sbol3.SBOL_REVERSE_COMPLEMENT else 1,
-            color=FEATURE_COLORS.get(feature_type, DEFAULT_FEATURE_COLOR),
+            direction=-1 if orientation == sbol3.SBOL_REVERSE_COMPLEMENT else 1 if orientation == sbol3.SBOL_INLINE else 0,
+            color=color,
+            inferred=metadata.get('inferred', False),
+            regulatory_class=str(metadata.get('regulatory_class') or ''),
+            basis=(feature.description or '')[:4000],
+            translation_start=translation_start,
+            translation_end=translation_end,
         ))
     annotations.sort(key=lambda annotation: (annotation.start, -(annotation.end - annotation.start)))
 
@@ -185,7 +192,7 @@ def _record_from_sbol(content: str, source_format: str, filename: str) -> Parsed
 
 
 def _feature_name(feature: SeqFeature, fallback: str) -> str:
-    """Best human label for a feature, in the order a biologist would pick."""
+
     for key in ("label", "gene", "product", "note", "standard_name",
                 "bound_moiety", "organism"):
         values = feature.qualifiers.get(key)
@@ -208,14 +215,9 @@ def _annotations_from(record) -> list[Annotation]:
         try:
             start, end = int(location.start), int(location.end)
         except (TypeError, ValueError):
-            continue      # fuzzy/unknown locations — nothing sensible to draw
+            continue
 
-        # Biopython represents an origin-spanning circular feature as a
-        # CompoundLocation with one part ending at the record boundary and
-        # another beginning at zero. Preserve it as [start, end + length),
-        # the same wrapped-coordinate convention used by our generated
-        # GenBank records and by SeqViz, rather than flattening it to the
-        # entire plasmid through CompoundLocation.start/end.
+
         parts = list(getattr(location, "parts", ()))
         record_length = len(record.seq)
         boundary_part = next(
@@ -243,6 +245,8 @@ def _annotations_from(record) -> list[Annotation]:
             continue
         translation_start = translation_end = None
         if ftype == 'CDS':
+            if str(feature.qualifiers.get('transl_table', ['1'])[0]) not in {'1', '11'} or feature.qualifiers.get('transl_except'):
+                raise ParseError('This CDS uses an unsupported genetic code or translation exception; its protein cannot be displayed faithfully.')
             try:
                 offset = int(feature.qualifiers.get('codon_start', ['1'])[0]) - 1
             except (ValueError, TypeError):
@@ -290,27 +294,18 @@ def _topology(record, source_format: str) -> str:
     topology = str(record.annotations.get("topology", "")).lower()
     if topology in ("circular", "linear"):
         return topology
-    # FASTA carries no topology; assume linear rather than guessing.
+
     return "linear"
 
 
 def parse_sequence_file(content: bytes | str, filename: str = "") -> ParsedRecord:
-    """Parse the first record of a FASTA, GenBank or SnapGene file.
 
-    SnapGene's `.dna` is binary and is read as bytes; the text formats are
-    decoded first. Supporting it matters because it is what a lab actually
-    has: a vector arrives from the supplier as `.dna`, and asking someone to
-    convert it first is asking them to use another program to use this one.
-
-    Raises ParseError with a message meant for an end user, not a stack trace.
-    """
     if isinstance(content, bytes) and len(content) > MAX_UPLOAD_BYTES:
         raise ParseError(
             f"File is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB."
         )
-    # Emptiness is checked before sniffing: a file of whitespace is empty,
-    # not unrecognised, and saying the wrong one sends the user looking for
-    # a format problem that is not there.
+
+
     if not content or not (
         content.strip() if isinstance(content, str) else content.strip()
     ):
@@ -373,6 +368,6 @@ def parse_sequence_file(content: bytes | str, filename: str = "") -> ParsedRecor
         topology=_topology(record, source_format),
         gc_content=_gc_content(sequence),
         source_format=source_format,
-        # Preserve annotations from every supported annotated format.
+
         annotations=_annotations_from(record),
     )

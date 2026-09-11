@@ -52,7 +52,7 @@ function clamp(value: number, low: number, high: number): number {
   return Math.min(high, Math.max(low, value));
 }
 
-/** Keep feature labels readable on both pale and saturated imported colours. */
+
 export function readableTextColour(hex: string): "#ffffff" | "#0b1f3b" {
   const match = /^#([0-9a-f]{6})$/i.exec(hex.trim());
   if (!match) return "#0b1f3b";
@@ -73,7 +73,7 @@ function reverseComplement(sequence: string): string {
     .join("");
 }
 
-/** Pick a useful locus rather than shrinking a 5 kb plasmid to illegibility. */
+
 export function chooseAnnotationWindow(
   annotations: Annotation[],
   sequenceLength: number,
@@ -102,7 +102,7 @@ export function chooseAnnotationWindow(
     ? target.end + WINDOW_PADDING
     : clamp(target.end + WINDOW_PADDING, 0, sequenceLength);
 
-  // Bring nearby promoter/operator/RBS tracks into the same scientific view.
+
   const placements = circular
     ? annotations.flatMap((annotation) => [-sequenceLength, 0, sequenceLength].map((offset) => ({
       start: annotation.start + offset,
@@ -113,9 +113,8 @@ export function chooseAnnotationWindow(
   const searchStart = start;
   const searchEnd = end;
   for (const annotation of placements) {
-    // Compare with the initial padded locus. Expanding against an already
-    // expanded range can chain from promoter to promoter around a plasmid
-    // until the expression cassette is a tiny part of a needlessly huge view.
+
+
     if (
       annotation.end - annotation.start <= 300
       && annotation.end >= searchStart - 40
@@ -153,7 +152,7 @@ export function chooseAnnotationWindow(
   return { start, end };
 }
 
-/** Greedy interval colouring keeps overlapping biological features legible. */
+
 export function visibleFeaturesForRow(
   annotations: Annotation[], rowStart: number, rowEnd: number,
 ): VisibleFeature[] {

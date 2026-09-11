@@ -1,29 +1,3 @@
-"""Small Sequence Design — the heart of G-Synth.
-
-Turns a gene or peptide-coding sequence into the forward and reverse oligos
-that, once annealed, form a duplex whose sticky ends match a chosen
-restriction pair in the target vector.
-
-The logic below is a faithful extraction of the validated G-Synth
-implementation. It reproduces the worked examples in the specification base
-for base (see tests/test_ssd_golden.py) — treat those tests as the
-definition of correct, not this code.
-
-Two paths:
-
-**Coding** — the input already carries its own ATG. For NdeI the leading ATG
-is dropped, because NdeI's site CATATG supplies it: the forward oligo starts
-"TATG", the T completing CATATG on ligation. The stop codon can be removed
-so the gene can be read through into a C-terminal tag.
-
-**Non-coding** — the input has no initiator. G-Synth prepends the standard
-cassette: ATG (unless the enzyme supplies one) → linker → 6×His → linker →
-protease site → insert.
-
-In both cases the reverse oligo is built so that after annealing the duplex
-presents exactly the two enzyme overhangs — e.g. 5'-TA for NdeI on the left
-and 5'-TCGA for XhoI on the right — and nothing else.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -52,7 +26,7 @@ from gsynth_engine.thermo import ANNEALING, melting_temperature
 
 @dataclass(frozen=True)
 class Segment:
-    """One labelled stretch of the forward oligo, for display and reports."""
+
     name: str
     start: int
     end: int
@@ -61,17 +35,7 @@ class Segment:
 
 @dataclass
 class SSDResult:
-    """One small single-stranded DNA design: the two oligos and what they mean.
 
-    `forward` and `reverse` are what you order — each written 5'→3' in its
-    own direction, so `reverse` is *not* the reverse complement of `forward`
-    read backwards; annealed, they form the cassette with the sticky ends the
-    chosen enzyme pair leaves at either end.
-
-    `segments` records which part of the design each stretch of bases came
-    from — site, start codon, tag, linker, protease site, insert — so the
-    interface can colour the construct without re-deriving the layout.
-    """
 
     forward: str
     reverse: str
@@ -82,7 +46,7 @@ class SSDResult:
     segments: list[Segment] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
-    # ── derived properties, computed on demand ──────────────────────────────
+
     @property
     def forward_length(self) -> int:
         return len(self.forward)
@@ -101,7 +65,7 @@ class SSDResult:
 
     @property
     def forward_tm(self) -> float:
-        """Tm under the annealing reaction, not a generic primer dilution."""
+
         return round(melting_temperature(self.forward, conditions=ANNEALING), 1)
 
     @property
@@ -110,29 +74,17 @@ class SSDResult:
 
     @property
     def left_overhang(self) -> str:
-        """The single-stranded end the duplex presents on the left."""
+
         return overhang(self.left_enzyme)[0]
 
     @property
     def right_overhang(self) -> str:
-        """The 5' single-stranded end the duplex presents on the right.
 
-        Given in bottom-strand 5'→3' sense, which is how it anneals to the
-        cut vector.
-        """
         return overhang(self.right_enzyme)[0]
 
     @property
     def orf_start(self) -> int:
-        """Index in `forward` where the reading frame begins.
 
-        Worth stating explicitly, because NdeI is counter-intuitive: its
-        forward remainder is TATG, and the ATG occupies indices 1–3. The A of
-        the 5'-TA overhang is *also* the A of the start codon — the overhang
-        and the initiator overlap by one base. Every other enzyme gets an
-        explicit ATG appended after its remainder, so the frame starts right
-        after it.
-        """
         cut, _ = left_remainders(self.left_enzyme)
         if supplies_start_codon(self.left_enzyme):
             return len(cut) - 3
@@ -140,7 +92,7 @@ class SSDResult:
 
     @property
     def coding_region(self) -> str:
-        """`forward` from the start codon onwards."""
+
         return self.forward[self.orf_start :]
 
 
@@ -152,8 +104,8 @@ def _split_pair(enzyme_pair: str) -> tuple[str, str]:
         )
     for name in parts:
         if name not in ALL_ENZYMES:
-            # 109 names is not a useful error message; list the ones this
-            # lab actually keeps, and say how many others are known.
+
+
             known = (", ".join(sorted(RESTRICTION_ENZYMES))
                      + f", and {len(ALL_ENZYMES) - len(RESTRICTION_ENZYMES)} more")
             raise SequenceError(f"Unknown restriction enzyme {name!r}. Known: {known}")
@@ -161,7 +113,7 @@ def _split_pair(enzyme_pair: str) -> tuple[str, str]:
 
 
 def _strip_stop_codon(sequence: str) -> tuple[str, bool]:
-    """Truncate at the first in-frame stop codon. Returns (sequence, found)."""
+
     for i in range(0, len(sequence) - 2, 3):
         if sequence[i : i + 3] in STOP_CODONS:
             return sequence[:i], True
@@ -178,21 +130,7 @@ def design_small_sequence(
     include_his_tag: bool = True,
     include_linkers: bool = True,
 ) -> SSDResult:
-    """Design the forward and reverse oligos for one insert.
 
-    Args:
-        sequence: the insert, A/C/G/T only.
-        enzyme_pair: e.g. "NdeI / XhoI" — left enzyme first.
-        is_coding: the insert already starts with its own ATG.
-        remove_stop: truncate at the first in-frame stop (coding only), so a
-            C-terminal tag stays in frame.
-        cleavage_site: protease site inserted before the insert
-            (non-coding only). None or "" for no site.
-        include_his_tag / include_linkers: non-coding only.
-
-    Raises:
-        SequenceError: with a message meant for the person at the bench.
-    """
     seq = validate_dna(sequence, field="insert sequence")
     left, right = _split_pair(enzyme_pair)
     warnings: list[str] = []
@@ -220,8 +158,8 @@ def design_small_sequence(
                 "its own ATG' if this is a non-coding sequence, or add the "
                 "correct start codon."
             )
-        # Some left sites retain a complete ATG at the cut end. Keeping the
-        # insert's own ATG as well would duplicate the initiator.
+
+
         if supplies_start_codon(left):
             seq = seq[3:]
             warnings.append(
@@ -245,7 +183,6 @@ def design_small_sequence(
         add(f"{right} overhang", fwd_cut_r, cursor)
 
     else:
-        # Non-coding: build the standard expression cassette in front.
         atg = "" if supplies_start_codon(left) else "ATG"
         if supplies_start_codon(left):
             warnings.append(
@@ -265,9 +202,7 @@ def design_small_sequence(
 
         forward = fwd_cut_l + atg + cassette + cleavage_seq + seq + fwd_cut_r
 
-        # The reverse oligo mirrors the forward, element by element, in
-        # reverse order — so that the annealed duplex is flush everywhere
-        # except the two enzyme overhangs.
+
         reverse = rev_cut_r + reverse_complement(seq)
         if cleavage_seq:
             reverse += reverse_complement(cleavage_seq)
@@ -298,11 +233,11 @@ def design_small_sequence(
         cursor = add("insert", seq, cursor)
         add(f"{right} overhang", fwd_cut_r, cursor)
 
-    # Warn about anything that would bite at the bench.
+
     for name, enzyme in ((left, left), (right, right)):
         site = str(ALL_ENZYMES[enzyme]["recognition"])
-        # The site is expected once at each end after ligation; an extra copy
-        # inside the insert would be cut during cloning.
+
+
         if site and site in seq:
             warnings.append(
                 f"The insert contains an internal {name} site ({site}) — it "

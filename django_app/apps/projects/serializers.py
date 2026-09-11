@@ -6,7 +6,7 @@ from apps.projects.models import Project
 
 
 class AnnotationSerializer(serializers.Serializer):
-    """One user-editable sequence feature in engine coordinates."""
+
 
     name = serializers.CharField(max_length=200, trim_whitespace=True)
     type = serializers.CharField(max_length=64, default="misc_feature")
@@ -57,7 +57,7 @@ class AnnotationSerializer(serializers.Serializer):
 
 
 class ProjectAnnotationsSerializer(serializers.Serializer):
-    """Validated replacement for only the annotations inside project data."""
+
 
     annotations = AnnotationSerializer(many=True)
     expected_updated_at = serializers.DateTimeField(required=False)
@@ -69,7 +69,7 @@ class ProjectAnnotationsSerializer(serializers.Serializer):
 
 
 class ProjectSerializer(serializers.ModelSerializer):
-    """Full project representation for retrieve / update."""
+
 
     def validate(self, attrs):
         if self.instance and 'sequence' in attrs and attrs['sequence'] != self.instance.sequence:
@@ -100,11 +100,7 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 
 class ProjectListSerializer(serializers.ModelSerializer):
-    """Compact projection for the list endpoint — omits `data` and `sequence`.
 
-    Keeps the list payload small even when a user has hundreds of projects
-    with heavy JSON payloads. Callers fetch full details via retrieve.
-    """
 
     class Meta:
         model = Project

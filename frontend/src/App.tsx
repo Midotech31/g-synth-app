@@ -12,15 +12,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import { WorkspaceStateProvider } from "./state/WorkspaceStateContext";
 
-/**
- * The workspaces load on demand.
- *
- * Eagerly importing all of them put the sequence viewer and the trace
- * renderer — the two heaviest things here — into the bundle that every
- * signed-in user waits for, including on the pages that draw neither. Home,
- * Login and Signup stay eager: they are the first thing anyone sees, and
- * splitting them would trade a smaller bundle for a spinner on arrival.
- */
+
 const Align = lazy(() => import("./pages/Align"));
 const Clone = lazy(() => import("./pages/Clone"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -135,12 +127,11 @@ function Rail() {
   );
 }
 
-/** Renders the app shell, or bounces to /login when signed out. */
+
 function Protected() {
   const { user, loading } = useAuth();
-  // Read before the early returns below: a hook called after a conditional
-  // return runs on some renders and not others, which is exactly the
-  // ordering React forbids.
+
+
   const { pathname } = useLocation();
   const mainRef = useRef<HTMLElement>(null);
 
@@ -162,13 +153,13 @@ function Protected() {
   return (
     <WorkspaceStateProvider identity={String(user.id)}>
       <div className="shell">
-      {/* Keyboard users can bypass repeated navigation. */}
+
       <a className="skip-link" href="#main">
         Skip to main content
       </a>
       <Rail />
       <main ref={mainRef} className="canvas" id="main" role="main" tabIndex={-1}>
-        {/* Reset page-level error state after navigation. */}
+
         <ErrorBoundary key={pathname}>
           <Suspense
             fallback={
@@ -187,7 +178,7 @@ function Protected() {
   );
 }
 
-/** Keeps signed-in users away from the auth screens. */
+
 function PublicOnly({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return null;
