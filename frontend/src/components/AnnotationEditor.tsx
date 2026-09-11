@@ -24,6 +24,7 @@ export type AnnotationDraft = {
   direction: string;
   color: string;
   wraps: boolean;
+  basis?: string;
 };
 
 export function draftFromAnnotation(
@@ -49,6 +50,7 @@ export function draftFromAnnotation(
     direction: String(annotation.direction),
     color: annotation.color || DEFAULT_COLOUR,
     wraps: annotation.end > sequenceLength,
+    basis: annotation.basis ?? "",
   };
 }
 
@@ -93,6 +95,9 @@ export function annotationFromDraft(
     annotation.inferred = true;
     annotation.basis = unchangedSpan ? previous.basis : "Annotation edited; sequence evidence and biological function require review.";
   } else if (unchangedSpan && previous?.basis) annotation.basis = previous.basis;
+  const note = draft.basis?.trim();
+  if (note && (!previous?.inferred || unchangedSpan)) annotation.basis = note;
+  if (!previous && !note) annotation.basis = "Manually assigned annotation; biological function has not been verified by G-Synth.";
   if (previous?.type === draft.type && previous.regulatory_class) annotation.regulatory_class = previous.regulatory_class;
   if (draft.type === "RBS") annotation.regulatory_class = "ribosome_binding_site";
   if (draft.type === "CDS") {
@@ -109,6 +114,7 @@ type Props = {
   sequenceLength: number;
   circular: boolean;
   saving: boolean;
+  saveError?: string;
   onSave: (annotation: Annotation) => void;
   onCancel: () => void;
 };
@@ -120,6 +126,7 @@ export default function AnnotationEditor({
   sequenceLength,
   circular,
   saving,
+  saveError,
   onSave,
   onCancel,
 }: Props) {
@@ -156,7 +163,7 @@ export default function AnnotationEditor({
           if (event.key === "Escape") { event.stopPropagation(); if (!saving) onCancel(); }
           if (event.key !== "Tab") return;
           event.stopPropagation();
-          const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled])')];
+          const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])')];
           const first = controls[0]; const last = controls[controls.length - 1];
           if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
           if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -177,7 +184,7 @@ export default function AnnotationEditor({
           Name a new insert or describe any sequence span. Coordinates are 1-based and inclusive,
           as they appear on the sequence ruler.
         </p>
-        {error && <div className="notice notice-error" role="alert">{error}</div>}
+        {(error || saveError) && <div className="notice notice-error" role="alert">{error || saveError}</div>}
         <div className="annotation-editor-grid">
           <div className="field annotation-name-field">
             <label htmlFor="annotation-name">Feature name</label>
@@ -246,6 +253,13 @@ export default function AnnotationEditor({
               onChange={(event) => set("color", event.target.value)}
             />
           </div>
+        </div>
+        <div className="field">
+          <label htmlFor="annotation-evidence">Evidence or source note (optional)</label>
+          <textarea id="annotation-evidence" rows={3} maxLength={4000}
+            value={draft.basis ?? ""} onChange={(event) => set("basis", event.target.value)}
+            placeholder="Reference accession, publication, or reason for this annotation" />
+          <p className="note">Adding or editing a feature does not confirm its biological function. Detected candidates retain their candidate status.</p>
         </div>
         {circular && (
           <label className="checkbox-row annotation-wrap-check">

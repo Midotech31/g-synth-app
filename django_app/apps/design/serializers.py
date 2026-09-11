@@ -127,7 +127,7 @@ class VectorAnnotationSerializer(serializers.Serializer):
     translation_end = serializers.IntegerField(min_value=0, required=False)
     truncated = serializers.BooleanField(required=False)
     inferred = serializers.BooleanField(required=False)
-    basis = serializers.CharField(max_length=300, required=False)
+    basis = serializers.CharField(max_length=4000, required=False, allow_blank=True)
     regulatory_class = serializers.CharField(max_length=80, required=False)
 
     def validate(self, attrs):

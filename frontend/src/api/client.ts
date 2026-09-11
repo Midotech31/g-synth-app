@@ -1075,10 +1075,10 @@ export const api = {
   createProject: (payload: Partial<Project>) =>
     request<Project>("/api/projects/", { method: "POST", body: payload }),
 
-  updateProjectAnnotations: (id: number, annotations: Annotation[]) =>
+  updateProjectAnnotations: (id: number, annotations: Annotation[], expectedUpdatedAt?: string) =>
     request<Project>(`/api/projects/${id}/annotations/`, {
       method: "PATCH",
-      body: { annotations },
+      body: { annotations, ...(expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {}) },
     }),
 
   detectSequenceFeatures: (sequence: string, annotations: Annotation[], circular: boolean) =>

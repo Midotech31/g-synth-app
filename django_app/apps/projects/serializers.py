@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from rest_framework import serializers
 
 from apps.projects.models import Project
@@ -17,7 +19,7 @@ class AnnotationSerializer(serializers.Serializer):
     )
     truncated = serializers.BooleanField(required=False)
     inferred = serializers.BooleanField(required=False)
-    basis = serializers.CharField(max_length=300, required=False)
+    basis = serializers.CharField(max_length=4000, required=False, allow_blank=True)
     regulatory_class = serializers.CharField(max_length=80, required=False)
     translation_start = serializers.IntegerField(min_value=0, required=False)
     translation_end = serializers.IntegerField(min_value=1, required=False)
@@ -58,6 +60,7 @@ class ProjectAnnotationsSerializer(serializers.Serializer):
     """Validated replacement for only the annotations inside project data."""
 
     annotations = AnnotationSerializer(many=True)
+    expected_updated_at = serializers.DateTimeField(required=False)
 
     def validate_annotations(self, value):
         if len(value) > 5000:
@@ -67,6 +70,27 @@ class ProjectAnnotationsSerializer(serializers.Serializer):
 
 class ProjectSerializer(serializers.ModelSerializer):
     """Full project representation for retrieve / update."""
+
+    def validate(self, attrs):
+        if self.instance and 'sequence' in attrs and attrs['sequence'] != self.instance.sequence:
+            raise serializers.ValidationError({'sequence': (
+                'Save the changed sequence as a new project. The original sequence '
+                'must remain bound to its saved results and provenance.'
+            )})
+        data = attrs.get('data', self.instance.data if self.instance else {})
+        if not isinstance(data, dict):
+            raise serializers.ValidationError({'data': 'Project data must be an object.'})
+        if 'data' in attrs and 'annotations' in data:
+            holder = SimpleNamespace(
+                sequence=attrs.get('sequence', self.instance.sequence if self.instance else ''),
+                data=data,
+            )
+            features = ProjectAnnotationsSerializer(
+                data={'annotations': data['annotations']}, context={'project': holder},
+            )
+            features.is_valid(raise_exception=True)
+            attrs['data'] = {**data, 'annotations': features.validated_data['annotations']}
+        return attrs
 
     class Meta:
         model = Project

@@ -7,6 +7,27 @@ from apps.projects.models import Project
 
 @pytest.mark.django_db
 class TestProjectCrud:
+    def test_saved_sequence_cannot_change_under_existing_evidence(self, auth_client):
+        created = auth_client.post('/api/projects/', {
+            'name': 'original', 'sequence': 'ATGAAATAA',
+            'data': {'preflight': {'verdict': 'ready'}},
+        }, format='json')
+        original = created.data
+        response = auth_client.patch(f"/api/projects/{original['id']}/", {
+            'sequence': 'ATGCCCTAA',
+        }, format='json')
+        assert response.status_code == 400
+        record = auth_client.get(f"/api/projects/{original['id']}/").data
+        assert record['sequence'] == original['sequence']
+        assert record['provenance'] == original['provenance']
+
+    @pytest.mark.parametrize('data', [[], 'invalid', {'annotations': [{'name': 'bad', 'start': 0, 'end': 30}]}])
+    def test_general_project_write_validates_data_and_annotations(self, auth_client, data):
+        response = auth_client.post('/api/projects/', {
+            'name': 'invalid data', 'sequence': 'ACGT', 'data': data,
+        }, format='json')
+        assert response.status_code == 400
+
     def test_requires_auth(self, api_client):
         assert api_client.get("/api/projects/").status_code == 401
 
@@ -66,6 +87,28 @@ class TestProjectCrud:
 
 @pytest.mark.django_db
 class TestEditableAnnotations:
+    def test_stale_annotation_save_does_not_overwrite_another_edit(self, auth_client, user):
+        project = Project.objects.create(user=user, name='two tabs', sequence='ACGT')
+        version = auth_client.get(f'/api/projects/{project.id}/').data['updated_at']
+        feature = {'name': 'first edit', 'start': 0, 'end': 2}
+        url = f'/api/projects/{project.id}/annotations/'
+        first = auth_client.patch(url, {'annotations': [feature], 'expected_updated_at': version}, format='json')
+        assert first.status_code == 200
+        stale = auth_client.patch(url, {'annotations': [], 'expected_updated_at': version}, format='json')
+        assert stale.status_code == 409
+        project.refresh_from_db()
+        assert project.data['annotations'][0]['name'] == 'first edit'
+
+    def test_detected_evidence_can_be_saved_without_truncation(self, auth_client, user):
+        project = Project.objects.create(user=user, name='evidence', sequence='AAGGAGCCCCCCCATGCCC')
+        url = f'/api/projects/{project.id}'
+        matches = auth_client.get(url + '/detect-common-features/').data['matches']
+        candidate = next(m['annotation'] for m in matches if 'SD-like' in m['annotation']['name'])
+        assert len(candidate['basis']) > 300
+        response = auth_client.patch(url + '/annotations/', {'annotations': [candidate]}, format='json')
+        assert response.status_code == 200, response.data
+        assert response.data['data']['annotations'][0]['basis'] == candidate['basis']
+
     def test_replaces_annotations_without_overwriting_other_project_data(self, auth_client, user):
         project = Project.objects.create(
             user=user,

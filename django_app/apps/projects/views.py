@@ -59,10 +59,19 @@ class ProjectViewSet(viewsets.ModelViewSet):
             context={"request": request, "project": project},
         )
         serializer.is_valid(raise_exception=True)
+        expected = serializer.validated_data.get('expected_updated_at')
+        if expected is not None and expected != project.updated_at:
+            return Response({'detail': 'This project changed in another tab. Reload the project before saving your edits.'}, status=409)
         data = dict(project.data or {})
         data["annotations"] = serializer.validated_data["annotations"]
-        project.data = data
-        project.save(update_fields=["data", "updated_at"])
+        # Compare-and-swap also protects against a write during validation.
+        updated_at = timezone.now()
+        changed = self.get_queryset().filter(pk=project.pk, updated_at=project.updated_at).update(
+            data=data, updated_at=updated_at,
+        )
+        if not changed:
+            return Response({'detail': 'This project changed while saving. Reload the project before saving your edits.'}, status=409)
+        project.data, project.updated_at = data, updated_at
         return Response(ProjectSerializer(project, context={"request": request}).data)
 
     @action(detail=True, methods=["get"], url_path="detect-common-features")

@@ -190,7 +190,8 @@ def _sd_context(
             f"coordinate {genomic_start + 1} on the {'forward' if direction == 1 else 'reverse'} strand. "
         )
         context += (
-            f"Positionally associated with annotated CDS: {', '.join(linked)}. " if linked
+            (f"Positionally associated with annotated CDS: {', '.join(name[:200] for name in linked[:3])}"
+             + (f" (and {len(linked) - 3} more)" if len(linked) > 3 else '') + '. ') if linked
             else "No annotated CDS starts at this codon; this motif is unassigned. "
         )
         context += "Review required: the 4–14 nt spacer screen does not establish transcription or RBS activity."

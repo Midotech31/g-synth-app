@@ -82,11 +82,21 @@ export default function Viewer() {
   const [detecting, setDetecting] = useState(false);
   const [detected, setDetected] = useState<DetectedFeature[]>([]);
   const [chosenMatches, setChosenMatches] = useState<Set<number>>(new Set());
+  const [featureQuery, setFeatureQuery] = useState("");
   const announcedProjectId = useRef<number | null>(null);
+  const lifecycle = useRef(0);
+  const scanVersion = useRef(0);
+  const savePending = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+    lifecycle.current += 1;
+    scanVersion.current += 1;
+    savePending.current = false;
     setProject(null); setError(""); setSelected(null); setDetected([]); setActionError("");
+    setEditorOpen(false); setDeleteOpen(false); setSavingAnnotation(false);
+    setDetecting(false); setChosenMatches(new Set()); setStatus("");
+    setFeatureQuery("");
     (async () => {
       try {
         const data = await api.getProject(Number(id));
@@ -99,6 +109,8 @@ export default function Viewer() {
     })();
     return () => {
       cancelled = true;
+      lifecycle.current += 1;
+      scanVersion.current += 1;
     };
   }, [id]);
 
@@ -112,21 +124,29 @@ export default function Viewer() {
     message: string,
     selectedIndex: number | null = null,
   ) => {
-    if (!project) return false;
+    if (!project || savePending.current) return false;
+    const version = lifecycle.current;
+    savePending.current = true;
+    scanVersion.current += 1;
+    setDetecting(false);
     setSavingAnnotation(true);
     setActionError("");
     try {
-      const updated = await api.updateProjectAnnotations(project.id, next);
+      const updated = await api.updateProjectAnnotations(project.id, next, project.updated_at);
+      if (version !== lifecycle.current) return false;
       setProject(updated);
       const saved = updated.data?.annotations ?? [];
       setSelected(selectedIndex === null ? null : saved[selectedIndex] ?? null);
       setStatus(message);
       return true;
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not save those annotations.");
+      if (version === lifecycle.current) setActionError(err instanceof ApiError ? err.message : "Could not save those annotations.");
       return false;
     } finally {
-      setSavingAnnotation(false);
+      if (version === lifecycle.current) {
+        savePending.current = false;
+        setSavingAnnotation(false);
+      }
     }
   };
 
@@ -138,35 +158,39 @@ export default function Viewer() {
 
   const detectFeatures = async () => {
     if (!project) return;
+    const version = ++scanVersion.current;
     setDetecting(true);
     setActionError("");
     try {
       const result = await api.detectCommonFeatures(project.id);
+      if (version !== scanVersion.current) return;
       setDetected(result.matches);
-      setChosenMatches(new Set(result.matches.map((_, index) => index)));
+      setChosenMatches(new Set());
       setStatus(
         result.matches.length
           ? `${result.matches.length} exact motif ${result.matches.length === 1 ? "match" : "matches"} found for review.`
           : "No additional curated motif matches were found.",
       );
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not scan for common features.");
+      if (version === scanVersion.current) setActionError(err instanceof ApiError ? err.message : "Could not scan for common features.");
     } finally {
-      setDetecting(false);
+      if (version === scanVersion.current) setDetecting(false);
     }
   };
 
   useEffect(() => {
     if (!project) return;
     let cancelled = false;
+    const version = ++scanVersion.current;
     setDetecting(true);
+    setDetected([]); setChosenMatches(new Set());
     api.detectCommonFeatures(project.id).then((result) => {
-      if (!cancelled) { setDetected(result.matches); setChosenMatches(new Set()); }
+      if (!cancelled && version === scanVersion.current) { setDetected(result.matches); setChosenMatches(new Set()); }
     }).catch(() => {
-      if (!cancelled) setActionError("Automatic feature detection failed. Use Find common to retry.");
-    }).finally(() => { if (!cancelled) setDetecting(false); });
+      if (!cancelled && version === scanVersion.current) setActionError("Automatic feature detection failed. Use Find common to retry.");
+    }).finally(() => { if (!cancelled && version === scanVersion.current) setDetecting(false); });
     return () => { cancelled = true; };
-  }, [project?.id]);
+  }, [project?.id, project?.updated_at]);
 
   // SeqViz wants its own shape; keep the mapping in one place.
   const seqvizAnnotations = useMemo(
@@ -374,6 +398,12 @@ export default function Viewer() {
                   Add feature
                 </button>
               </div>
+              {annotations.length > 0 && <div className="card-body field">
+                <label htmlFor="feature-search">Find an annotation</label>
+                <input id="feature-search" type="search" value={featureQuery}
+                  onChange={(event) => setFeatureQuery(event.target.value)}
+                  placeholder="Feature name or type" />
+              </div>}
               {detected.length > 0 && (
                 <div className="motif-review" aria-label="Common motif matches">
                   <div className="motif-review-intro">
@@ -456,7 +486,7 @@ export default function Viewer() {
                 </div>
               ) : (
                 <div className="feature-list">
-                  {annotations.map((a, index) => (
+                  {annotations.filter((a) => `${a.name} ${a.type}`.toLowerCase().includes(featureQuery.trim().toLowerCase())).map((a, index) => (
                     <button
                       key={`${a.name}-${a.start}-${index}`}
                       className="feature-row"
@@ -480,10 +510,13 @@ export default function Viewer() {
                         </span>
                       </span>
                       <span className="rg">
-                        {(a.start + 1).toLocaleString()}–{a.end.toLocaleString()}
+                        {(a.start + 1).toLocaleString()}–{((a.end - 1) % project.sequence.length + 1).toLocaleString()}
+                        {a.end > project.sequence.length ? " · across origin" : ""}
                       </span>
                     </button>
                   ))}
+                  {!annotations.some((a) => `${a.name} ${a.type}`.toLowerCase().includes(featureQuery.trim().toLowerCase()))
+                    && <p className="card-body">No annotations match this search.</p>}
                 </div>
               )}
             </div>
@@ -535,7 +568,8 @@ export default function Viewer() {
                   <div className="stat">
                     <div className="k">Position</div>
                     <div className="v" style={{ fontSize: "1.05rem" }}>
-                      {(selected.start + 1).toLocaleString()}–{selected.end.toLocaleString()}
+                      {(selected.start + 1).toLocaleString()}–{((selected.end - 1) % project.sequence.length + 1).toLocaleString()}
+                      {selected.end > project.sequence.length ? " · across origin" : ""}
                     </div>
                   </div>
                   <div className="stat">
@@ -692,6 +726,7 @@ export default function Viewer() {
         sequenceLength={project.sequence.length}
         circular={topology === "circular"}
         saving={savingAnnotation}
+        saveError={actionError}
         onCancel={() => setEditorOpen(false)}
         onSave={(annotation) => {
           const next = [...annotations];

@@ -550,9 +550,14 @@ def _flip_annotations(annotations: list[dict], length: int) -> list[dict]:
     for feature in annotations:
         entry = dict(feature)
         start, end = int(feature.get("start", 0)), int(feature.get("end", 0))
-        entry["start"] = length - end
-        entry["end"] = length - start
-        entry["direction"] = -int(feature.get("direction", 1) or 1)
+        mirrored = (length - end) % length
+        shift = mirrored - (length - end)
+        entry["start"] = mirrored
+        entry["end"] = length - start + shift
+        entry["direction"] = -int(feature.get("direction", 1))
+        if feature.get('translation_start') is not None and feature.get('translation_end') is not None:
+            entry['translation_start'] = length - int(feature['translation_end']) + shift
+            entry['translation_end'] = length - int(feature['translation_start']) + shift
         flipped.append(entry)
     return flipped
 
@@ -598,6 +603,21 @@ def _remap_annotations(
         else:
             entry["end"] = new_end
         entry["end"] = min(entry["end"], plasmid_length)
+        if feature.get('translation_start') is not None and feature.get('translation_end') is not None:
+            translated_start = new_start + int(feature['translation_start']) - start
+            translated_end = new_start + int(feature['translation_end']) - start
+            clipped_end = min(translated_end, entry['end'])
+            if entry.get('direction') == -1:
+                # Retain codon phase when the 5′ end of a reverse CDS is cut.
+                clipped_end -= (clipped_end - translated_end) % 3
+            if translated_start < clipped_end:
+                entry['translation_start'], entry['translation_end'] = translated_start, clipped_end
+            else:
+                entry.pop('translation_start', None)
+                entry.pop('translation_end', None)
+                if entry.get('type') == 'CDS':
+                    entry['type'] = 'misc_feature'
+                    entry['basis'] = 'The coding region was removed; only a flanking fragment remains.'
         moved.append(entry)
     return moved
 
