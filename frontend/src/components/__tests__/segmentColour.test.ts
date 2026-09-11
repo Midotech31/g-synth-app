@@ -1,11 +1,3 @@
-/**
- * The construct map and the hybridisation view colour the same cassette from
- * this one table. A part that is teal in one drawing and grey in the other
- * reads as two different parts, and the reader trusts the drawing over the
- * sequence. These checks pin the matching rule the engine's segment names
- * depend on: the engine names segments in context ("NdeI overhang", "left
- * linker"), never by the bare key.
- */
 import { describe, expect, it } from "vitest";
 
 import { SEGMENT_COLOURS, fragmentColour, segmentColour } from "../segmentColour";
@@ -23,13 +15,13 @@ describe("segmentColour", () => {
   });
 
   it("gives the two ends of the cassette the same colour at both ends", () => {
-    // The overhangs are the pair a reader checks against the enzyme table;
-    // they have to be findable at a glance on either side.
+
+
     expect(segmentColour("BamHI overhang")).toBe(segmentColour("EcoRI overhang"));
   });
 
   it("falls back to a real colour for a name it does not know", () => {
-    // Always return an explicit SVG fill.
+
     expect(segmentColour("unnamed spacer")).toMatch(/^#[0-9a-f]{6}$/);
     expect(segmentColour("")).toMatch(/^#[0-9a-f]{6}$/);
   });
@@ -37,8 +29,8 @@ describe("segmentColour", () => {
 
 describe("fragmentColour", () => {
   it("gives the first four fragments four different colours", () => {
-    // With two, F1 and F3 come out the same and a reader counting fragments
-    // off the drawing has to count rather than see.
+
+
     const shades = [0, 1, 2, 3].map(fragmentColour);
     expect(new Set(shades).size).toBe(4);
   });
@@ -49,7 +41,7 @@ describe("fragmentColour", () => {
   });
 
   it("stays inside the palette for an index below zero", () => {
-    // A negative modulo would index off the end and return undefined.
+
     expect(fragmentColour(-1)).toBe(fragmentColour(0));
   });
 });

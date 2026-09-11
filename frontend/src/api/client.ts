@@ -1,30 +1,8 @@
-/**
- * API client for the G-Synth Django backend.
- *
- * Access tokens are short-lived (30 min in production). Rather than making
- * every caller handle expiry, a 401 triggers one refresh attempt and the
- * original request is replayed. Concurrent 401s share a single refresh
- * promise, so a page issuing five requests doesn't fire five refreshes and
- * invalidate its own rotating refresh token.
- */
-
-/**
- * Where the API lives.
- *
- * Empty in development: Vite proxies `/api` to :8000, so a relative path is
- * same-origin and no CORS is involved. In production the workspace is a
- * static site and the API is a separate service, so the two are on different
- * origins and the path has to be absolute — `VITE_API_BASE` supplies it at
- * build time. Trailing slashes are stripped so `${BASE}/api/...` never
- * doubles one.
- */
 function normaliseApiBase(value: string): string {
   const base = value.trim().replace(/\/+$/, "");
   if (!base || /^https?:\/\//i.test(base)) return base;
 
-  // Render's Blueprint service references expose `host` but not `url`.
-  // Production services are HTTPS, so turn the supplied hostname into the
-  // absolute origin fetch() needs. Local development keeps the empty value.
+
   return `https://${base}`;
 }
 
@@ -55,11 +33,9 @@ export type Annotation = {
   end: number;
   direction: number;
   color: string;
-  /** Clipped where a vector feature met the insert junction. Set only on a
-   *  cloned plasmid's own features — a truncated promoter is worth seeing,
-   *  not silently keeping its pre-cut length. */
+
   truncated?: boolean;
-  /** Optional reading-frame bounds for coordinate-level translation. */
+
   translation_start?: number;
   translation_end?: number;
   regulatory_class?: string;
@@ -165,10 +141,10 @@ export type Fragment = {
   top_end: number;
   left_overhang: string;
   right_overhang: string;
-  /** Which strand the overhang sits on: "top", "bottom" or "blunt". */
+
   left_overhang_strand: string;
   right_overhang_strand: string;
-  /** How far right the bottom strand's left end sits, in bases. */
+
   bottom_offset: number;
   is_first: boolean;
   is_last: boolean;
@@ -178,10 +154,7 @@ export type Oligo = Record<string, string | number>;
 
 export type DuplexSpan = { name: string; start: number; end: number };
 
-/**
- * Both strands in one coordinate frame. A space means that strand is absent
- * from the column — which is what a single-stranded overhang looks like.
- */
+
 export type Duplex = {
   top: string;
   bottom: string;
@@ -200,7 +173,7 @@ export type TerminalEnd = {
   side: "left" | "right";
   enzyme: string;
   overhang: string;
-  /** "5'", "3'" or "blunt" — polarity follows the side, not the strand. */
+
   kind: string;
 };
 
@@ -209,7 +182,7 @@ export type AssemblyResult = {
   construct_reverse: string;
   construct_length: number;
   construct_gc: number;
-  /** Zero-based, end-exclusive insert span inside the linear construct. */
+
   insert_start: number;
   insert_end: number;
   topology: "linear";
@@ -218,7 +191,7 @@ export type AssemblyResult = {
   overhang_length: number;
   longest_oligo: number;
   junction_overhangs: string[];
-  /** The outer ends as the assembled fragments present them, not as designed. */
+
   terminal_ends: TerminalEnd[];
   fragments: Fragment[];
   oligos: Oligo[];
@@ -226,7 +199,7 @@ export type AssemblyResult = {
   duplex: Duplex;
   tm_conditions: { name: string; summary: string; model: string };
   warnings: string[];
-  /** Empty means the oligos re-ligate to the design. Non-empty blocks ordering. */
+
   verification: string[];
   preflight?: PreflightReport;
   provenance?: Provenance;
@@ -325,7 +298,7 @@ export type ReadingFrameAssessment = {
   }[];
 };
 
-/** The recombinant plasmid: what you actually end up with. */
+
 export type CloneResult = {
   plasmid: string;
   name: string;
@@ -343,7 +316,7 @@ export type CloneResult = {
   protein: string;
   protein_length: number;
   reading_frame: ReadingFrameAssessment;
-  /** True when the insert reads on the minus strand of the vector's numbering. */
+
   reversed_insert: boolean;
   tags: { name: string; end: string; present: boolean; position: number | null; note: string }[];
   vector: { recognised: boolean; spec: VectorSpec | null; check: VectorCheck | null };
@@ -355,18 +328,18 @@ export type CloneResult = {
   gel?: GelSimulation;
   validation: ValidationCheck[];
   warnings: string[];
-  /** Empty means these two molecules really do join. */
+
   problems: string[];
   is_clonable: boolean;
   preflight?: PreflightReport;
   provenance?: Provenance;
-  /** Null when the insert was supplied already cut — there was no SSD design. */
+
   insert: SSDResult | null;
   assembly: AssemblyResult | null;
   project_id?: number;
 };
 
-/** One PCR primer. `tail` is the 5' addition; `anneals` binds template. */
+
 export type PcrPrimer = {
   name: string;
   sequence: string;
@@ -377,13 +350,13 @@ export type PcrPrimer = {
   end: number;
   length: number;
   anneal_length: number;
-  /** Tm of the annealing part — what the annealing temperature comes from. */
+
   tm: number;
-  /** Tm of the whole oligo, which only applies once the tail is copied. */
+
   tm_full: number;
   gc: number;
   enzyme: string | null;
-  /** Recognition sequence as it appears in this primer's 5′→3′ orientation. */
+
   restriction_site: string;
   has_gc_clamp: boolean;
   warnings: string[];
@@ -393,11 +366,11 @@ export type DigestEnd = {
   sequence: string;
   strand: string;
   side: string;
-  /** "5'", "3'" or "blunt" — polarity follows the side, not the strand. */
+
   kind: string;
 };
 
-/** The product after both ends are cut: the insert that goes into a vector. */
+
 export type PcrDigest = {
   top: string;
   bottom: string;
@@ -420,12 +393,12 @@ export type PcrResult = {
   left_enzyme: string | null;
   right_enzyme: string | null;
   insert_orf_start: number | null;
-  /** Empty means the product can be cut into the insert as designed. */
+
   problems: string[];
   warnings: string[];
   is_clean: boolean;
   primer_source: "automatic" | "custom";
-  /** Null for conventional PCR, and when a problem blocks the digest. */
+
   digest: PcrDigest | null;
   gel?: GelSimulation;
   preflight?: PreflightReport;
@@ -476,7 +449,7 @@ export type OptimiseResult = {
   table_source: string;
   metric_label: string;
   expression_yield_predicted: false;
-  /** Null when the input was a protein: there was no gene to measure. */
+
   cai_before: number | null;
   cai_after: number;
   gc_before: number | null;
@@ -485,7 +458,7 @@ export type OptimiseResult = {
   rare_codons_before: number;
   rare_codons_after: number;
   changed_codons: number;
-  /** Empty means the gene can be built and cut as asked. */
+
   problems: string[];
   warnings: string[];
   is_clean: boolean;
@@ -563,7 +536,7 @@ export type Difference = {
   to_residue: string;
   silent: boolean | null;
   description: string;
-  /** Null when the read came as letters — "unknown", not "fine". */
+
   quality?: number | null;
   confident?: boolean | null;
   read_index?: number | null;
@@ -586,7 +559,7 @@ export type VerifyReport = {
   coverage: number;
   gaps: [number, number][];
   fully_covered: boolean;
-  /** True only when the requested region is completely covered and agrees. */
+
   is_verified: boolean;
   verification_state?:
     | "fully_verified"
@@ -611,19 +584,19 @@ export type VerifyReport = {
     difference_count: number;
     is_clean: boolean;
     warnings: string[];
-    /** Null when the read arrived as letters rather than as a trace. */
+
     mean_quality?: number | null;
     trimmed_start?: number;
     trimmed_end?: number;
   }[];
   warnings: string[];
-  /** Present only on the trace endpoint. */
+
   traces?: TraceSummary[];
   trace_tracks?: TraceTrack[];
   trace_windows?: TraceWindow[];
-  /** Present only for chromatograms: oriented F/R assembly at the selected cutoff. */
+
   consensus?: ConsensusReport;
-  /** All called bases assembled before quality gating. */
+
   raw_consensus?: ConsensusReport;
   quality_cutoff?: number;
 };
@@ -637,11 +610,11 @@ export type TraceSummary = {
   trimmed_length: number;
   high_quality_bases: number;
   sample_count: number;
-  /** Enough good sequence to be worth comparing to a design at all. */
+
   usable: boolean;
 };
 
-/** Quality-trimmed chromatogram evidence, oriented left-to-right on the reference. */
+
 export type TraceTrack = {
   read: string;
   reference_start: number;
@@ -654,7 +627,7 @@ export type TraceTrack = {
   traces: Record<string, number[]>;
 };
 
-/** The peaks around one difference — never a whole trace, which is megabytes. */
+
 export type TraceWindow = {
   read: string;
   position: number;
@@ -765,7 +738,7 @@ export type HybridizationResult = {
 
 export type VectorTag = { name: string; end: string; note: string };
 
-/** A backbone G-Synth knows about. `has_sequence` means it ships with one. */
+
 export type VectorSpec = {
   key: string;
   name: string;
@@ -807,9 +780,7 @@ export type VectorCheck = {
 };
 
 export type CloneParams = DesignParams & {
-  /** Ligate the fragment as supplied instead of designing an insert around
-   *  it. Requires `insert_reverse`: the stagger between the two strands is
-   *  the overhang, so one strand alone cannot show both ends. */
+
   pre_digested?: boolean;
   insert_reverse?: string;
   orf_start?: number | null;
@@ -818,9 +789,7 @@ export type CloneParams = DesignParams & {
   vector?: string;
   vector_name?: string;
   vector_annotations?: Annotation[];
-  /** User-reviewed annotations on the final recombinant product. These do
-   * not alter any DNA bases; they replace the generated annotation list only
-   * when a ligated construct is saved or exported. */
+
   product_annotations?: Annotation[];
   vector_is_circular?: boolean;
   fragment?: boolean;
@@ -833,7 +802,7 @@ export type Enzyme = {
   overhang: string;
   overhang_type: string;
   supplies_start_codon: boolean;
-  /** Preferred in cloning selectors; all supported geometries remain available. */
+
   common: boolean;
 };
 
@@ -886,7 +855,7 @@ export type Project = ProjectSummary & {
 
 export class ApiError extends Error {
   status: number;
-  /** Field-level errors from DRF, e.g. { email: ["already exists"] } */
+
   fields: Record<string, string[]>;
 
   constructor(status: number, message: string, fields: Record<string, string[]> = {}) {
@@ -916,7 +885,7 @@ export const tokenStore = {
   },
 };
 
-/** Turn a DRF error body into one readable sentence plus per-field detail. */
+
 function describe(status: number, body: unknown): ApiError {
   if (body && typeof body === "object") {
     const obj = body as Record<string, unknown>;
@@ -936,7 +905,7 @@ function describe(status: number, body: unknown): ApiError {
   return new ApiError(status, `Request failed (${status}).`);
 }
 
-/** Hand a blob to the browser as a download. */
+
 function saveBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -946,8 +915,8 @@ function saveBlob(blob: Blob, filename: string): void {
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
-  // Firefox can cancel the download when the object URL is revoked in the
-  // same task as the synthetic click.
+
+
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
@@ -965,7 +934,7 @@ async function refreshAccessToken(): Promise<string | null> {
   if (!response.ok) return null;
 
   const data = (await response.json()) as { access: string; refresh?: string };
-  // ROTATE_REFRESH_TOKENS is on, so keep the new refresh token when sent.
+
   if (data.refresh) tokenStore.save({ access: data.access, refresh: data.refresh });
   else tokenStore.saveAccess(data.access);
   return data.access;
@@ -1000,7 +969,7 @@ function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Respo
 type RequestOptions = {
   method?: string;
   body?: unknown;
-  /** Set for multipart uploads — the browser must write its own boundary. */
+
   formData?: FormData;
   auth?: boolean;
 };
@@ -1138,13 +1107,7 @@ export const api = {
     region_end?: number | null;
   }) => request<VerifyReport>("/api/design/verify/", { method: "POST", body: params }),
 
-  /**
-   * The same comparison, from ABIF or SCF traces rather than pasted letters.
-   *
-   * Multipart because a trace is binary — base64 in JSON would inflate a
-   * 400 kB file by a third for nothing. What comes back carries the quality
-   * of each disputed base and the peaks around it.
-   */
+
   verifyTraces: (params: {
     design: string;
     files: File[];
@@ -1204,14 +1167,14 @@ export const api = {
       auth: false,
     }),
 
-  /** GET a file the browser saves — for endpoints that need no body. */
+
   downloadUrl: async (path: string, filename: string) => {
     const response = await authenticatedFetch(path);
     if (!response.ok) throw new ApiError(response.status, "Download failed.");
     saveBlob(await response.blob(), filename);
   },
 
-  /** Downloads stream as files, so they bypass the JSON request helper. */
+
   download: async (path: string, params: DesignParams | CloneParams, filename: string) => {
     const response = await authenticatedFetch(path, {
       method: "POST",

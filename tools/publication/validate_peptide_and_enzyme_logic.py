@@ -1,4 +1,3 @@
-"""Generate machine-readable evidence for peptide starts and enzyme coverage."""
 from __future__ import annotations
 
 import hashlib

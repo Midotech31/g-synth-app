@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the journal-neutral G-Synth submission and review package."""
+
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def copy_file(source: Path, destination: Path) -> None:
 
 
 def export_tiff(source: Path, destination: Path, width_in: float) -> dict[str, str | int | float]:
-    """Export RGB TIFF artwork at its intended print size without resampling."""
+
     destination.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(source) as image:
         rgba = image.convert("RGBA")
@@ -85,7 +85,7 @@ def add_simple_title(doc: Document, title: str, subtitle: str) -> None:
 
 
 def configure_cover_letter(doc: Document) -> None:
-    """Apply compact, readable cover-letter typography."""
+
     configure_document(doc, "G-Synth — Cover Letter")
     normal = doc.styles["Normal"]
     normal.font.size = Pt(9.5)

@@ -1,4 +1,3 @@
-"""Render the G-Synth double-helix and leaf brand mark."""
 import math
 import pathlib
 
@@ -14,11 +13,7 @@ NAVY, MID, TEAL = "#0b2545", "#1b5c86", "#34a0bd"
 
 
 def strand(phase: float) -> str:
-    """One ribbon, as a closed outline whose width breathes along the sweep.
 
-    A helix seen side-on shows its ribbon broadside at the extremes and
-    edge-on where the strands cross, so the width follows |sin|.
-    """
     left, right = [], []
     for i in range(STEPS + 1):
         f = i / STEPS
@@ -29,7 +24,7 @@ def strand(phase: float) -> str:
         half = (W_MIN + (W_MAX - W_MIN) * abs(math.sin(t))) / 2
         half *= 0.42 + 0.58 * min(1.0, f / 0.05, (1 - f) / 0.05)
 
-        # Offset along the normal to preserve ribbon width through curves.
+
         dx = AMP * math.cos(t) * TURNS * 2 * math.pi
         dy = BOT - TOP
         n = math.hypot(dx, dy)
@@ -43,7 +38,7 @@ def strand(phase: float) -> str:
 
 
 def rungs() -> list[str]:
-    """Return legible base-pair rungs away from helix crossings."""
+
     out = []
     for i in range(1, 10):
         f = i / 10
@@ -63,7 +58,7 @@ def rungs() -> list[str]:
 
 
 def leaf(base, tip, bulge, back=0.82):
-    """An almond leaf: two arcs bowed to opposite sides of the base–tip axis."""
+
     (bx, by), (tx, ty) = base, tip
     mx, my = (tx + bx) / 2, (ty + by) / 2
     dx, dy = tx - bx, ty - by
@@ -75,7 +70,7 @@ def leaf(base, tip, bulge, back=0.82):
 
 
 def midrib(base, tip, bulge):
-    """The vein, bowed a little less than the leaf's own upper edge."""
+
     (bx, by), (tx, ty) = base, tip
     mx, my = (tx + bx) / 2, (ty + by) / 2
     dx, dy = tx - bx, ty - by

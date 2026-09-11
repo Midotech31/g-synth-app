@@ -1,8 +1,3 @@
-"""Stable, machine-readable verdicts shared by every design workflow.
-
-Human prose changes as the interface improves. Codes and statuses do not:
-they are the contract saved projects, exports and clients can rely on.
-"""
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
@@ -72,7 +67,7 @@ class PreflightReport:
 
 
 def diagnostic_for(check: PreflightCheck) -> Diagnostic | None:
-    """Convert a non-passing check into its stable diagnostic."""
+
     if check.status == "pass":
         return None
     return Diagnostic(

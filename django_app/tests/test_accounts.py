@@ -1,4 +1,3 @@
-"""Auth flow: register, login, refresh, me, change-password."""
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -39,9 +38,7 @@ class TestRegister:
         assert r.status_code == 400
 
     def test_rejects_password_derived_from_the_email(self, api_client):
-        """The first guess anyone makes, and the length, common-list and
-        all-digits validators all accept it: "merzoug2024" is eleven
-        characters, is not a known common password, and is not numeric."""
+
         r = api_client.post(reverse("auth-register"), {
             "email": "merzoug@example.com", "name": "Someone Else",
             "password": "merzoug2024", "password2": "merzoug2024",

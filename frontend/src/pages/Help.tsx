@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 
 import Icon, { type IconName } from "../components/Icon";
 
-/** Concise bench-facing reference for each workflow and its evidence. */
 
 type Section = {
   to: string;

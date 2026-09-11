@@ -82,3 +82,13 @@ it("renaming a CDS preserves its translation origin", () => {
   expect(result.annotation?.inferred).toBe(true);
   expect(result.annotation?.basis).toBe("Sequence evidence.");
 });
+
+it("preserves a new evidence note when a candidate span changes", () => {
+  const previous = { name: "Candidate", type: "misc_feature", start: 10, end: 31,
+    direction: 1, color: "#0E6E77", inferred: true, basis: "Previous interval." };
+  const draft = { name: "Revised", type: "misc_feature", start: "12", end: "31", direction: "1",
+    color: "#0E6E77", wraps: false, basis: "Revised interval checked against source record." };
+  const result = annotationFromDraft(draft, 100, false, previous);
+  expect(result.annotation?.basis).toBe(draft.basis);
+  expect(result.annotation?.inferred).toBe(true);
+});

@@ -7,7 +7,7 @@ const VERDICT = {
   blocked: { label: "Blocked", icon: "cross" as const },
 };
 
-/** A single, workflow-independent release gate for every molecular design. */
+
 export default function PreflightPanel({ report }: { report?: PreflightReport }) {
   if (!report) return null;
   const verdict = VERDICT[report.verdict];

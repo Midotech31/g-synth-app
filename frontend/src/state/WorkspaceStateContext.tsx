@@ -19,11 +19,7 @@ type WorkspaceStateContextValue = {
 
 const WorkspaceStateContext = createContext<WorkspaceStateContextValue | null>(null);
 
-/**
- * Keeps unfinished workspace work alive while authenticated routes swap in
- * and out. The provider deliberately lives inside the protected shell: a
- * sign-out destroys it, so sequences and results cannot cross accounts.
- */
+
 export function WorkspaceStateProvider({ children, identity = "anonymous" }: { children: ReactNode; identity?: string }) {
   const storageKey = `gsynth.workspace.${identity}`;
   const [store, setStore] = useState<WorkspaceStore>(() => {
@@ -36,14 +32,14 @@ export function WorkspaceStateProvider({ children, identity = "anonymous" }: { c
   });
 
   useEffect(() => {
-    // Recompute derived results after restoring editable inputs.
+
     const draftEntries = Object.entries(store).filter(([key]) => (
       !/\.(result|report|primers|ligation|saved|selected|traceFiles|project)$/.test(key)
     ));
     try {
       window.sessionStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(draftEntries)));
     } catch {
-      // Session persistence is optional.
+
     }
   }, [storageKey, store]);
 
@@ -54,7 +50,7 @@ export function WorkspaceStateProvider({ children, identity = "anonymous" }: { c
   );
 }
 
-/** A useState-compatible value that survives navigation between workspaces. */
+
 export function useWorkspaceState<T>(
   key: string,
   initialValue: T,

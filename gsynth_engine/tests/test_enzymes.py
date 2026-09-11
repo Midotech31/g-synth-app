@@ -1,16 +1,3 @@
-"""Tests for the restriction tables.
-
-Two sets, for two different questions.
-
-`RESTRICTION_ENZYMES` is the preferred cloning subset whose reference designs
-are pinned. Its curated coordinates are checked against REBASE because a
-transposed cut position would silently produce an incorrect overhang.
-
-`ALL_ENZYMES` answers a different question — "what else cuts here" — and
-breadth is the point. pET-21a has sixty single-cutters; a plasmid map drawn
-from nineteen shows fourteen of them, and a diagnostic digest planned
-against that map can fail on a site nobody was ever shown.
-"""
 import pytest
 
 from gsynth_engine.constants import (
@@ -27,16 +14,11 @@ biopython = pytest.importorskip("Bio.Restriction", reason="regeneration source")
 
 
 class TestTheCuratedSetIsCorrect:
-    """Hand-typed data, checked against the authority it came from."""
+
 
     @pytest.mark.parametrize("name", sorted(RESTRICTION_ENZYMES))
     def test_geometry_matches_rebase(self, name):
-        """Recognition sequence and both cut positions, against Biopython.
 
-        This is the whole reason the curated set is allowed to be hand-typed:
-        it is verified against REBASE on every run. Without this, a single
-        transposed digit gives one enzyme the wrong overhang for ever.
-        """
         enzyme = getattr(biopython, name)
         site = str(enzyme.site)
         ours = RESTRICTION_ENZYMES[name]
@@ -48,7 +30,7 @@ class TestTheCuratedSetIsCorrect:
 
 class TestTheWideTable:
     def test_contains_every_curated_enzyme(self):
-        """The two must not diverge; the curated names are the canonical ones."""
+
         missing = sorted(set(RESTRICTION_ENZYMES) - set(ALL_ENZYMES))
         assert missing == []
         for name, spec in RESTRICTION_ENZYMES.items():
@@ -56,19 +38,12 @@ class TestTheWideTable:
                 assert ALL_ENZYMES[name][key] == spec[key], name
 
     def test_is_substantially_wider_than_the_freezer(self):
-        """If this collapses back to nineteen the generator has silently
-        stopped running and every plasmid map is under-annotated again."""
+
         assert len(ALL_ENZYMES) >= 100
 
     @pytest.mark.parametrize("name", sorted(ALL_ENZYMES))
     def test_every_entry_is_a_real_type_IIP_specification(self, name):
-        """No ambiguity codes, and the cut falls inside the site.
 
-        The scanner matches literally, so an N in a site reports positions
-        the enzyme does not cut. And the remainders are slices of the site,
-        so a Type IIS enzyme cutting past its own end yields empty strings —
-        wrong ends rather than an error, which is worse.
-        """
         spec = ALL_ENZYMES[name]
         site = str(spec["recognition"])
         top, bottom = int(spec["cut_top"]), int(spec["cut_bottom"])
@@ -79,13 +54,7 @@ class TestTheWideTable:
 
     @pytest.mark.parametrize("name", sorted(ALL_ENZYMES))
     def test_the_derived_ends_reassemble_the_site(self, name):
-        """Cutting and re-joining must give the recognition sequence back.
 
-        This is the property the whole cut model rests on: what each oligo
-        carries is *derived* from the cut positions per role. If the
-        derivation is wrong for an enzyme, its two remainders will not
-        reconstitute the site it came from.
-        """
         site = str(ALL_ENZYMES[name]["recognition"])
         left_fwd, left_rev = left_remainders(name)
         right_fwd, right_rev = right_remainders(name)
@@ -95,8 +64,7 @@ class TestTheWideTable:
 
     @pytest.mark.parametrize("name", sorted(ALL_ENZYMES))
     def test_overhang_agrees_with_the_cut_positions(self, name):
-        """`overhang()` is what the compatibility checks compare against, so
-        it must be derived from the same two numbers and not stored."""
+
         spec = ALL_ENZYMES[name]
         site = str(spec["recognition"])
         top, bottom = int(spec["cut_top"]), int(spec["cut_bottom"])
@@ -113,8 +81,8 @@ class TestTheWideTable:
         assert {name for name in ALL_ENZYMES if supplies_start_codon(name)} == {
             "CviAII", "FatI", "NdeI",
         }
-        # Each of these recognition sites contains ATG, but the cut removes
-        # it or leaves an extra frame-shifting base after it.
+
+
         for name in ("CciI", "FaeI", "NcoI", "NsiI", "PciI", "SphI"):
             assert "ATG" in str(ALL_ENZYMES[name]["recognition"])
             assert not supplies_start_codon(name)
@@ -122,7 +90,7 @@ class TestTheWideTable:
 
 class TestIsoschizomersAreCollapsed:
     def test_one_name_per_cut_specification(self):
-        """Five names for one site turns a plasmid map into noise."""
+
         seen: dict[tuple, str] = {}
         for name, spec in ALL_ENZYMES.items():
             key = (spec["recognition"], spec["cut_top"], spec["cut_bottom"])
@@ -130,20 +98,12 @@ class TestIsoschizomersAreCollapsed:
             seen[key] = name
 
     def test_the_familiar_name_survives(self):
-        """NheI, not AsuNHI — the canonical choice must favour the name a
-        biologist will recognise, or the map is unreadable."""
+
         assert ALL_ENZYMES["NheI"]["recognition"] == "GCTAGC"
         assert "AsuNHI" not in ALL_ENZYMES, "a true isoschizomer of NheI"
 
     def test_a_neoschizomer_is_not_collapsed_into_its_twin(self):
-        """Same site, opposite cut, and both must survive.
 
-        NheI and BmtI both recognise GCTAGC. NheI leaves G^CTAG_C — a 5'
-        overhang; BmtI leaves G_CTAG^C — a 3' one. Grouping by recognition
-        sequence would merge them and hand back the wrong sticky end for
-        whichever name lost, which is the same class of error as reading
-        polarity off the strand instead of the cut.
-        """
         nhe, bmt = ALL_ENZYMES["NheI"], ALL_ENZYMES["BmtI"]
         assert nhe["recognition"] == bmt["recognition"] == "GCTAGC"
         assert (nhe["cut_top"], nhe["cut_bottom"]) == (1, 5)

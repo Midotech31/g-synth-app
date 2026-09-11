@@ -1,4 +1,3 @@
-"""Auth URL routes — mounted under /api/auth/ in config.urls."""
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 

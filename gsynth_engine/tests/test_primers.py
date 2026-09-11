@@ -1,10 +1,3 @@
-"""Tests for sequencing primer design.
-
-Run against a real recombinant plasmid rather than a synthetic template,
-because the two properties that matter — uniqueness across the whole
-molecule, and reading *into* the insert rather than at it — only mean
-anything on a molecule with a real backbone in it.
-"""
 from __future__ import annotations
 
 import pytest
@@ -54,7 +47,7 @@ class TestFlankingPrimers:
         assert result_plasmid
 
     def test_every_primer_is_unique_in_the_plasmid(self, short):
-        """A primer that binds twice gives a superimposed trace and no data."""
+
         result = design_sequencing_primers(
             short.plasmid,
             target_start=short.insert_start, target_end=short.insert_end,
@@ -79,8 +72,7 @@ class TestFlankingPrimers:
             assert primer.sequence == expected, primer.name
 
     def test_primers_sit_back_from_the_target(self, short):
-        """A primer starting at the insert reads its beginning as noise —
-        the part with the ATG and the tag in it."""
+
         result = design_sequencing_primers(
             short.plasmid,
             target_start=short.insert_start, target_end=short.insert_end,
@@ -107,7 +99,7 @@ class TestFlankingPrimers:
             assert 52 <= primer.tm <= 62, primer.name
 
     def test_the_tm_is_the_engines_own_model_under_stated_conditions(self, short):
-        """Two numbers in one project must mean the same thing."""
+
         result = design_sequencing_primers(
             short.plasmid,
             target_start=short.insert_start, target_end=short.insert_end,
@@ -137,7 +129,7 @@ class TestCoverage:
         assert result.warnings == []
 
     def test_a_long_insert_gets_internal_primers(self, long):
-        """One Sanger read gives ~700 usable bases; a 950 bp insert needs more."""
+
         result = design_sequencing_primers(
             long.plasmid,
             target_start=long.insert_start, target_end=long.insert_end,
@@ -146,8 +138,7 @@ class TestCoverage:
         assert result.covers_target, result.gaps
 
     def test_read_ranges_wrap_the_origin(self, short):
-        """A read runs round the origin as readily as any other stretch.
-        Clamping instead reported a primer past the origin as reading nothing."""
+
         result = design_sequencing_primers(
             short.plasmid,
             target_start=short.insert_start, target_end=short.insert_end,
@@ -167,7 +158,7 @@ class TestCoverage:
         assert any("not reached by any primer" in note for note in result.warnings)
 
     def test_a_repetitive_insert_reports_what_it_could_not_place(self, short):
-        """Nothing in a tandem repeat is unique, so no primer can be made."""
+
         record = vectors.sequence_of("pET-21a")
         design = design_small_sequence(
             "ATG" + "GCTAGCAAAGGTTTCCGTGAAGATCTGGCAAAATTCCTGCAGGCTAACGGT" * 18,

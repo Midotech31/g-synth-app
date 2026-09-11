@@ -1,4 +1,3 @@
-"""Environment-driven base settings for the G-Synth API."""
 import sys
 from datetime import timedelta
 from pathlib import Path
@@ -7,7 +6,7 @@ import environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-# Shared scientific engine
+
 REPO_ROOT = BASE_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -15,16 +14,14 @@ if str(REPO_ROOT) not in sys.path:
 env = environ.Env(DEBUG=(bool, False))
 environ.Env.read_env(BASE_DIR / ".env")
 
-# Production settings reject this development-only key.
+
 INSECURE_DEV_SECRET_KEY = "dev-insecure-do-not-use-in-production-32chars-min"
 
 SECRET_KEY = env("DJANGO_SECRET_KEY", default=INSECURE_DEV_SECRET_KEY)
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Apps
-# ─────────────────────────────────────────────────────────────────────────────
+
 DJANGO_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -35,7 +32,7 @@ DJANGO_APPS = [
 ]
 THIRD_PARTY_APPS = [
     "rest_framework",
-    # Required for logout and credential-change revocation.
+
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
 ]
@@ -48,13 +45,11 @@ LOCAL_APPS = [
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Middleware
-# ─────────────────────────────────────────────────────────────────────────────
+
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",       # must precede CommonMiddleware
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",  # static files in prod
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -79,9 +74,7 @@ TEMPLATES = [{
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Database; production requires DATABASE_URL.
-# ─────────────────────────────────────────────────────────────────────────────
+
 DATABASES = {
     "default": env.db_url(
         "DATABASE_URL",
@@ -89,26 +82,22 @@ DATABASES = {
     ),
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Auth
-# ─────────────────────────────────────────────────────────────────────────────
+
 AUTH_USER_MODEL = "accounts.User"
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
      "OPTIONS": {"min_length": 8}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-    # Reject passwords similar to the account identity.
+
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
      "OPTIONS": {"user_attributes": ("email", "name")}},
 ]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DRF + JWT
-# ─────────────────────────────────────────────────────────────────────────────
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        # Reject tokens issued before the latest credential change.
+
         "apps.accounts.authentication.VersionedJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
@@ -120,7 +109,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
-    # Scoped limits protect authentication and compute-intensive endpoints.
+
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
@@ -140,29 +129,23 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
     "ROTATE_REFRESH_TOKENS": True,
-    # Revoke superseded refresh tokens after rotation.
+
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
     "TOKEN_OBTAIN_SERIALIZER": "apps.accounts.serializers.VersionedTokenObtainPairSerializer",
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Cross-origin web client
-# ─────────────────────────────────────────────────────────────────────────────
+
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CORS_ALLOW_CREDENTIALS = True
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Optional private study assistant; disabled by default.
-# ─────────────────────────────────────────────────────────────────────────────
+
 OLLAMA_BASE_URL = env("OLLAMA_BASE_URL", default="http://localhost:11434")
 OLLAMA_MODEL = env("OLLAMA_MODEL", default="llama3.1")
 OLLAMA_TIMEOUT_SECONDS = env.int("OLLAMA_TIMEOUT_SECONDS", default=60)
 TUTOR_ENABLED = env.bool("TUTOR_ENABLED", default=False)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Static files
-# ─────────────────────────────────────────────────────────────────────────────
+
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
@@ -170,9 +153,7 @@ STORAGES = {
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Misc
-# ─────────────────────────────────────────────────────────────────────────────
+
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True

@@ -277,7 +277,7 @@ export default function Design() {
         {saved && <div className="notice notice-info" role="status">{saved}</div>}
 
         <div className="design-layout">
-          {/* ── Inputs ─────────────────────────────────────────────────── */}
+
           <div className="card design-input-card">
             <div className="card-head">
               <h2 style={{ flex: 1 }}>Insert</h2>
@@ -311,7 +311,7 @@ export default function Design() {
             </div>
           </div>
 
-          {/* ── Results ────────────────────────────────────────────────── */}
+
           <div className="design-results">
             {!result ? (
               <div className="card">
@@ -383,9 +383,7 @@ export default function Design() {
                       <div className="k">Longest oligo</div>
                       <div className="v">{result.longest_oligo}<small>nt</small></div>
                     </div>
-                    {/* A long gene needs more distinct junctions than 4 nt can
-                        supply, so the design widens them. The form still shows
-                        what was asked for; this shows what was built. */}
+
                     <div className="stat">
                       <Icon name="target" size={19} />
                       <div className="k">Overhang</div>
@@ -462,9 +460,7 @@ export default function Design() {
                 <div className="card">
                   <div className="card-head">
                     <h2 style={{ flex: 1 }}>Construct map</h2>
-                    {/* Measured off the assembled fragments. The design's own
-                        label cannot disagree with itself, so showing that
-                        would confirm nothing. */}
+
                     <span className="label">
                       {result.terminal_ends.map((end) => (
                         <span key={end.side} className="terminal-end">

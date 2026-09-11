@@ -1,9 +1,3 @@
-"""Tests for sequencing verification.
-
-Built on a real construct: a designed insert cloned into pET-21a(+), then
-reads simulated from the resulting plasmid the way a sequencing facility
-would return them — in either orientation, with noise at both ends.
-"""
 from __future__ import annotations
 
 import pytest
@@ -29,7 +23,7 @@ def construct():
 
 
 def sanger(plasmid: str, start: int, end: int, *, noise: int = 30) -> str:
-    """A read as a facility returns it: junk, sequence, junk."""
+
     length = len(plasmid)
     body = "".join(plasmid[i % length] for i in range(start, end))
     return "A" * noise + body + "T" * noise
@@ -46,7 +40,7 @@ class TestPlacing:
         assert not aligned.reverse_complemented
 
     def test_a_reversed_read_is_recognised_and_handled(self, construct):
-        """Half of all Sanger reads come back on the other strand."""
+
         result, _ = construct
         read = sanger(result.plasmid, result.insert_start - 150, result.insert_end + 150)
         aligned = verify_read(result.plasmid, reverse_complement(read), circular=True)
@@ -56,7 +50,7 @@ class TestPlacing:
         assert aligned.is_clean
 
     def test_the_noisy_ends_are_trimmed_before_comparing(self, construct):
-        """Left in, they produce differences indistinguishable from mutations."""
+
         result, _ = construct
         read = sanger(result.plasmid, result.insert_start, result.insert_end, noise=40)
 
@@ -67,7 +61,7 @@ class TestPlacing:
         assert trimmed.is_clean
 
     def test_a_read_across_the_origin_is_continuous(self, construct):
-        """Split in the coordinates, continuous in the molecule."""
+
         result, _ = construct
         read = sanger(result.plasmid, len(result.plasmid) - 300, len(result.plasmid) + 300)
         aligned = verify_read(result.plasmid, read, circular=True)
@@ -89,12 +83,7 @@ class TestPlacing:
             verify_read(result.plasmid, "", circular=True)
 
     def test_short_linear_reference_inside_a_long_t7_read(self):
-        """Vector flanks around a short insert are not alignment failures.
 
-        This is the geometry of the experimental insulin-glargine T7 reads:
-        the sequencer reads through vector, across the complete 123 bp insert,
-        and back into vector while validation targets the insert alone.
-        """
         reference = clean_filler(123, 91)
         read = clean_filler(180, 92) + reference + clean_filler(210, 93)
         aligned = verify_read(reference, read, circular=False, trim=0)
@@ -141,7 +130,7 @@ class TestDifferences:
         assert difference.found == replacement
 
     def test_a_substitution_is_reported_as_its_effect_on_the_protein(self, construct):
-        """What the user needs to know is whether it matters."""
+
         result, design = construct
         at = result.insert_start + design.orf_start + 30
         replacement = "G" if result.plasmid[at] != "G" else "C"
@@ -155,7 +144,7 @@ class TestDifferences:
             coding_end=result.insert_end,
         )
         difference = aligned.differences[0]
-        assert difference.residue == 11          # base 30 of the frame
+        assert difference.residue == 11
         assert difference.silent in (True, False)
         assert difference.from_residue
         assert "residue" in difference.description
@@ -185,7 +174,7 @@ class TestDifferences:
         assert any(d.kind == "insertion" for d in aligned.differences)
 
     def test_a_poor_read_is_flagged_rather_than_believed(self, construct):
-        """A dozen differences in one read is a bad trace, not a dozen mutations."""
+
         result, _ = construct
         body = list(result.plasmid[result.insert_start : result.insert_end])
         for i in range(20, len(body), 30):
@@ -200,8 +189,7 @@ class TestDifferences:
         assert any("trace quality" in note for note in aligned.warnings)
 
     def test_a_hopeless_read_is_refused_rather_than_misreported(self, construct):
-        """At one error in nine there is nothing to anchor on. Saying so beats
-        reporting forty mutations that are really a failed run."""
+
         result, _ = construct
         body = list(result.plasmid[result.insert_start : result.insert_end])
         for i in range(5, len(body), 9):
@@ -232,7 +220,7 @@ class TestReport:
         assert len(report.reads) == 2
 
     def test_a_gap_in_the_coverage_is_reported(self, construct):
-        """Half the insert read is not the insert verified."""
+
         result, _ = construct
         report = verify(
             result.plasmid,

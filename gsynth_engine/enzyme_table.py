@@ -1,13 +1,7 @@
-"""Versioned REBASE-derived restriction-enzyme cut geometries.
-
-Each entry is a distinct cut specification; isoschizomers are retained as
-aliases. The preferred subset in ``constants.py`` appears first in selectors.
-"""
 from __future__ import annotations
 
 from typing import Final
 
-#: 109 distinct specifications, from 289 commercially available enzymes.
 ENZYME_TABLE: Final[dict[str, dict[str, object]]] = {
     "AatII": {"recognition": "GACGTC", "cut_top": 5, "cut_bottom": 1},
     "AbsI": {"recognition": "CCTCGAGG", "cut_top": 2, "cut_bottom": 6},

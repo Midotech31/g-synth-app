@@ -1,14 +1,5 @@
 import type { JunctionView } from "../api/client";
 
-/**
- * One ligation seam, drawn as the two ends that made it.
- *
- * A banner saying "the overhangs match" asks to be believed. Showing the two
- * ends about to anneal, base against base, can be checked — and it is the
- * only rendering in which an overhang one base short, or the right sequence
- * on the wrong strand, looks obviously wrong instead of looking like a
- * passing test.
- */
 
 type Props = {
   view: JunctionView;
@@ -25,9 +16,8 @@ function Strand({ text, span, className }: {
     <span className={`dx-seq ${className ?? ""}`}>
       {[...text].map((base, index) => {
         const inOverhang = span && index >= span[0] && index < span[1];
-        // A padding column must hold its width. A plain space collapses
-        // wherever `white-space: pre` does not reach, and the two pieces
-        // stop lining up — which is the one thing this drawing is for.
+
+
         return (
           <span
             key={index}

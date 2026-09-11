@@ -1,4 +1,3 @@
-"""Reproducible design provenance without storing duplicate raw sequences."""
 from __future__ import annotations
 
 import hashlib
@@ -25,7 +24,7 @@ def enzyme_table_checksum() -> str:
 
 
 def _parameter_manifest(parameters: dict[str, Any]) -> dict[str, Any]:
-    """Keep choices, but replace large/sensitive molecular inputs by hashes."""
+
     out: dict[str, Any] = {}
     molecular = {"sequence", "template", "vector_sequence", "insert_reverse", "design"}
     for key, value in parameters.items():

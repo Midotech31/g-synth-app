@@ -1,32 +1,3 @@
-"""Generate the wide restriction table from REBASE, via Biopython.
-
-    python tools/generate_enzymes.py > gsynth_engine/enzyme_table.py
-
-The generated table supports both sequence-wide detection and cloning-enzyme
-selection. A curated subset is offered first, while every supported geometry
-remains selectable.
-
-What is excluded, and why:
-
-- **Ambiguous recognition sequences.** The site scanner matches literally;
-  an enzyme whose site contains N or R would need a different matcher and
-  would report positions it does not really cut.
-- **Type IIS enzymes** (BsaI, BsmBI, Esp3I…), which cut *outside* their
-  recognition sequence. The data model stores a cut as an offset into the
-  site, so `site[cut_top:]` is empty for them — the remainders come out
-  wrong rather than absent, which is worse. Supporting them means extending
-  the model, not extending this table.
-- **Enzymes that cut twice**, for the same reason.
-- **Non-commercial enzymes.** If it cannot be ordered it cannot be used, and
-  REBASE lists a great many that cannot.
-
-Isoschizomers are collapsed. NheI, AsuNHI, BmtI, BspOI and PaeI are one
-specification; listing five names for one site turns a plasmid map into
-noise. The surviving name is the one this lab already uses if there is one,
-otherwise the one with the most suppliers — which is a good proxy for the
-name a biologist will recognise. The rest are kept as aliases so a search
-still finds them.
-"""
 from __future__ import annotations
 
 import sys
@@ -34,7 +5,7 @@ from collections import defaultdict
 
 try:
     from Bio import Restriction
-except ImportError:                                        # pragma: no cover
+except ImportError:
     sys.exit("Biopython is needed to regenerate this table: pip install biopython")
 
 sys.path.insert(0, ".")
@@ -42,7 +13,7 @@ from gsynth_engine.constants import RESTRICTION_ENZYMES as CURATED  # noqa: E402
 
 
 def usable(enzyme) -> bool:
-    """Type IIP, unambiguous, cutting inside its own recognition sequence."""
+
     site = str(enzyme.site)
     if not site or set(site) - set("ACGT"):
         return False
@@ -55,7 +26,7 @@ def usable(enzyme) -> bool:
 
 
 def canonical(names: list[str]) -> str:
-    """The name a biologist will recognise, chosen deterministically."""
+
     for name in names:
         if name in CURATED:
             return name

@@ -17,7 +17,7 @@ import { useWorkspaceState } from "../state/WorkspaceStateContext";
 const MODES = [
   { key: "global", label: "Whole of both", hint: "Two variants of one gene" },
   { key: "local", label: "Best stretch", hint: "The one region they share" },
-  { key: "semi-global", label: "Shorter in longer", hint: "Where a gene sits in a plasmid" },
+  { key: "semi-global", label: "First in second", hint: "Align all of the first sequence within the second" },
 ] as const;
 
 const SAMPLE_A = "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGGTATATTGGAAATAATGGAGCACATATGGGA";

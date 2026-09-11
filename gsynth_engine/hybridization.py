@@ -1,17 +1,3 @@
-"""Antiparallel hybridization of two DNA strands.
-
-Both inputs are written in the order supplied to an oligonucleotide vendor:
-5′→3′.  The second strand is reverse-complemented before offsets are tested,
-then drawn physically as 3′→5′ beneath the first.  This is deliberately not
-pairwise homology alignment: internal gaps are not introduced, because a gap
-would describe a bulge rather than a cohesive end.  Unpaired terminal bases
-therefore remain visible as 5′ or 3′ overhangs.
-
-The thermodynamic result is restricted to a perfectly complementary overlap.
-SantaLucia nearest-neighbour parameters in :mod:`gsynth_engine.thermo` are not
-silently applied to mismatched duplexes, for which this engine does not carry
-the mismatch parameter set.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -35,7 +21,7 @@ MIN_COHESIVE_OVERLAP = 4
 
 @dataclass(frozen=True)
 class Overhang:
-    """One single-stranded terminal extension, reported in strand sense."""
+
 
     end: str
     strand: str
@@ -62,7 +48,7 @@ class Overhang:
 
 @dataclass
 class HybridizationResult:
-    """A best ungapped antiparallel placement and its evidence."""
+
 
     first: str
     second: str
@@ -152,7 +138,7 @@ class HybridizationResult:
                 "bottom": bottom,
                 "top_start": top_seen + 1 if top_bases else None,
                 "top_end": top_seen + top_bases,
-                # The lower strand is physically 3′→5′ in the drawing.
+
                 "bottom_start": len(self.second) - bottom_seen if bottom_bases else None,
                 "bottom_end": len(self.second) - bottom_seen - bottom_bases + 1,
             })
@@ -177,7 +163,7 @@ def _candidate(
     second_rc: str,
     offset: int,
 ) -> tuple[tuple[int, ...], int, int, int]:
-    """Return a sortable quality key and overlap measurements for one offset."""
+
     start = max(0, offset)
     stop = min(len(first), offset + len(second_rc))
     overlap = max(0, stop - start)
@@ -190,8 +176,8 @@ def _candidate(
     mismatches = overlap - paired
     unpaired = len(first) + len(second_rc) - 2 * overlap
     score = 2 * paired - 3 * mismatches
-    # Stable and deterministic: prefer more pairs, fewer mismatches, a longer
-    # overlap, fewer dangling bases, then the placement closest to flush.
+
+
     key = (score, paired, -mismatches, overlap, -unpaired, -abs(offset), -offset)
     return key, start, stop, paired
 
@@ -203,12 +189,7 @@ def hybridize(
     conditions: BufferConditions = ANNEALING,
     analysis_temperature_c: float = 25.0,
 ) -> HybridizationResult:
-    """Place two 5′→3′ DNA strands in their best antiparallel register.
 
-    No internal gaps are introduced. Terminal displacement becomes explicit
-    overhang geometry, while internal non-complementary columns remain marked
-    as mismatches rather than being hidden by a local alignment.
-    """
     top_sequence = validate_dna(first, field="first strand")
     partner_sequence = validate_dna(second, field="second strand")
     if len(top_sequence) * len(partner_sequence) > MAX_HYBRIDIZATION_CELLS:

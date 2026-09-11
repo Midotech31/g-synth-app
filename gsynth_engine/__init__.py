@@ -1,26 +1,4 @@
-"""
-gsynth_engine — the G-Synth design engine.
-
-Pure Python. No web framework and no UI. This package holds the part of
-G-Synth that is genuinely G-Synth's: the oligo design logic for synthesising
-and cloning genes by hybridisation and ligation.
-
-    peptide / gene
-        → SSD          Small Sequence Design: one forward/reverse order pair
-                       with the exact sticky ends for a chosen restriction
-                       pair, plus optional tag, linkers and cleavage site
-        → ESD          Extended Sequence Design: longer constructs split into
-                       orderable oligo pairs joined by complementary 4–8 nt
-                       overhangs, with no PCR at any step
-        → bench        an order-ready oligo list
-
-Everything here is covered by tests, including golden tests that reproduce
-the worked examples from the G-Synth specification base for base. Those
-tests exist so that no future refactor — in any framework — can silently
-change the sequences the lab orders.
-"""
-
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from gsynth_engine.esd import (
     ESDResult,

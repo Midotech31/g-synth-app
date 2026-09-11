@@ -1,10 +1,3 @@
-"""In-silico agarose-gel inputs derived from sequence and restriction cuts.
-
-The engine reports fragment sizes.  It does not fabricate experimental lane
-brightness, background, smearing or topology-dependent migration.  The UI can
-plot these sizes as a clearly labelled prediction and choose a reference
-ladder that brackets the expected bands.
-"""
 from __future__ import annotations
 
 from typing import Final
@@ -32,7 +25,7 @@ GEL_LADDERS: Final[dict[str, dict[str, object]]] = {
 
 
 def recommended_ladder(fragment_sizes: list[int]) -> str:
-    """Choose the narrowest generic ladder that brackets all useful bands."""
+
     if not fragment_sizes:
         return "broad-range"
     maximum = max(fragment_sizes)
@@ -50,12 +43,7 @@ def restriction_digest_sizes(
     *,
     circular: bool = True,
 ) -> list[int]:
-    """Return all fragment lengths from a complete in-silico digest.
 
-    Cut coordinates use each enzyme's top-strand cut offset.  Duplicate cut
-    coordinates are collapsed, as two enzymes cutting the same phosphodiester
-    bond do not create a zero-length gel fragment.
-    """
     dna = validate_dna(sequence)
     if not enzymes:
         raise SequenceError("Choose at least one restriction enzyme for a digest simulation.")
@@ -81,7 +69,7 @@ def restriction_digest_sizes(
 
 
 def ladder_payload() -> list[dict]:
-    """JSON-ready ladder catalogue with every marker size visible."""
+
     return [
         {"key": key, "name": entry["name"], "bands": list(entry["bands"]), "range": entry["range"]}
         for key, entry in GEL_LADDERS.items()

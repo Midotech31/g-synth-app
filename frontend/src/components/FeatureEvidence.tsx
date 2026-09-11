@@ -1,4 +1,3 @@
-/** Display evidence and biological terminology consistently across viewers. */
 export default function FeatureEvidence({ annotation }: {
   annotation: { name: string; type?: string; inferred?: boolean; basis?: string; regulatory_class?: string };
 }) {

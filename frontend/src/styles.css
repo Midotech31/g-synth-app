@@ -1,5 +1,3 @@
-/* G-Synth design tokens and interface styles. */
-
 :root {
   --navy: #0b1f3b;
   --navy-700: #122c50;
@@ -8,7 +6,7 @@
   --surface: #ffffff;
   --ink: #16202c;
   --ink-soft: #46586d;
-  /* WCAG AA contrast on white for small text. */
+
   --muted: #607185;
   --ink-faint: #607185;
   --paper-deep: #efede7;
@@ -25,7 +23,7 @@
   --radius: 8px;
   --rail: 232px;
 
-  /* Scientific symbols and French-language coverage. */
+
   --sans: "Noto Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 }
@@ -70,7 +68,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
   color: var(--muted);
 }
 
-/* Visually hidden content retained in the accessibility tree. */
+
 .sr-only {
   position: absolute;
   width: 1px; height: 1px;
@@ -81,7 +79,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
   border: 0;
 }
 
-/* Keyboard shortcut to the main content. */
+
 .skip-link {
   position: absolute;
   left: 0.5rem;
@@ -99,11 +97,10 @@ a { color: var(--accent); text-underline-offset: 3px; }
 }
 .skip-link:focus-visible { top: 0.5rem; }
 
-/* The canvas takes focus when the skip link is used; it is a destination,
-   not a control, so it must not draw a focus ring of its own. */
+
 .canvas:focus { outline: none; }
 
-/* ── App shell ───────────────────────────────────────────────────────── */
+
 .shell { display: flex; min-height: 100%; }
 
 .rail {
@@ -123,16 +120,14 @@ a { color: var(--accent); text-underline-offset: 3px; }
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   color: inherit; text-decoration: none;
 }
-/* The version is an aside, not part of the name: it gets a rule and a step
-   down in weight so the lockup still reads as one object. */
+
 .rail .brand .ver {
   font-family: var(--mono); font-size: 0.6rem; color: #8fa4bd;
   padding-left: 0.5rem; border-left: 1px solid rgba(255, 255, 255, 0.16);
   align-self: stretch; display: flex; align-items: center;
 }
 
-/* The mark sits on navy here, so the deep end of its gradient would vanish.
-   Lifting it keeps the strands readable without recolouring the artwork. */
+
 .rail .brand .logo-mark { filter: brightness(1.55) saturate(1.1); }
 .rail .brand .logo-name { color: #ffffff; }
 
@@ -210,7 +205,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 
 .content { padding: 1.5rem 1.75rem 3rem; }
 
-/* ── Controls ────────────────────────────────────────────────────────── */
+
 .btn {
   font: inherit;
   font-weight: 550;
@@ -244,8 +239,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .btn-ghost:hover:not(:disabled) { background: rgba(0, 0, 0, 0.05); }
 .btn-danger { background: transparent; color: var(--danger); border-color: transparent; }
 .btn-danger:hover:not(:disabled) { background: #f7ecec; }
-/* Only inside a confirmation, where the button is the irreversible act
-   itself rather than the way to ask about it. */
+
 .btn-danger-solid { background: var(--danger); color: #fff; }
 .btn-danger-solid:hover:not(:disabled) { background: #862f2f; }
 .btn-rail {
@@ -257,9 +251,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .btn-rail:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); }
 
 .field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
-/* A group of buttons has no single control to point a <label> at, so it is
-   named by a plain span instead — a label element with nothing to label is
-   a promise to a screen reader that the markup does not keep. */
+
 .field > label, .field > .field-label { font-size: 0.85rem; font-weight: 550; color: var(--ink-soft); }
 .field-hint { color: var(--muted); font-size: 0.74rem; line-height: 1.45; }
 input[type="text"], input[type="email"], input[type="password"], input[type="number"], textarea, select {
@@ -278,7 +270,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, .btn:focus-vi
 }
 textarea { resize: vertical; min-height: 72px; }
 
-/* ── Cards, tables, notices ──────────────────────────────────────────── */
+
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -291,7 +283,7 @@ textarea { resize: vertical; min-height: 72px; }
   display: flex; align-items: center; gap: 0.6rem;
   flex-wrap: wrap;
 }
-/* Scientific names wrap before they can collide with adjacent controls. */
+
 .card > .card-head > h2 { min-width: 0; overflow-wrap: anywhere; }
 .card > .card-body { padding: 1.1rem; }
 
@@ -305,10 +297,7 @@ textarea { resize: vertical; min-height: 72px; }
 .notice-error { border-color: #e0bcbc; background: #fbf1f1; color: #7d2f2f; }
 .notice-info { border-color: #bcd6d8; background: var(--accent-wash); color: #0b4f56; }
 
-/* ── Confirming something irreversible ─────────────────────────────────
-   The question the browser used to ask. Asked here instead, so it carries
-   the name of what is about to be deleted, can be answered from the
-   keyboard, and is read out as a dialogue rather than as chrome. */
+
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 30;
   display: grid; place-items: center;
@@ -371,7 +360,7 @@ table.data thead th {
 table.data tbody tr:last-child td { border-bottom: none; }
 table.data td.num { font-variant-numeric: tabular-nums; }
 
-/* ── Auth screens ────────────────────────────────────────────────────── */
+
 .auth {
   min-height: 100%;
   display: grid;
@@ -537,7 +526,7 @@ table.data td.num { font-variant-numeric: tabular-nums; }
   .auth-form-head h1 { font-size: 1.45rem; }
 }
 
-/* ── Home ────────────────────────────────────────────────────────────── */
+
 .home-hero { background: linear-gradient(180deg, var(--accent-wash), var(--surface) 75%); }
 .home-hero-body { display: flex; align-items: center; gap: 1.5rem; }
 .home-hero-copy { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0.4rem; }
@@ -590,7 +579,7 @@ table.data td.num { font-variant-numeric: tabular-nums; }
 .home-footer a { color: var(--muted); text-decoration-color: var(--line-strong); }
 .home-footer a:hover { color: var(--accent); }
 
-/* ── Help ────────────────────────────────────────────────────────────── */
+
 .help-section:not(:first-child) { border-top: 1px solid var(--line); padding-top: 1.3rem; }
 .help-stage-head { display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; color: var(--ink); }
 .help-stage-head:hover { color: var(--accent); }
@@ -599,7 +588,7 @@ table.data td.num { font-variant-numeric: tabular-nums; }
 .help-points { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: 0.32rem; }
 .help-points li { font-size: 0.85rem; color: var(--ink-soft); line-height: 1.55; }
 
-/* ── Dashboard ───────────────────────────────────────────────────────── */
+
 .grid-projects { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.9rem; }
 
 .project-card { display: flex; flex-direction: column; text-decoration: none; color: inherit; overflow: hidden; }
@@ -625,7 +614,7 @@ table.data td.num { font-variant-numeric: tabular-nums; }
 .dropzone.over { border-color: var(--accent); background: var(--accent-wash); }
 .dropzone .hint { color: var(--muted); font-size: 0.85rem; }
 
-/* ── Viewer ──────────────────────────────────────────────────────────── */
+
 .viewer-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1.1rem; align-items: start; }
 @media (max-width: 1080px) { .viewer-layout { grid-template-columns: 1fr; } }
 .viewer-audit-grid {
@@ -731,9 +720,7 @@ table.data td.num { font-variant-numeric: tabular-nums; }
 .motif-match code { display: block; max-width: 260px; margin-top: 0.18rem; overflow: hidden; text-overflow: ellipsis; color: var(--ink-soft); font-size: 0.66rem; white-space: nowrap; }
 .motif-review-actions { display: flex; justify-content: flex-end; gap: 0.45rem; padding: 0.65rem 1.1rem; }
 
-/* What a click on the map turns into: a feature's or restriction site's own
-   facts, plus the bases it actually spans — the reason the map is worth
-   clicking at all rather than just looking decorative. */
+
 .feature-detail { background: var(--accent-wash); }
 .feature-detail .dot { width: 10px; height: 10px; border-radius: 2px; flex: none; }
 .feature-detail .seq-block { max-height: 140px; overflow-y: auto; }
@@ -771,7 +758,7 @@ table.data td.num { font-variant-numeric: tabular-nums; }
 
 .center-note { display: grid; place-items: center; min-height: 60vh; color: var(--muted); gap: 0.6rem; }
 
-/* ── Design workspace ─────────────────────────────────────────────────── */
+
 .design-topbar {
   min-height: 120px;
   padding: 1.15rem 1.85rem 1.05rem;
@@ -954,7 +941,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .notice-ok { border-color: #b9d3c1; background: #eef5f0; color: #2c5c3d; }
 
-/* Construct map — each part sized by how much sequence it occupies. */
+
 .track { display: flex; width: 100%; border-radius: 3px; overflow: hidden; }
 .track + .track { margin-top: 0.35rem; }
 .track-part {
@@ -979,10 +966,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .table-scroll { overflow-x: auto; }
 .seq-cell { max-width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.76rem; }
 
-/* ── Hybridisation view ───────────────────────────────────────────────── */
-/* Both strands in one monospace grid. A space is a column where that strand
-   is absent, which is what a single-stranded overhang looks like — so the
-   stagger at each end and at each junction is drawn, not described. */
+
 .duplex { display: flex; flex-direction: column; gap: 0.7rem; }
 
 .duplex-legend { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
@@ -1031,25 +1015,22 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .dx-ticks { color: var(--line-strong); }
 
 .dx-base { font-weight: 500; }
-/* Unpaired: an overhang. Lighter, so the double-stranded core reads first. */
+
 .dx-single { opacity: 0.55; font-style: italic; }
 .dx-mismatch { background: var(--danger); color: #fff; }
-/* Where a strand is cut. Each strand is cut at a different column — the
-   distance between the two rules is the overhang, which is the whole
-   reason the fragments ligate in one defined order. */
+
 .dx-cut { box-shadow: inset 1.5px 0 0 0 var(--navy); }
 .dx-stagger { background: rgba(11, 31, 59, 0.09); }
 .dx-gap { color: transparent; }
 
 .duplex-foot { margin: 0; max-width: 78ch; }
 
-/* ── Cloning ──────────────────────────────────────────────────────────── */
+
 .junction { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.7rem 0.8rem; }
 .junction-head { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
 .junction-head .grow { flex: 1; }
 
-/* The seam is drawn, not described: the two halves of the context sit either
-   side of a rule at the exact base where vector becomes insert. */
+
 .junction-seq {
   display: flex; align-items: center;
   font-family: var(--mono); font-size: 0.8rem;
@@ -1074,7 +1055,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   font-size: 0.78rem; color: var(--ink-soft);
 }
 .vector-facts b { font-family: var(--mono); color: var(--ink); }
-/* The catalogue's own caveats: the things that make a design fail. */
+
 .vector-note {
   border-left: 2px solid var(--amber);
   padding-left: 0.55rem;
@@ -1082,7 +1063,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   font-size: 0.76rem;
 }
 
-/* Evidence intake is a scientific choice, not a native file-control detail. */
+
 .verify-evidence-field { gap: 0.5rem; }
 .trace-upload {
   min-height: 82px;
@@ -1141,7 +1122,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tag-row.on { color: var(--ink-soft); }
 .tag-row.on .pill { border-color: #b9d3c1; background: #eef5f0; color: #2c5c3d; }
 
-/* Enzyme chips — toggles, so the selected set is visible without a legend. */
+
 .enzyme-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .chip {
   font-family: var(--mono); font-size: 0.72rem;
@@ -1152,17 +1133,12 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .chip:hover { border-color: var(--accent); }
 .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
-/* The two ends the vector will be offered, side by side in the card head.
-   Enzyme names keep their own case: NdeI and NDEI are not the same word to
-   anyone who orders one, and the surrounding label style uppercases. */
+
 .terminal-end { text-transform: none; }
 .terminal-end + .terminal-end { margin-left: 1.1rem; padding-left: 1.1rem; border-left: 1px solid var(--line); }
 .terminal-end strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 
-/* ── Brand ─────────────────────────────────────────────────────────────
-   The mark and the wordmark, locked to one another. The wordmark is set in
-   the app's own type rather than traced into paths: it stays selectable,
-   restyles with the rest of the interface, and costs nothing to ship. */
+
 .logo { display: inline-flex; align-items: center; gap: 0.55em; line-height: 1; }
 .logo .logo-mark { flex: none; display: block; }
 .logo-type { display: flex; flex-direction: column; gap: 0.18em; min-width: 0; }
@@ -1180,34 +1156,26 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   white-space: nowrap;
 }
 
-/* ── Icons ─────────────────────────────────────────────────────────────
-   One grid, one weight, `currentColor`. These replaced emoji, which render
-   as a different picture — and sometimes an empty box — per operating
-   system. Nothing in a lab tool should change shape depending on the
-   machine it is read on. */
+
 .icon { flex: none; vertical-align: -0.15em; }
 
-/* A stat can carry a "from" value; keep the two on separate lines. */
+
 .stat .v small + small { display: block; }
 
-/* The design did not use the overhang length that was asked for. It is not a
-   problem — the assembly is sound — but the number on the form is no longer
-   the number in the tubes, so it is coloured rather than left to be noticed. */
+
 .stat .v small.widened { color: var(--amber); }
 
-/* Sequencing differences. A silent change is real but harmless, so it is
-   toned down rather than hidden — the reader still needs to see it. */
+
 .difference-list { margin: 0; padding-left: 1.1rem; color: var(--ink); }
 .difference-list li { margin-bottom: 0.35rem; line-height: 1.5; font-size: 0.86rem; }
 .difference-list li.silent { color: var(--muted); }
 
-/* Alignment: three lines per row, each with its own numbering either side. */
+
 .align-row { grid-template-columns: max-content max-content max-content; }
 .align-row .dx-num { min-width: 5ch; }
 .align-row .dx-seq { padding: 0 0.5rem; }
 
-/* Alignment and physical hybridization share inputs, but remain visibly
-   separate questions. Homology scoring must never masquerade as annealing. */
+
 .align-workspace { display: flex; flex-direction: column; gap: 1.1rem; }
 .align-layout { align-items: start; }
 .align-inputs, .align-results { display: flex; flex-direction: column; gap: 0.85rem; }
@@ -1374,8 +1342,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .workflow-next-card strong { color: var(--ink); }
 .workflow-next-card small { color: var(--ink-soft); }
 
-/* Design hands a verified duplex forward; enzyme edits invalidate and rebuild
-   the molecules rather than merely changing their labels. */
+
 .design-hybrid-enzyme-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-bottom: 0.85rem; }
 .design-hybrid-enzyme-row .field-hint { grid-column: 1 / -1; }
 .design-hybrid-simple { display: grid; grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.4fr) minmax(150px, 0.8fr); gap: 0.75rem; }
@@ -1866,8 +1833,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .workbench-feature-list code { grid-column: 2; }
 }
 
-/* Mode picker — the question decides the algorithm, so it is asked in those
-   terms rather than as "global / local / semi-global". */
+
 .mode-list { display: flex; flex-direction: column; gap: 0.35rem; }
 .mode {
   display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem;
@@ -1881,7 +1847,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .mode.on { border-color: var(--accent); background: var(--accent-wash); }
 .mode.on strong { color: var(--accent); }
 
-/* ── Ligation junctions, drawn ─────────────────────────────────────────── */
+
 .junction-duplex {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -1894,17 +1860,16 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 .jx-block { padding: 0.55rem 0.7rem; }
 .jx-block .duplex-row { grid-template-columns: max-content max-content max-content max-content; }
-/* The gap between the two pieces before they are joined. */
+
 .jx-space { display: inline-block; width: 2.5ch; }
-/* The overhang is the whole point of the drawing, so it is the one thing
-   that carries colour. */
+
 .jx-overhang {
   background: var(--amber); color: #fff; font-weight: 600; border-radius: 2px;
 }
 .jx-note { margin: 0.15rem 0 0; }
 .pill-bad { border-color: #d8b4b4; background: #fbeeee; color: #9e3d3d; }
 
-/* ── The checks, stated one by one ─────────────────────────────────────── */
+
 .check-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .check-list li { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.86rem; }
 .check-list .mark { width: 1.2rem; flex: none; margin-top: 0.12rem; }
@@ -1915,7 +1880,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .check-list strong { display: block; color: var(--ink); font-weight: 600; }
 .check-list .detail { display: block; color: var(--ink-soft); font-size: 0.8rem; line-height: 1.5; }
 
-/* One release language across design, PCR, cloning and verification. */
+
 .preflight { overflow: hidden; }
 .preflight-verdict {
   display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.28rem 0.6rem;
@@ -1986,13 +1951,10 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .inline-check { display: flex; align-items: center; gap: 0.4rem; min-height: 44px; font-size: 0.8rem; color: var(--ink-soft); cursor: pointer; }
 .inline-check input { width: 20px; height: 20px; accent-color: var(--accent); }
 
-/* A back link reads as one object: the arrow travels with the words. */
+
 .back-link { display: inline-flex; align-items: center; gap: 0.35rem; }
 
-/* ── Sequencing traces ─────────────────────────────────────────────────
-   The peaks under a disputed base. Drawn rather than described, because
-   "this might be a bad call" is a judgement someone has to make by looking,
-   and the shape is the only thing that supports it. */
+
 .trace-view {
   margin: 0.55rem 0 0.2rem;
   padding: 0.5rem 0.6rem 0.4rem;
@@ -2001,11 +1963,10 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   background: var(--surface);
 }
 .trace-plot { display: block; width: 100%; }
-/* The disputed column, so the eye lands on it before reading anything. */
+
 .trace-focus { fill: var(--accent-wash); }
 
-/* Base calls sit at their own peaks, so the row stays in register with the
-   trace above it — evenly spaced letters drift apart from what they label. */
+
 .trace-bases { position: relative; margin-top: 0.15rem; }
 .trace-base {
   position: absolute; transform: translateX(-50%);
@@ -2015,9 +1976,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .trace-base.is-poor { opacity: 0.45; }
 .trace-note { margin-top: 0.5rem; }
 
-/* Reference-aligned Sanger evidence. The reference, consensus and raw peaks
-   share one fixed nucleotide grid; horizontal scrolling preserves that
-   coordinate system on a phone instead of squeezing bases into ambiguity. */
+
 .reference-alignment {
   margin: 1rem -0.15rem 0.85rem;
   border-top: 1px solid var(--line);
@@ -2161,13 +2120,10 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .alignment-legend .legend-low { background: rgb(201 118 52 / 18%); }
 .alignment-legend .legend-mismatch { border: 0; border-bottom: 3px solid var(--danger); }
 
-/* A difference the trace does not support is still shown — hiding it would
-   be deciding for the reader — but it is toned down, because acting on it
-   is usually wrong. */
+
 .difference-list li.unconfident { color: var(--ink-soft); }
 .difference-list li.unconfident::marker { color: var(--amber); }
-/* Phone layout: turn the desktop rail into a compact header and let every
-   workspace use the full viewport width. */
+
 @media (max-width: 720px) {
   .shell { flex-direction: column; }
   .rail {
@@ -2271,7 +2227,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .empty { padding: 2rem 1rem; }
 }
 
-/* ── Learn knowledge library ───────────────────────────────────────────── */
+
 .learn-library { display: flex; flex-direction: column; gap: 1rem; }
 .learn-intro { background: linear-gradient(135deg, var(--accent-wash), var(--surface) 68%); }
 .learn-intro .card-body {
@@ -2370,12 +2326,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .design-topbar > .btn-outline { width: 100%; }
 }
 
-/* ── PCR ───────────────────────────────────────────────────────────────
-   A primer is ordered as one oligo but behaves as two: the tail does
-   nothing in the first cycle, and the Tm that sets the annealing
-   temperature belongs to the other part. Drawing them the same way is what
-   makes a tailed primer look as though it should anneal ten degrees hotter
-   than it does, so they are coloured apart everywhere they appear. */
+
 .primer-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -2389,7 +2340,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   font-size: 0.78rem; line-height: 1.7; word-break: break-all;
   background: #fbfaf7; border-radius: 3px; padding: 0.45rem 0.55rem;
 }
-/* Added by the primer — present in the product, absent from the template. */
+
 .seq-tail { color: #8f4c1c; font-weight: 600; }
 .seq-anneal, .seq-body { color: var(--ink); }
 .annealing-clamp { color: #9a5a24; background: #fff2d2; }
@@ -2468,8 +2419,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .annealing-arrow { transform: rotate(90deg); justify-self: center; }
 }
 
-/* Predicted electrophoresis: a size plot, never styled as an experimental
-   photograph. Exact band sizes remain visible beside the plot. */
+
 .gel-simulation { display: flex; flex-direction: column; gap: 0.85rem; }
 .gel-toolbar { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
 .gel-toolbar > div:first-child { max-width: 62ch; }
@@ -2627,7 +2577,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .frame-checks { grid-template-columns: 1fr; }
 }
 
-/* Shared sequence exploration: wide view, bounded scrolling and readable tracks. */
+
 .expandable-panel { min-width: 0; }
 .expandable-panel.expanded {
   position: fixed; inset: 1rem; z-index: 200; margin: 0; padding: 0;

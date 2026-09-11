@@ -1,19 +1,10 @@
-"""User-scoped storage for designs, sequences and validation records."""
 from django.conf import settings
 from django.db import models
 
 
 class Project(models.Model):
-    """A saved item belonging to one user.
 
-    `data` is a JSONField — any G-Synth module can persist arbitrary
-    result payloads without schema migrations. `sequence` and `notes`
-    are surfaced separately because they're queried on the list view.
-    """
 
-    # What the app actually saves. Kept in step with the views: a module
-    # missing from here still stores, but shows as an unlabelled chip and
-    # fails model validation, so the two drift silently.
     MODULES = (
         ("general",              "General"),
         ("ssd",                  "Small Sequence Design"),

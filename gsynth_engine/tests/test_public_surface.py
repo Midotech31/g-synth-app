@@ -1,16 +1,3 @@
-"""The values the interface reads, and the sentences the user is shown.
-
-Two things that look like plumbing and are not.
-
-The properties on `SSDResult` and `OligoPair` go straight into the API
-payload — `forward_tm` is the temperature printed beside an oligo on the
-order sheet, `right_overhang_strand` decides which way a duplex is drawn.
-Nothing asserted any of them; they were exercised only through whatever a
-higher-level test happened to look at.
-
-And `SequenceError` messages are shown verbatim in the interface. A message
-that names the problem without naming the fix costs the user a round trip.
-"""
 import pytest
 
 from gsynth_engine.constants import HIS_TAG, LEFT_LINKER, RIGHT_LINKER
@@ -24,10 +11,7 @@ INSERT = ("GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCAACGGCGGC
 
 
 class TestTheCassetteCombinations:
-    """Four combinations of tag and linkers; three had no test.
 
-    Each is a checkbox pair in the interface, and each changes the protein.
-    """
 
     def test_tag_and_linkers_together(self):
         r = design_small_sequence(INSERT, include_his_tag=True, include_linkers=True)
@@ -35,16 +19,14 @@ class TestTheCassetteCombinations:
         assert "6×His tag" in [s.name for s in r.segments]
 
     def test_tag_without_linkers(self):
-        """A tag butted straight onto the protein — no flexible spacer. The
-        user asked for exactly that; it must not silently add one."""
+
         r = design_small_sequence(INSERT, include_his_tag=True, include_linkers=False)
         assert HIS_TAG in r.forward
         assert LEFT_LINKER not in r.forward
         assert RIGHT_LINKER not in r.forward
 
     def test_linkers_without_a_tag(self):
-        """A spacer with nothing to space. Unusual, but it is what the two
-        boxes allow, and it must not quietly insert a tag."""
+
         r = design_small_sequence(INSERT, include_his_tag=False, include_linkers=True)
         assert LEFT_LINKER + RIGHT_LINKER in r.forward
         assert HIS_TAG not in r.forward
@@ -57,8 +39,7 @@ class TestTheCassetteCombinations:
     @pytest.mark.parametrize("tag,linkers", [(True, True), (True, False),
                                              (False, True), (False, False)])
     def test_both_strands_stay_complementary_in_every_combination(self, tag, linkers):
-        """The reverse strand is built by a parallel set of branches, so a
-        combination can be right on top and wrong underneath."""
+
         r = design_small_sequence(INSERT, include_his_tag=tag, include_linkers=linkers)
         plan = design_extended_sequence(INSERT, include_his_tag=tag,
                                        include_linkers=linkers)
@@ -67,7 +48,7 @@ class TestTheCassetteCombinations:
 
 
 class TestTheNumbersTheOrderSheetPrints:
-    """These are read off a screen and typed into a supplier's form."""
+
 
     def test_ssd_lengths_and_gc_match_the_strands_themselves(self):
         r = design_small_sequence(INSERT)
@@ -77,8 +58,7 @@ class TestTheNumbersTheOrderSheetPrints:
         assert r.reverse_gc == round(gc_content(r.reverse), 1)
 
     def test_ssd_tm_is_the_annealing_reaction_not_a_generic_dilution(self):
-        """The two differ by about 7 °C, and the protocol anneals at the
-        first. A Tm quoted at the wrong concentration is a failed anneal."""
+
         r = design_small_sequence(INSERT)
         assert r.forward_tm == round(
             melting_temperature(r.forward, conditions=ANNEALING), 1)
@@ -96,8 +76,7 @@ class TestTheNumbersTheOrderSheetPrints:
 
 
 class TestWhichStrandCarriesEachOverhang:
-    """The drawing is laid out from these. Getting one wrong puts an overhang
-    on the strand that cannot present it, and the picture still looks fine."""
+
 
     def test_a_five_prime_pair_puts_them_on_opposite_strands(self):
         plan = design_extended_sequence(INSERT, enzyme_pair="NdeI / XhoI")
@@ -105,8 +84,7 @@ class TestWhichStrandCarriesEachOverhang:
         assert plan.fragments[-1].right_overhang_strand == "bottom"
 
     def test_a_three_prime_pair_is_the_other_way_round(self):
-        """KpnI and SacI leave 3' overhangs — the same protrusion sits on the
-        other strand, which is the distinction the whole model turns on."""
+
         plan = design_extended_sequence(INSERT, enzyme_pair="KpnI / SacI")
         assert plan.fragments[0].left_overhang_strand == "bottom"
         assert plan.fragments[-1].right_overhang_strand == "top"
@@ -117,8 +95,7 @@ class TestWhichStrandCarriesEachOverhang:
         assert plan.fragments[-1].right_overhang_strand == "blunt"
 
     def test_internal_junctions_are_always_five_prime_on_top(self):
-        """However the outer ends are cut, the stagger between fragments is
-        made by the design and is always the same way round."""
+
         plan = design_extended_sequence(INSERT, enzyme_pair="KpnI / SacI",
                                        target_oligo_length=60)
         for fragment in plan.fragments[1:]:
@@ -126,7 +103,7 @@ class TestWhichStrandCarriesEachOverhang:
 
 
 class TestErrorsTellTheUserWhatToDo:
-    """`SequenceError` text reaches the interface unchanged."""
+
 
     def test_an_unknown_enzyme_lists_the_ones_that_are_known(self):
         with pytest.raises(SequenceError) as caught:

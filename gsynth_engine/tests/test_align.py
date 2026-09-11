@@ -1,10 +1,3 @@
-"""Tests for pairwise alignment.
-
-The properties that matter are not "does it produce an alignment" but
-whether it produces the *right* one: affine gaps must prefer one long gap to
-several short ones, a reverse-complemented sequence must be recognised
-rather than reported as unrelated, and the three modes must actually differ.
-"""
 from __future__ import annotations
 
 import pytest
@@ -24,7 +17,7 @@ class TestBasics:
         assert result.length == len(GENE)
 
     def test_the_alignment_reproduces_both_inputs(self):
-        """Whatever else it does, it must not invent or lose bases."""
+
         other = GENE[:20] + "GGG" + GENE[25:]
         result = align(GENE, other)
         assert result.top.replace("-", "") == GENE
@@ -44,18 +37,17 @@ class TestBasics:
 
 class TestAffineGaps:
     def test_one_long_gap_beats_several_short_ones(self):
-        """One long gap is one event; scattered gaps are biologically
-        backwards and produce alignments that look wrong to a reader."""
-        deleted = GENE[:20] + GENE[32:]          # a clean 12 nt deletion
+
+        deleted = GENE[:20] + GENE[32:]
         result = align(GENE, deleted)
 
         assert result.gaps == 12
-        # All twelve in one run, not sprinkled.
+
         runs = [run for run in result.bottom.split("-") if run]
         assert len(runs) == 2, result.bottom
 
     def test_a_cheaper_gap_opening_allows_more_gaps(self):
-        """The penalty is doing the work, not an accident of the sequences."""
+
         a, b = clean_filler(120, 5), clean_filler(120, 6)
         strict = align(a, b, scoring=Scoring(gap_open=40, gap_extend=2))
         loose = align(a, b, scoring=Scoring(gap_open=1, gap_extend=1))
@@ -64,7 +56,7 @@ class TestAffineGaps:
 
 class TestOrientation:
     def test_a_reverse_complemented_sequence_is_recognised(self):
-        """A gene cloned the other way round is not a different gene."""
+
         result = align(GENE, reverse_complement(GENE))
         assert result.reverse_complemented
         assert result.identity == 100.0
@@ -91,7 +83,7 @@ class TestModes:
         assert result.length >= len(GENE) + 8
 
     def test_local_finds_only_the_shared_stretch(self):
-        """Two sequences that share one region and nothing else."""
+
         a = "TTTTTTTTTTTT" + GENE[:40] + "GGGGGGGGGGGG"
         b = "CCCCCCCCCCCC" + GENE[:40] + "AAAAAAAAAAAA"
         result = align(a, b, mode="local")
@@ -101,8 +93,7 @@ class TestModes:
         assert result.start_a == 12 and result.end_a == 52
 
     def test_semi_global_places_the_shorter_inside_the_longer(self):
-        """Where does this gene sit in this plasmid — the question global
-        alignment answers badly and local answers incompletely."""
+
         plasmid = clean_filler(300, 9) + GENE + clean_filler(300, 10)
         result = align(GENE, plasmid, mode="semi-global")
 
@@ -116,8 +107,7 @@ class TestModes:
 
 class TestProtein:
     def test_the_matrix_is_the_published_one(self):
-        """Read from Biopython's copy rather than typed: 576 values is 576
-        chances to be quietly wrong."""
+
         matrix = blosum62()
         assert matrix["W"]["W"] == 11
         assert matrix["C"]["C"] == 9
@@ -125,7 +115,7 @@ class TestProtein:
         assert matrix["W"]["G"] == -2
 
     def test_conservative_substitutions_are_marked_as_similar(self):
-        """K→R and I→V are not the same residue and not a random change."""
+
         result = align("MTTSKLGKGLGYIGNN", "MTTSRLGKGLGYVGNN", is_protein=True)
         assert result.identity < 100
         assert result.similarity == 100.0
@@ -137,7 +127,7 @@ class TestProtein:
         assert result.similarity < 30
 
     def test_dna_has_no_similarity_category(self):
-        """A base is the right one or it is not."""
+
         result = align(GENE, GENE[:30] + "G" + GENE[31:])
         assert result.similarity == result.identity
 
@@ -160,7 +150,7 @@ class TestOutput:
         result = align("A" * 60, "A" * 20 + "A" * 20)
         for row in result.rows(20):
             if row["top_start"] is None:
-                assert row["top_end"] == row["top_end"]      # unchanged
+                assert row["top_end"] == row["top_end"]
 
     def test_the_text_rendering_shows_both_and_the_marks(self):
         text = align(GENE, GENE).to_text(60)
@@ -180,7 +170,7 @@ class TestInput:
         assert align(GENE, messy).identity == 100.0
 
     def test_a_pair_too_large_is_refused_with_a_pointer(self):
-        """Better than a request that hangs for a minute."""
+
         size = int(MAX_CELLS ** 0.5) + 500
         with pytest.raises(SequenceError, match="verification tool"):
             align("A" * size, "A" * size)

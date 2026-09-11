@@ -1,43 +1,3 @@
-"""Codon optimisation — rewriting a gene for the host that will express it.
-
-A bacteriocin gene taken from *Enterococcus* and put into *E. coli* is the
-same protein and a different translation context: synonymous-codon usage
-differs across taxa, while translation also depends on tRNA supply, transcript
-structure, growth state and the protein itself. This module rewrites the
-coding sequence against a documented host profile while leaving the protein
-untouched; it does not claim to predict expression yield.
-
-**The protein is the invariant.** Every path through this module ends with
-the same amino-acid sequence it started with, and a test asserts it for
-every optimisation the suite performs. Everything else — codon choice, GC
-content, which sites are avoided — is negotiable; that is not.
-
-**Constraints, not just preferences.** Picking the host's favourite codon
-everywhere produces a sequence that is easy to translate and often
-impossible to clone: it will contain the very restriction sites the
-construct is going to be cut with. So optimisation runs as a two-stage
-process — choose codons by adaptiveness, then repair the sequence against
-hard constraints by swapping synonymous codons, iterating until nothing
-changes. Anything that cannot be repaired is reported rather than left for
-the user to discover at the bench.
-
-**About the usage tables.** Bundled profiles are normalized from a committed
-FDA HIVE-CUTs/CoCoPUTs snapshot. RefSeq genomic species aggregates are used
-when present, with a disclosed GenBank fallback for organisms absent from that
-RefSeq snapshot. Codon *choice* depends on the ranking within each amino-acid
-family. A strict CAI, however, is defined against an explicit set of highly
-expressed genes; a species-wide score is therefore labelled profile-relative,
-not an expression-yield prediction. For a particular strain, tissue or cell
-line, build a table from the relevant expressed genes with `build_table` and
-report that reference set.
-
-References
-    Sharp P.M. & Li W.-H. (1987) Nucleic Acids Res 15:1281–1295.
-    Athey J. et al. (2017) BMC Bioinformatics 18:391 — HIVE-CUTs.
-    Alexaki A. et al. (2019) J Mol Biol 431:2434–2441 — CoCoPUTs.
-    Ranaghan M.J. et al. (2021) BMC Biology 19:36 — algorithm inequality.
-    Welch M. et al. (2009) PLoS ONE 4:e7002 — expression vs codon choice.
-"""
 from __future__ import annotations
 
 import hashlib
@@ -57,8 +17,6 @@ from gsynth_engine.sequence import (
     validate_dna,
 )
 
-#: Codons grouped by the amino acid they encode. Built once from the
-#: translation table so the two can never disagree.
 SYNONYMS: dict[str, tuple[str, ...]] = {}
 _CODON_TO_AA: dict[str, str] = {}
 
@@ -74,13 +32,7 @@ for _first in "TCAG":
 
 @dataclass(frozen=True)
 class CodonTable:
-    """Relative adaptiveness per codon, plus where the numbers came from.
 
-    `weights` are w values in the CAI sense: within each amino acid the most
-    used codon is 1.0 and the others are its fraction. Provenance is carried
-    with the numbers because a CAI is only meaningful against a stated
-    reference set.
-    """
 
     name: str
     source: str
@@ -96,31 +48,19 @@ class CodonTable:
     source_url: str = ""
 
     def weight(self, codon: str) -> float:
-        """Relative adaptiveness, 0–1: this codon's usage against the most
-        used codon for the same amino acid, which scores 1.0.
 
-        Not a frequency — the synonyms of one amino acid do not sum to 1.
-        These are the w values CAI is the geometric mean of.
-
-        An unknown codon returns 0.0 rather than raising, so a sequence
-        containing an ambiguity code degrades the score instead of failing
-        the whole optimisation.
-        """
         return self.weights.get(codon.upper(), 0.0)
 
     def best(self, amino_acid: str) -> str:
-        """The host's most-used codon for this amino acid."""
+
         return max(SYNONYMS[amino_acid], key=self.weight)
 
     def ranked(self, amino_acid: str) -> list[str]:
-        """Synonymous codons, most used first."""
+
         return sorted(SYNONYMS[amino_acid], key=self.weight, reverse=True)
 
     def rare(self, threshold: float = 0.1) -> frozenset[str]:
-        """Codons below a stated relative-frequency threshold.
 
-        Low genomic frequency is not itself a measurement of elongation rate.
-        """
         return frozenset(
             codon for codon, w in self.weights.items()
             if w < threshold and len(SYNONYMS[_CODON_TO_AA[codon]]) > 1
@@ -136,7 +76,7 @@ CODON_DATA_URL = str(_SNAPSHOT["source"]["url"])
 
 
 def _weights_from_counts(name: str, counts: dict[str, int]) -> dict[str, float]:
-    """Normalize raw codon counts within each synonymous family."""
+
     expected = set(_CODON_TO_AA)
     if set(counts) != expected:
         missing = ", ".join(sorted(expected - set(counts))) or "none"
@@ -189,15 +129,7 @@ ECOLI = TABLES[DEFAULT_HOST]
 
 
 def build_table(sequences: list[str], *, name: str, source: str = "") -> CodonTable:
-    """Derive a usage table from reference genes.
 
-    A strict CAI is measured against genes chosen a priori, usually a set of
-    highly expressed genes from the exact expression context. The caller must
-    document that selection; G-Synth records its size and source.
-
-    Raises:
-        SequenceError: if no complete codon could be read.
-    """
     counts: Counter[str] = Counter()
     for entry in sequences:
         seq = clean_dna(entry)
@@ -224,14 +156,7 @@ def build_table(sequences: list[str], *, name: str, source: str = "") -> CodonTa
 
 
 def codon_adaptation_index(sequence: str, table: CodonTable = ECOLI) -> float:
-    """CAI: the geometric mean of the codons' relative adaptiveness.
 
-    Single-codon families (Met, Trp) are excluded — they carry no choice, so
-    including them only pulls every gene towards 1.0. Codons with a weight of
-    zero are excluded too rather than sending the mean to zero, since a
-    reference set that never used a codon says nothing about how badly it
-    reads.
-    """
     seq = clean_dna(sequence)
     logs: list[float] = []
     for i in range(0, len(seq) - 2, 3):
@@ -249,35 +174,25 @@ def codon_adaptation_index(sequence: str, table: CodonTable = ECOLI) -> float:
     return round(math.exp(sum(logs) / len(logs)), 3)
 
 
-# ── Constraints ─────────────────────────────────────────────────────────────
-
-
 @dataclass
 class Constraints:
-    """What the finished sequence must avoid.
 
-    The defaults are what a synthesis supplier and a cloning strategy
-    between them require: no site belonging to the enzymes the construct
-    will be cut with, no homopolymer long enough to slip during synthesis,
-    and GC in a range that both synthesises and amplifies.
-    """
 
-    #: Enzymes whose sites must not appear. Usually the cloning pair.
     avoid_enzymes: tuple[str, ...] = ()
-    #: Any other motif to keep out — a supplier's blacklist, an internal site.
+
     avoid_motifs: tuple[str, ...] = ()
     max_homopolymer: int = 5
     gc_min: float = 30.0
     gc_max: float = 70.0
-    #: Sliding window for local GC, which is what actually breaks synthesis.
+
     gc_window: int = 50
-    #: Reject any repeated stretch at least this long.
+
     max_repeat: int = 15
     avoid_rare: bool = True
     rare_threshold: float = 0.1
 
     def motifs(self) -> tuple[str, ...]:
-        """Every literal sequence to avoid, from the enzymes and the extras."""
+
         sites = tuple(
             str(ALL_ENZYMES[e]["recognition"])
             for e in self.avoid_enzymes
@@ -288,7 +203,7 @@ class Constraints:
 
 @dataclass
 class OptimisationResult:
-    """The rewritten gene, and what changed."""
+
 
     sequence: str
     protein: str
@@ -297,20 +212,20 @@ class OptimisationResult:
     cai_after: float
     gc_before: float | None
     gc_after: float
-    #: Motifs that were present before and are gone now.
+
     sites_removed: list[str] = field(default_factory=list)
     rare_codons_before: int = 0
     rare_codons_after: int = 0
     changed_codons: int = 0
-    #: Breaches that stop the construct working: a forbidden restriction site
-    #: makes it unclonable. Empty means the gene can be built and cut.
+
+
     problems: list[str] = field(default_factory=list)
-    #: Breaches that cost profile fit rather than viability — a rare codon left
-    #: in to satisfy the GC window, a repeat a supplier may charge more for.
+
+
     warnings: list[str] = field(default_factory=list)
-    #: Protein exactly as supplied before any expression-start handling.
+
     input_protein: str | None = None
-    #: Resolved biological role for a peptide input.
+
     protein_context: str | None = None
     initiator_methionine_added: bool = False
     recommended_design_is_coding: bool = False
@@ -321,24 +236,14 @@ class OptimisationResult:
 
     @property
     def is_clean(self) -> bool:
-        """No *problems* — the gene can be built and cut as asked.
 
-        Warnings are not consulted. A low-frequency codon left in to satisfy a
-        GC window reduces profile fit and leaves this True; a
-        restriction site that survived optimisation blocks the strategy and
-        makes it False. Severity follows consequence.
-        """
         return not self.problems
 
 
 def _violations(
     sequence: str, constraints: Constraints, table: CodonTable,
 ) -> list[tuple[int, int, str]]:
-    """Every constraint breach, as (position, width, description).
 
-    Positions and widths are in nucleotides, so the repair pass knows which
-    codons to reach for — a forbidden site usually straddles two or three.
-    """
     found: list[tuple[int, int, str]] = []
 
     for motif in constraints.motifs():
@@ -371,7 +276,7 @@ def _violations(
 
 
 def _repeats(sequence: str, minimum: int) -> list[tuple[int, int, str]]:
-    """Stretches that occur more than once, which synthesis suppliers reject."""
+
     seen: set[str] = set()
     found: list[tuple[int, int, str]] = []
     for i in range(len(sequence) - minimum + 1):
@@ -391,24 +296,7 @@ def _cost(
     window: tuple[int, int] | None = None,
     with_repeats: bool = True,
 ) -> float:
-    """How badly a sequence breaks the constraints, as one number.
 
-    A plain count of breaches makes a poor objective: widening a GC window
-    fails every overlapping window at once, so no single codon swap ever
-    reduces the count and the repair pass stalls with nothing to climb. A
-    weighted cost that measures *how far* each window is out gives the swap
-    something to improve, one codon at a time.
-
-    The weights are a priority order, not a measurement. A forbidden site
-    makes the construct unclonable, so it outranks everything; a rare codon
-    only slows translation, so it yields to all of them.
-
-    `window` restricts the sum to a stretch of the sequence. Swapping one
-    codon changes three bases, so every term except repeats is unaffected
-    outside a short neighbourhood — and scoring the whole gene for each
-    candidate is what made a 3 kb optimisation take seven seconds of CPU,
-    which is a denial of service anyone can trigger by pasting an operon.
-    """
     if window is None:
         start, stop = 0, len(sequence)
     else:
@@ -428,10 +316,7 @@ def _cost(
         if run > constraints.max_homopolymer:
             total += 50.0
 
-    # GC windows are enumerated on absolute positions that are multiples of
-    # three, exactly as the global pass does. Stepping from the region's own
-    # start instead enumerates a *different* set of windows, so a window that
-    # is out of range can fall between the two and never be repaired.
+
     width = constraints.gc_window
     first_window = -(-start // 3) * 3
     for at in range(first_window, stop - width + 1, 3):
@@ -446,8 +331,8 @@ def _cost(
 
     if constraints.avoid_rare:
         rare = table.rare(constraints.rare_threshold)
-        # Codon boundaries are absolute, so step from the frame rather than
-        # from the window's own start.
+
+
         first_codon = -(-start // 3) * 3
         total += sum(
             1.0 for i in range(first_codon, stop - 2, 3)
@@ -466,25 +351,11 @@ def _fix_near(
     *,
     local: bool = True,
 ) -> bool:
-    """Swap one codon in or beside the breach. True when the cost dropped.
 
-    Every codon overlapping the breach is tried, and within each the
-    synonymous alternatives are tried best-first, so the sequence gives up as
-    little adaptiveness as it has to. Two codons of slack either side catch
-    sites that straddle the edge of the region.
-
-    Candidates are compared on a *window* of the sequence rather than the
-    whole of it. Every candidate differs from the others in the same three
-    bases, so the terms outside that neighbourhood are identical and cancel —
-    comparing them is the same decision at a fraction of the cost. Repeats
-    are the exception, since a repeat's partner can be anywhere, so a breach
-    of that kind falls back to scoring the whole sequence.
-    """
     first = max(0, position // 3 - 2)
     last = min(len(codons) - 1, (position + width) // 3 + 2)
 
-    # Wide enough that every GC window and every motif touching the edited
-    # codons lies inside it.
+
     radius = constraints.gc_window + max(
         (len(m) for m in constraints.motifs()), default=0
     ) + constraints.max_homopolymer + 6
@@ -522,7 +393,7 @@ def _perturb(
     table: CodonTable,
     rng: random.Random,
 ) -> None:
-    """Take a sideways step so a plateau does not end the repair pass."""
+
     first = max(0, position // 3 - 2)
     last = min(len(codons) - 1, (position + width) // 3 + 2)
     if last < first:
@@ -544,35 +415,7 @@ def optimise(
     seed: int = 0,
     max_rounds: int = 40,
 ) -> OptimisationResult:
-    """Rewrite a gene for the host, keeping the protein identical.
 
-    Args:
-        sequence: a coding sequence, or a protein when `is_protein` is set.
-        protein_context: peptide-to-DNA start logic. ``auto`` treats an
-            N-terminal methionine as a complete ORF and a peptide without one
-            as a mature peptide. ``mature_peptide`` always preserves the
-            supplied peptide exactly. ``complete_orf`` adds one initiator
-            methionine only when it is absent.
-        table: the host's codon usage. Build your own with `build_table` when
-            the CAI matters.
-        constraints: what the result must avoid. Pass the cloning enzymes in
-            `avoid_enzymes` — a gene carrying an internal NdeI site cannot be
-            cloned NdeI/XhoI however well it translates.
-        keep_stop: append the host's preferred stop codon. Turn it off for an
-            insert destined for a C-terminal vector tag, where a stop would
-            silently remove the tag.
-        seed: choices are deterministic. The same input gives the same gene,
-            which matters when a sequence has been ordered and someone wants
-            to know it was this design that produced it.
-
-    Returns:
-        An :class:`OptimisationResult`. `problems` lists anything the repair
-        pass could not fix — a stretch where no synonymous codon removes a
-        site, for instance.
-
-    Raises:
-        SequenceError: for input that cannot be read as a gene or a protein.
-    """
     constraints = constraints or Constraints()
     rng = random.Random(seed)
 
@@ -624,12 +467,10 @@ def optimise(
     if not protein:
         raise SequenceError("There is nothing to optimise: the protein is empty.")
 
-    # ── Stage one: choose by adaptiveness ───────────────────────────────────
+
     codons = [table.best(aa) for aa in protein]
 
-    # ── Stage two: repair against the constraints ───────────────────────────
-    # A hill-climb on the cost above: fix the worst breach, re-measure, repeat.
-    # Sideways steps break plateaus; giving up is reported, never silent.
+
     problems: list[str] = []
     stalled = 0
     for _ in range(max_rounds):
@@ -637,8 +478,8 @@ def optimise(
         if not breaches:
             break
         position, width, reason = breaches[0]
-        # A repeat's partner can be anywhere, so that one breach is the one
-        # kind a local comparison cannot judge.
+
+
         locally = not reason.startswith("repeat")
         if _fix_near(
             codons, position, width, protein, table, constraints, local=locally,
@@ -659,10 +500,7 @@ def optimise(
     if keep_stop:
         optimised += table.best("*")
 
-    # Severity is about consequence, not about which constraint was set. A
-    # site left in cannot be cloned around; a low-frequency codon left in
-    # reduces profile fit, and calling both "problems" would train the
-    # user to ignore the word.
+
     warnings: list[str] = []
     blocking = tuple(constraints.motifs())
     for position, _width, reason in _violations(optimised, constraints, table):
@@ -673,7 +511,7 @@ def optimise(
         elif message not in warnings:
             warnings.append(message)
 
-    # ── What changed ────────────────────────────────────────────────────────
+
     rare = table.rare(constraints.rare_threshold)
     sites_removed = [
         motif for motif in constraints.motifs()
@@ -724,13 +562,7 @@ def _swap(
     constraints: Constraints,
     rng: random.Random,
 ) -> bool:
-    """Try a different synonymous codon at `index`. True when it helped.
 
-    Candidates are tried best-first, so the sequence gives up as little
-    adaptiveness as it has to. A swap is kept only if it reduces the number
-    of breaches; otherwise the codon is put back, which stops the repair pass
-    from wandering.
-    """
     if not 0 <= index < len(codons):
         return False
 
@@ -749,8 +581,8 @@ def _swap(
             return True
 
     codons[index] = original
-    # A last resort when no single swap improves the count: take a random
-    # alternative anyway, so a stuck position can still move.
+
+
     if len(alternatives) > 1:
         codons[index] = rng.choice(alternatives)
         return True
@@ -758,12 +590,7 @@ def _swap(
 
 
 def back_translate(protein: str, *, table: CodonTable = ECOLI) -> str:
-    """The host's preferred codon for each residue, with no constraints.
 
-    Kept separate from `optimise` because it is a different thing: this is
-    what "reverse translate" means in a sequence editor, and it makes no
-    claim about being clonable.
-    """
     residues = "".join(protein.split()).upper()
     invalid = sorted(set(residues) - set(SYNONYMS))
     if invalid:

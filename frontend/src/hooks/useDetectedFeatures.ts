@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Annotation, type DetectedFeature } from "../api/client";
 
-/** Preview candidates automatically; only explicit acceptance changes saved features. */
+
 export function useDetectedFeatures(sequence: string, annotations: Annotation[], circular: boolean) {
   const [scan, setScan] = useState<{ sequence: string; annotations: Annotation[]; matches: DetectedFeature[]; error: string } | null>(null);
   const [revision, setRevision] = useState(0);

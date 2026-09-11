@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduce the insulin-glargine A/B experimental designs with G-Synth."""
+
 from __future__ import annotations
 
 import argparse

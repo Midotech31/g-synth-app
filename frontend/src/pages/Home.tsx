@@ -6,11 +6,7 @@ import { useAuth } from "../auth/AuthContext";
 import Icon, { type IconName } from "../components/Icon";
 import { Logo } from "../components/Logo";
 
-/** One pipeline stage: its own icon (reused from that page's own empty
- *  state, so a returning user already knows what it means) and the exact
- *  claim the README makes for it — this page draws on that wording rather
- *  than inventing separate marketing copy that could drift out of truth
- *  with what the tool actually does. */
+
 const STAGES: { to: string; name: string; icon: IconName; blurb: string }[] = [
   {
     to: "/optimise", name: "Optimise", icon: "helix",
@@ -49,7 +45,7 @@ const SUPPORTING_TOOLS: { to: string; name: string; icon: IconName; blurb: strin
   },
 ];
 
-/** Concrete safeguards expressed in language a bench scientist can act on. */
+
 const GUARANTEES = [
   {
     title: "Nothing ships unverified",

@@ -147,7 +147,7 @@ function clipTrack(track: TraceTrack, firstBase: number, baseCount: number): Tra
   };
 }
 
-/** Reference, consensus, oriented base calls and real Sanger peaks in one coordinate system. */
+
 export default function ReferenceAlignment({ reference, report }: Props) {
   const tracks = report.trace_tracks ?? [];
   const [cell, setCell] = useState(18);

@@ -1,4 +1,3 @@
-"""Independent sequence extraction checks for coding feature transport."""
 import io
 
 import pytest

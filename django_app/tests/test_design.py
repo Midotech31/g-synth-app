@@ -1,10 +1,3 @@
-"""Tests for the design endpoints.
-
-The engine's own suite proves the biology. These tests prove the HTTP layer
-does not corrupt it: the API must return exactly what the engine computed,
-guard access, save designs to the right owner, and turn engine errors into
-messages a user can act on.
-"""
 import csv
 import io
 
@@ -16,7 +9,6 @@ from gsynth_engine.constants import ALL_ENZYMES
 from gsynth_engine.esd import design_extended_sequence
 from gsynth_engine.ssd import design_small_sequence
 
-# The specification's Example 1 — the API must reproduce it end to end.
 GOLDEN_INSERT = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGCGGCTAA"
 GOLDEN_FORWARD = (
     "TATGGGTTCTTCTCACCACCACCACCACCACTCTTCTGGTCTGGTGCCGCGTGGTTCT"
@@ -37,7 +29,7 @@ LONG_INSERT = (
 @pytest.mark.django_db
 class TestEnzymeCatalogue:
     def test_is_public(self, api_client):
-        """A reference table — the UI may need it before sign-in."""
+
         response = api_client.get(reverse("design-enzymes"))
         assert response.status_code == 200
 
@@ -79,7 +71,7 @@ class TestSSDEndpoint:
         assert response.status_code == 401
 
     def test_reproduces_the_specification_example(self, auth_client):
-        """The golden example, through HTTP."""
+
         response = auth_client.post(reverse(self.url_name), {
             "sequence": GOLDEN_INSERT,
             "left_enzyme": "NdeI", "right_enzyme": "XhoI",
@@ -92,7 +84,7 @@ class TestSSDEndpoint:
         assert response.data["right_overhang"] == "TCGA"
 
     def test_matches_the_engine_exactly(self, auth_client):
-        """The API must not reshape, round or truncate the design."""
+
         expected = design_small_sequence(GOLDEN_INSERT)
         response = auth_client.post(reverse(self.url_name), {"sequence": GOLDEN_INSERT})
         assert response.data["forward"] == expected.forward
@@ -135,7 +127,7 @@ class TestSSDEndpoint:
 
 
 def _random_gene(length: int, seed: int) -> str:
-    """A coding insert long enough to need more junctions than 4 nt can supply."""
+
     import random
 
     codons = ("GCG", "TGC", "GAT", "GAA", "TTT", "GGC", "CAT", "ATT", "AAA", "CTG",
@@ -155,13 +147,13 @@ class TestAssemblyEndpoint:
             "sequence": LONG_INSERT, "target_oligo_length": 90, "overhang_length": 4,
         })
         assert response.status_code == 200, response.data
-        # Empty verification means the oligos re-ligate to the design.
+
         assert response.data["verification"] == []
         assert response.data["fragment_count"] >= 2
         assert response.data["oligo_count"] == 2 * response.data["fragment_count"]
 
     def test_fragments_reassemble_into_the_construct(self, auth_client):
-        """The property the whole method rests on, checked over HTTP."""
+
         response = auth_client.post(reverse(self.url_name), {"sequence": LONG_INSERT})
         rebuilt = "".join(f["forward"] for f in response.data["fragments"])
         assert rebuilt == response.data["construct_forward"]
@@ -182,13 +174,7 @@ class TestAssemblyEndpoint:
         assert fragments[-1]["right_overhang"] == "TCGA"
 
     def test_reports_the_ends_measured_off_the_assembly(self, auth_client):
-        """The response must say what the fragments present, not what was asked.
 
-        Every terminal value in the plan is copied from the SSD, so a payload
-        built from those labels would agree with itself whatever the oligos
-        actually spell. These come from the assembled duplex, and carry the
-        polarity — which follows the side, not the strand.
-        """
         response = auth_client.post(reverse(self.url_name), {
             "sequence": LONG_INSERT, "left_enzyme": "NdeI", "right_enzyme": "XhoI",
         })
@@ -215,7 +201,7 @@ class TestAssemblyEndpoint:
         ] == [left, right]
 
     def test_includes_the_hybridisation_view(self, auth_client):
-        """The client draws the duplex from coordinates, not from prose."""
+
         response = auth_client.post(reverse(self.url_name), {"sequence": LONG_INSERT})
         duplex = response.data["duplex"]
 
@@ -238,7 +224,7 @@ class TestAssemblyEndpoint:
             assert duplex["top"][span["start"]:span["end"]] == fragment["forward"]
 
     def test_reports_which_strand_carries_each_overhang(self, auth_client):
-        """NdeI and XhoI both leave 5' overhangs, so both sit on the outer top/bottom."""
+
         response = auth_client.post(reverse(self.url_name), {"sequence": LONG_INSERT})
         fragments = response.data["fragments"]
 
@@ -292,12 +278,7 @@ class TestAssemblyEndpoint:
         assert response.status_code == 400
 
     def test_a_whole_gene_designs_over_http(self, auth_client):
-        """The endpoint accepts 200 kb, but was only ever exercised on peptides.
 
-        A 2.4 kb gene needs 26 junctions and there are only 22 sets of 4 nt
-        overhangs that ligate in one order, so this used to come back as a 400
-        naming a junction the user had never heard of.
-        """
         gene = _random_gene(2_400, seed=7)
         response = auth_client.post(reverse(self.url_name), {
             "sequence": gene, "target_oligo_length": 90, "overhang_length": 4,
@@ -307,12 +288,7 @@ class TestAssemblyEndpoint:
         assert response.data["fragment_count"] > 25
 
     def test_reports_the_overhang_it_actually_used(self, auth_client):
-        """The client shows what was built, not what was asked for.
 
-        The design widens the overhang when 4 nt cannot supply the junctions.
-        A response that echoed the request would have the interface — and the
-        bench protocol printed from it — describing oligos nobody ordered.
-        """
         gene = _random_gene(2_400, seed=7)
         expected = design_extended_sequence(
             gene, target_oligo_length=90, overhang_length=4,
@@ -357,16 +333,8 @@ class TestDownloads:
             assert api_client.post(reverse(name), {"sequence": LONG_INSERT}).status_code == 401
 
 
-# ── Cloning ─────────────────────────────────────────────────────────────────
-
-
 def build_vector(left: str = "NdeI", right: str = "XhoI") -> str:
-    """A circular vector with exactly one site for each enzyme.
 
-    Built from the enzyme table rather than hand-written, so a filler that
-    happens to carry a second site cannot turn a cloning test into a test of
-    luck.
-    """
     from gsynth_engine.cloning import find_sites
     from gsynth_engine.tests.test_cloning import build_vector as engine_build
 
@@ -422,7 +390,7 @@ class TestCloneEndpoint:
         assert response.data["protein_length"] == len(response.data["protein"])
 
     def test_the_insert_comes_back_as_a_drawable_annotation(self, auth_client):
-        """So the client draws the whole map from one list."""
+
         response = auth_client.post(reverse(self.url_name), {
             "sequence": LONG_INSERT, "vector": build_vector(), "name": "EntA",
         })
@@ -433,7 +401,7 @@ class TestCloneEndpoint:
         assert insert[0]["end"] == data["insert_end"]
 
     def test_cassette_parts_are_coordinate_level_annotations(self, auth_client):
-        """The viewer can show the tag, cleavage site and target without motif guesses."""
+
         response = auth_client.post(reverse(self.url_name), {
             "sequence": LONG_INSERT,
             "vector": build_vector(),
@@ -484,7 +452,7 @@ class TestCloneEndpoint:
         assert "NdeI cuts it 2 times" in response.data["detail"]
 
     def test_an_unclonable_design_returns_200_with_problems(self, auth_client):
-        """The user needs to see what does not fit, not an error page."""
+
         response = auth_client.post(reverse(self.url_name), {
             "sequence": "GGCTAAATCGTGGAACAGTGCTGCACCAGCTGCAGCCTGTACCAGCTGGAA",
             "vector": build_vector(),
@@ -519,7 +487,7 @@ class TestCloneEndpoint:
         assert not Project.objects.filter(module="cloning").exists()
 
     def test_matches_the_engine_exactly(self, auth_client):
-        """The HTTP layer must not reinterpret the biology."""
+
         from gsynth_engine.cloning import clone
 
         vector = build_vector()
@@ -538,7 +506,7 @@ class TestCloneEndpoint:
 @pytest.mark.django_db
 class TestVectorCatalogue:
     def test_is_public(self, api_client):
-        """The cloning page builds its dropdown before anything is designed."""
+
         assert api_client.get(reverse("design-vectors")).status_code == 200
 
     def test_pet21a_is_the_default(self, api_client):
@@ -584,7 +552,7 @@ class TestCloningIntoACatalogueVector:
     url_name = "design-clone"
 
     def test_a_vector_key_alone_is_enough(self, auth_client):
-        """No sequence needed: pET-21a's ships with G-Synth."""
+
         response = auth_client.post(reverse(self.url_name), {
             "sequence": LONG_INSERT, "vector_key": "pET-21a", "name": "EntA",
         })
@@ -597,8 +565,7 @@ class TestCloningIntoACatalogueVector:
         assert len(response.data["provenance"]["output_sha256"]) == 64
 
     def test_the_backbone_survives(self, auth_client):
-        """pET-21a's cassette reads on the minus strand; getting that wrong
-        keeps the 78 bp stuffer and discards the origin and the marker."""
+
         response = auth_client.post(reverse(self.url_name), {
             "sequence": LONG_INSERT, "vector_key": "pET-21a",
         })
@@ -620,11 +587,11 @@ class TestCloningIntoACatalogueVector:
         })
         tags = {t["name"]: t for t in response.data["tags"]}
         assert "His-tag" in tags and "T7·Tag" in tags
-        # NdeI cloning replaces the T7·Tag with the insert.
+
         assert tags["T7·Tag"]["present"] is False
 
     def test_the_supplied_sequence_is_checked_against_the_entry(self, auth_client):
-        """Pasting pET-21(+) while pET-21a(+) is selected must be caught."""
+
         from gsynth_engine import vectors
 
         response = auth_client.post(reverse(self.url_name), {
@@ -649,7 +616,7 @@ class TestCloningIntoACatalogueVector:
         assert response.data["vector"]["check"]["matches"] is True
 
     def test_an_unrecognised_sequence_is_still_cloned_into(self, auth_client):
-        """A lab's own backbone is not in any catalogue, and still works."""
+
         response = auth_client.post(reverse(self.url_name), {
             "sequence": LONG_INSERT,
             "vector_key": "",
@@ -660,7 +627,7 @@ class TestCloningIntoACatalogueVector:
         assert response.data["vector"]["recognised"] is False
 
     def test_pet21_has_no_ndei_so_the_default_pair_is_refused(self, auth_client):
-        """The distinction that matters between pET-21(+) and pET-21a(+)."""
+
         response = auth_client.post(reverse(self.url_name), {
             "sequence": LONG_INSERT, "vector_key": "pET-21",
         })
@@ -688,7 +655,7 @@ class TestCloningIntoACatalogueVector:
 class TestOptimiseEndpoint:
     url_name = "design-optimise"
 
-    # An enterocin-like gene: AT-rich, slow codons, internal NdeI site.
+
     DONOR = (
         "ATGACAACAAGTAAATTAGGGAAAGGTTTAGGGTATATTGGAAATAATGGAGCACATATGGGA"
         "TTAAATTTAGCATTATTAGGATTAGCAAGTTTATTAGGTAAAGGTATTAGTAAATTAGGA"
@@ -701,7 +668,7 @@ class TestOptimiseEndpoint:
         ).status_code == 401
 
     def test_the_protein_is_unchanged(self, auth_client):
-        """The invariant, checked over HTTP as well as in the engine."""
+
         from gsynth_engine.cloning import translate
 
         response = auth_client.post(reverse(self.url_name), {"sequence": self.DONOR})
@@ -780,7 +747,7 @@ class TestOptimiseEndpoint:
         assert response.status_code == 400
 
     def test_the_cloning_sites_are_removed(self, auth_client):
-        """A gene with an internal NdeI site cannot be cloned NdeI/XhoI."""
+
         from gsynth_engine.cloning import find_sites
 
         response = auth_client.post(reverse(self.url_name), {
@@ -833,14 +800,14 @@ class TestOptimiseEndpoint:
         assert response.data["recommended_design_is_coding"] is True
 
     def test_the_stop_codon_can_be_left_off(self, auth_client):
-        """For an insert going into a C-terminal vector tag."""
+
         response = auth_client.post(reverse(self.url_name), {
             "sequence": self.DONOR_PROTEIN, "is_protein": True, "keep_stop": False,
         })
         assert response.data["length"] == 3 * len(self.DONOR_PROTEIN)
 
     def test_a_reference_set_replaces_the_shipped_table(self, auth_client):
-        """The honest way to get a CAI: measure it against genes you chose."""
+
         response = auth_client.post(reverse(self.url_name), {
             "sequence": self.DONOR,
             "reference_genes": ["ATGTTATTATTAAAAAAA" * 3],
@@ -875,7 +842,7 @@ class TestOptimiseEndpoint:
 
 @pytest.mark.django_db
 class TestExport:
-    """A design that only exists inside G-Synth is not finished."""
+
 
     def parse_genbank(self, response):
         import io
@@ -901,7 +868,7 @@ class TestExport:
         assert {"AmpR", "ori", "pGS-EntA"} <= labels
 
     def test_the_exported_plasmid_is_the_one_the_api_returned(self, auth_client):
-        """Two endpoints, one molecule — they must not drift."""
+
         payload = {"sequence": LONG_INSERT, "vector_key": "pET-21a", "name": "EntA"}
         designed = auth_client.post(reverse("design-clone"), payload).data
         exported = self.parse_genbank(
@@ -1027,7 +994,7 @@ class TestExport:
             for f in record.features if f.type != "source"
         }
         assert "6×His tag" in labels
-        assert "F1" in labels          # the fragments are drawn too
+        assert "F1" in labels
 
     def test_the_linear_construct_exports_as_valid_sbol3(self, auth_client):
         from apps.sequences.parsing import parse_sequence_file
@@ -1043,8 +1010,7 @@ class TestExport:
         assert any(annotation.name == "6×His tag" for annotation in record.annotations)
 
     def test_the_oligos_export_as_one_fasta_per_oligo(self, auth_client):
-        """Suppliers take a FASTA upload; retyping thirty names is where
-        transcription errors come from."""
+
         import io
 
         from Bio import SeqIO
@@ -1113,13 +1079,13 @@ class TestLigationEndpoint:
         }).status_code == 401
 
     def test_equal_mass_is_nowhere_near_equal_moles(self, auth_client):
-        """The mistake the module exists to prevent, over HTTP."""
+
         response = auth_client.post(reverse(self.url_name), {
             "vector_length": 5443, "insert_length": 150, "vector_ng": 50, "ratio": 3,
         })
         assert response.status_code == 200, response.data
         reaction = response.data["reactions"][0]
-        assert reaction["insert_ng"] < 5      # not 50
+        assert reaction["insert_ng"] < 5
         assert reaction["insert_fmol"] == pytest.approx(
             reaction["vector_fmol"] * 3, rel=1e-2
         )
@@ -1170,7 +1136,7 @@ class TestPrimerEndpoint:
         assert {p["direction"] for p in response.data["primers"]} == {1, -1}
 
     def test_every_primer_is_unique_in_the_plasmid(self, auth_client):
-        """One that binds twice gives a superimposed trace and no data."""
+
         from gsynth_engine.sequence import reverse_complement
 
         cloned = self.clone_something(auth_client)
@@ -1204,8 +1170,8 @@ class TestPrimerEndpoint:
             "target_end": cloned["insert_end"],
             "margin": 50,
         })
-        # 50 is the floor the serializer allows and the engine's dead zone,
-        # so this is the boundary rather than an error.
+
+
         assert response.status_code == 200
 
     def test_an_inverted_region_is_refused(self, auth_client):
@@ -1259,7 +1225,7 @@ class TestVerifyEndpoint:
         assert response.data["provenance"]["workflow"] == "sequence_verification"
 
     def test_a_reversed_read_is_handled(self, auth_client):
-        """Half of all Sanger reads come back on the other strand."""
+
         from gsynth_engine.sequence import reverse_complement
 
         cloned = self.build(auth_client)
@@ -1300,7 +1266,7 @@ class TestVerifyEndpoint:
         assert "position" in difference["description"]
 
     def test_a_gap_in_coverage_is_reported(self, auth_client):
-        """Half the insert read is not the insert verified."""
+
         cloned = self.build(auth_client)
         response = auth_client.post(reverse(self.url_name), {
             "design": cloned["plasmid"],
@@ -1365,7 +1331,7 @@ class TestAlignEndpoint:
         assert response.data["bottom"].replace("-", "") == other
 
     def test_a_deletion_aligns_as_one_gap(self, auth_client):
-        """Affine penalties exist to stop one event becoming four."""
+
         deleted = self.GENE[:20] + self.GENE[32:]
         response = auth_client.post(reverse(self.url_name), {
             "first": self.GENE, "second": deleted,
@@ -1532,7 +1498,7 @@ class TestPrimerExport:
         assert records[0].id.startswith("EntA_")
 
     def test_the_export_matches_what_the_design_endpoint_returned(self, auth_client):
-        """Two endpoints, one primer set — they must not drift."""
+
         import csv
         import io
 
@@ -1559,7 +1525,7 @@ class TestPrimerExport:
 
 @pytest.mark.django_db
 class TestValidationAndJunctionViews:
-    """The checks the user asked to be able to *see* rather than infer."""
+
 
     def cloned(self, auth_client, **extra):
         payload = {
@@ -1579,7 +1545,7 @@ class TestValidationAndJunctionViews:
             assert view["joined_pairs"].count("|") == len(view["joined_top"])
 
     def test_the_overhang_is_located_in_the_drawing(self, auth_client):
-        """So "the overhangs match" is checkable rather than asserted."""
+
         data = self.cloned(auth_client)
         for view in data["junction_views"]:
             low, high = view["overhang_span"]
@@ -1587,13 +1553,13 @@ class TestValidationAndJunctionViews:
             assert high - low == len(view["overhang"])
 
     def test_both_ends_carry_the_overhang_before_ligation(self, auth_client):
-        """On opposite strands — that is what lets them anneal."""
+
         view = self.cloned(auth_client)["junction_views"][0]
         assert view["left_top"].rstrip() != view["left_bottom"].rstrip()
         assert view["right_top"].lstrip() != view["right_bottom"].lstrip()
 
     def test_the_validation_list_states_each_check_separately(self, auth_client):
-        """One banner collapses a dozen questions into a colour."""
+
         data = self.cloned(auth_client)
         checks = {row["check"]: row for row in data["validation"]}
 
@@ -1606,8 +1572,7 @@ class TestValidationAndJunctionViews:
         assert all(row["detail"] for row in data["validation"])
 
     def test_a_failing_check_says_which_one(self, auth_client):
-        """A design that fails on the frame must not look like one that
-        fails on the ends."""
+
         data = self.cloned(
             auth_client,
             sequence="GGCTAAATCGTGGAACAGTGCTGCACCAGCTGCAGCCTGTACCAGCTGGAA",
@@ -1678,7 +1643,7 @@ class TestValidationAndJunctionViews:
 
     @pytest.mark.parametrize("declare_start", [True, False])
     def test_handoff_annotation_translates_the_same_n_terminus(self, auth_client, declare_start):
-        """A duplex handoff must display Met and six His in the engine's frame."""
+
         from Bio.Seq import Seq
 
         designed = self.cloned(auth_client)
@@ -1809,7 +1774,7 @@ class TestValidationAndJunctionViews:
         plasmid = data["plasmid"]
         length = len(plasmid)
         for site in data["restriction_sites"]:
-            # A circular molecule has no beginning: a site can straddle it.
+
             found = "".join(
                 plasmid[i % length] for i in range(site["start"], site["end"])
             )
@@ -1818,18 +1783,14 @@ class TestValidationAndJunctionViews:
             assert site["wraps"] == (site["end"] > length)
 
     def test_multi_cutters_are_returned_for_the_explicit_all_sites_filter(self, auth_client):
-        """The client may hide these by default, but the API must not erase them."""
+
         data = self.cloned(auth_client)
         assert any(site["cuts"] > 1 and not site["used"] for site in data["restriction_sites"])
 
 
 @pytest.mark.django_db
 class TestTraceVerifyEndpoint:
-    """Uploading ABIF/SCF traces rather than pasting the letters off them.
 
-    The trace is what separates a mutation from a bad call, so the response
-    has to carry the confidence — not just the difference.
-    """
 
     url_name = "design-verify-traces"
 
@@ -1890,7 +1851,7 @@ class TestTraceVerifyEndpoint:
         assert response.data["traces"][0]["mean_quality"] == 45.0
 
     def test_a_poor_peak_is_returned_as_unconfident(self, auth_client):
-        """Same letters as a real mutation; the response must not conflate them."""
+
         read = self._changed_read()
         quality = [45] * len(read)
         quality[100] = 7
@@ -1916,8 +1877,7 @@ class TestTraceVerifyEndpoint:
         assert difference["confident"] is True
 
     def test_the_peaks_around_each_difference_come_back(self, auth_client):
-        """So it can be looked at, not taken on trust. Only the window
-        travels — whole traces would be megabytes per read."""
+
         read = self._changed_read()
         response = auth_client.post(reverse(self.url_name), {
             "design": self.DESIGN, "circular": False,
@@ -1933,7 +1893,7 @@ class TestTraceVerifyEndpoint:
         assert any(b["index"] == window["centre"] for b in window["bases"])
 
     def test_reference_aligned_trace_track_uses_only_verified_bases(self, auth_client):
-        """The overview must not present quality-discarded ends as evidence."""
+
         read = self.DESIGN[30:230]
         quality = [2] * 12 + [45] * (len(read) - 24) + [2] * 12
         response = auth_client.post(reverse(self.url_name), {
@@ -1952,7 +1912,7 @@ class TestTraceVerifyEndpoint:
         assert set(track["traces"]) == set("ACGT")
 
     def test_requested_quality_cutoff_controls_the_verified_alignment(self, auth_client):
-        """The API must not display one cutoff while silently using Q13."""
+
         read = self.DESIGN[30:230]
         quality = [2] * 12 + [45] * (len(read) - 24) + [2] * 12
 
@@ -2009,7 +1969,7 @@ class TestTraceVerifyEndpoint:
         assert consensus["bidirectional_agreement"] == 100.0
 
     def test_matches_what_the_engine_measured(self, auth_client):
-        """The response reports the engine's numbers, not its own."""
+
         from gsynth_engine.chromatogram import read_ab1
         from gsynth_engine.tests.test_chromatogram import build_ab1
         from gsynth_engine.verify import verify

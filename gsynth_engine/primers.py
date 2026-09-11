@@ -1,26 +1,3 @@
-"""Sequencing primers — reading back what you built.
-
-Once a clone is picked, it gets sequenced, and that needs primers that sit
-outside the insert and read into it. The rules are not subtle but they are
-easy to get wrong in a way that wastes a week:
-
-* **Place it back from the target.** The first thirty to fifty bases after
-  a sequencing primer are unusable. A primer that starts exactly at the
-  insert reads the insert's beginning as noise — the one part everybody
-  most wants to check, because that is where the ATG and the tag are.
-* **It has to be unique.** A primer that binds twice in the plasmid gives a
-  superimposed trace and no usable sequence. On a circular template that
-  means checking both strands over the whole molecule, not just the region
-  of interest.
-* **Tm decides the run, not the guesswork.** Melting temperatures come from
-  the nearest-neighbour model under sequencing conditions, the same engine
-  the oligo design uses, so two numbers in the same project mean the same
-  thing.
-
-Long inserts need more than the two flanking primers: a Sanger read gives
-perhaps 700 usable bases, so anything longer gets internal primers spaced
-to overlap.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -34,31 +11,28 @@ from gsynth_engine.sequence import (
 )
 from gsynth_engine.thermo import BufferConditions, melting_temperature
 
-#: A sequencing reaction: dilute primer, standard salt. Quoted with every
-#: Tm so the number means something.
 SEQUENCING = BufferConditions(
     name="sequencing reaction", oligo_nM=200.0, na_mM=50.0
 )
 
-#: How much sequence a Sanger read gives before it degrades, in practice.
+
 READ_LENGTH = 700
 
-#: Bases after the primer that come back as noise. A primer must sit at
-#: least this far back from anything you want to read.
+
 DEAD_ZONE = 50
 
 
 @dataclass(frozen=True)
 class Primer:
-    """One sequencing primer, with everything needed to order and use it."""
+
 
     name: str
     sequence: str
-    start: int              #: 0-based position of its 5' end in the template
-    direction: int          #: 1 reads left→right, -1 reads right→left
+    start: int
+    direction: int
     tm: float
     gc: float
-    #: Where its usable read begins and ends in the template.
+
     reads_from: int
     reads_to: int
     warnings: tuple[str, ...] = ()
@@ -82,7 +56,7 @@ class Primer:
 
 @dataclass
 class PrimerSet:
-    """Every primer needed to read one region, and what they leave uncovered."""
+
 
     primers: list[Primer] = field(default_factory=list)
     target_start: int = 0
@@ -92,12 +66,7 @@ class PrimerSet:
 
     @property
     def covers_target(self) -> bool:
-        """Every base of the requested region falls in some primer's read.
 
-        Read range, not primer position: a primer sits back from what it
-        reads, and the region it covers starts downstream of its 3' end. A
-        set can therefore cover a target that no primer overlaps.
-        """
         return not self.gaps
 
     @property
@@ -106,23 +75,19 @@ class PrimerSet:
 
 
 def _is_unique(template: str, candidate: str, *, circular: bool) -> bool:
-    """True when the primer binds in exactly one place, on either strand.
 
-    A primer that binds twice gives a superimposed trace, which reads as a
-    sequence full of double peaks and is usually blamed on the sample.
-    """
     scan = template + template[: len(candidate) - 1] if circular else template
     hits = scan.count(candidate) + scan.count(reverse_complement(candidate))
     return hits == 1
 
 
 def _score(candidate: str, tm: float, *, tm_target: float) -> float:
-    """How good a primer this is. Lower is better."""
+
     gc = gc_content(candidate)
     penalty = abs(tm - tm_target) * 2.0
     penalty += abs(gc - 50.0) * 0.4
-    # A G or C at the 3' end holds the primer down while the polymerase
-    # starts; three or more in a row makes it stick too well elsewhere.
+
+
     if candidate[-1] not in "GC":
         penalty += 6.0
     if candidate[-4:].count("G") + candidate[-4:].count("C") >= 4:
@@ -143,12 +108,7 @@ def _pick(
     length_range: tuple[int, int],
     search: int,
 ) -> tuple[str, int] | None:
-    """Best primer whose 3' end sits near `anchor`, or None.
 
-    `anchor` is where the primer should end reading *from*; the search walks
-    outwards so a primer that cannot be made at the ideal spot is found a
-    little further away rather than not at all.
-    """
     length = len(template)
     best: tuple[float, str, int] | None = None
 
@@ -201,23 +161,7 @@ def design_sequencing_primers(
     read_length: int = READ_LENGTH,
     search: int = 60,
 ) -> PrimerSet:
-    """Primers that read across a region, both strands, with internal ones.
 
-    Args:
-        target_start / target_end: the stretch that must be read — usually
-            the insert.
-        margin: how far back from the target each flanking primer sits. Must
-            exceed the dead zone after a sequencing primer, or the start of
-            the insert comes back as noise.
-
-    Returns:
-        A :class:`PrimerSet`. `gaps` lists any part of the target no primer
-        reaches, so a long insert that needs another primer says so rather
-        than looking finished.
-
-    Raises:
-        SequenceError: for a target that does not lie in the template.
-    """
     sequence = clean_dna(template)
     length = len(sequence)
     if not sequence:
@@ -252,9 +196,8 @@ def design_sequencing_primers(
             return
         candidate, start = found
         size = len(candidate)
-        # A read runs round the origin as readily as any other stretch, so
-        # the range wraps rather than clamping. Clamping quietly reported a
-        # primer just past the origin as reading almost nothing.
+
+
         if direction == 1:
             first, last = start + size + DEAD_ZONE, start + size + read_length
         else:
@@ -276,15 +219,15 @@ def design_sequencing_primers(
             reads_to=reads_to,
         ))
 
-    # The two flanking primers, each reading into the target from outside.
+
     add((target_start - margin) % length, 1, "F")
     add((target_end + margin) % length, -1, "R")
 
-    # Internal primers when the target is longer than one read can cover.
+
     span = target_end - target_start
     usable = max(1, read_length - DEAD_ZONE)
     if span > usable:
-        # Overlap by a quarter of a read, so no junction lands at an end.
+
         step = int(usable * 0.75)
         for index, position in enumerate(
             range(target_start + step, target_end - DEAD_ZONE, step), start=1

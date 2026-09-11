@@ -86,8 +86,7 @@ export default function Signup() {
                 />
               </div>
 
-              {/* Carries the password rules when one is rejected, so it is
-                  the text a reader most needs announced rather than found. */}
+
               {error && <div className="notice notice-error" role="alert">{error}</div>}
 
               <button className="btn btn-primary" type="submit" disabled={busy}>

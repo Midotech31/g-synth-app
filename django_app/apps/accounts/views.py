@@ -1,7 +1,3 @@
-"""Auth endpoints: register, login, logout, me, change-password.
-
-Refresh is provided by simplejwt directly (wired in urls.py).
-"""
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -17,7 +13,7 @@ from apps.accounts.serializers import (
 
 
 class RegisterView(generics.CreateAPIView):
-    """POST /api/auth/register — create a new account. Public, rate-limited."""
+
 
     permission_classes = (permissions.AllowAny,)
     serializer_class = RegisterSerializer
@@ -32,18 +28,14 @@ class RegisterView(generics.CreateAPIView):
 
 
 class LoginView(TokenObtainPairView):
-    """POST /api/auth/login — email + password → access & refresh tokens.
 
-    Rate-limited on its own scope: this is the endpoint an attacker hammers
-    to guess passwords.
-    """
 
     throttle_classes = (ScopedRateThrottle,)
     throttle_scope = "login"
 
 
 class LogoutView(APIView):
-    """POST /api/auth/logout — blacklist the supplied refresh token."""
+
 
     def post(self, request):
         serializer = LogoutSerializer(data=request.data)
@@ -53,11 +45,7 @@ class LogoutView(APIView):
 
 
 class LogoutAllView(APIView):
-    """POST /api/auth/logout-all — revoke every session for this user.
 
-    The "I think someone has my password" button: bumps the token version
-    and blacklists all outstanding refresh tokens.
-    """
 
     def post(self, request):
         revoked = request.user.revoke_all_tokens()
@@ -65,18 +53,14 @@ class LogoutAllView(APIView):
 
 
 class MeView(APIView):
-    """GET /api/auth/me — profile of the currently signed-in user."""
+
 
     def get(self, request):
         return Response(UserSerializer(request.user).data)
 
 
 class ChangePasswordView(APIView):
-    """POST /api/auth/change-password — requires current password.
 
-    Succeeding here revokes every existing token for the account, so the
-    client must sign in again with the new password.
-    """
 
     def post(self, request):
         serializer = ChangePasswordSerializer(

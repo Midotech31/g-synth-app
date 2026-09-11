@@ -1,11 +1,3 @@
-"""The PCR endpoint.
-
-What these assert is that the response carries what the engine computed —
-the same primers, the same product, the same ends — rather than something
-that merely looks like a PCR. The biology itself is pinned in
-`gsynth_engine/tests/test_pcr.py`; duplicating those claims here would mean
-two places to update and one of them silently going stale.
-"""
 import pytest
 from django.urls import reverse
 
@@ -38,7 +30,7 @@ class TestRequestIsBounded:
         assert r.status_code == 400
 
     def test_one_enzyme_alone_is_rejected(self, auth_client):
-        """One site cannot open both ends of a product."""
+
         r = auth_client.post(
             reverse("design-pcr"),
             {"template": GENE, "left_enzyme": "NdeI"},
@@ -73,7 +65,7 @@ class TestRequestIsBounded:
         assert r.status_code == 400
 
     def test_an_unorderable_clamp_is_rejected(self, auth_client):
-        """The clamp is synthesised into every primer, so it is bounded."""
+
         r = auth_client.post(
             reverse("design-pcr"),
             {"template": GENE, "left_enzyme": "NdeI", "right_enzyme": "XhoI",
@@ -93,8 +85,7 @@ class TestRequestIsBounded:
         assert "start_codon_mode" in r.data
 
     def test_a_region_too_short_becomes_a_readable_400(self, auth_client):
-        """`SequenceError` messages are shown to the user verbatim, so the
-        endpoint must pass one through rather than raise a 500."""
+
         r = auth_client.post(
             reverse("design-pcr"),
             {"template": GENE, "target_start": 0, "target_end": 20},
@@ -164,8 +155,7 @@ class TestTheResponseMatchesTheEngine:
         assert any(ladder["bands"] for ladder in r.data["gel"]["ladders"])
 
     def test_both_tm_figures_survive_serialisation(self, auth_client):
-        """Collapsing the two into one is what makes a tailed primer look as
-        though it should anneal ten degrees hotter than it does."""
+
         expected = design_pcr(GENE, left_enzyme="NdeI", right_enzyme="XhoI")
         r = auth_client.post(
             reverse("design-pcr"),
@@ -179,8 +169,7 @@ class TestTheResponseMatchesTheEngine:
         assert r.data["annealing_temperature"] == expected.annealing_temperature
 
     def test_the_tail_is_returned_separately_from_the_annealing_part(self, auth_client):
-        """The interface draws them differently, so it needs them apart —
-        and the two must still concatenate to the oligo that gets ordered."""
+
         r = auth_client.post(
             reverse("design-pcr"),
             {"template": GENE, "left_enzyme": "NdeI", "right_enzyme": "XhoI"},
@@ -206,8 +195,7 @@ class TestTheResponseMatchesTheEngine:
         assert digest["right_end"]["kind"] == expected.digest.right_end.kind
 
     def test_the_insert_can_be_posted_straight_to_the_clone_endpoint(self, auth_client):
-        """The whole point of the feature: what comes out of the PCR page
-        goes into the Clone page without the caller reshaping it."""
+
         pcr = auth_client.post(
             reverse("design-pcr"),
             {"template": GENE, "left_enzyme": "NdeI", "right_enzyme": "XhoI"},
@@ -255,8 +243,7 @@ class TestTheResponseMatchesTheEngine:
 @pytest.mark.django_db
 class TestSitesInsideTheGene:
     def test_an_internal_site_comes_back_as_a_problem_with_no_insert(self, auth_client):
-        """A problem, not a warning: the digest would cut the gene in two as
-        well as opening its ends, and no reaction condition rescues that."""
+
         gene = "ATG" + "GCTAGC" + GENE[3:]
         r = auth_client.post(
             reverse("design-pcr"),

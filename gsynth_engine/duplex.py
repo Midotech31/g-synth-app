@@ -1,32 +1,3 @@
-"""The hybridisation view — both strands, aligned, with the overhangs showing.
-
-This is the check that has to happen before oligos are ordered. Every other
-report is a summary; this one shows the actual molecule. It answers, at a
-glance, the questions that cost a fortnight when they go unanswered:
-
-* Do the two oligos of a fragment actually pair over their whole length?
-* Does each junction present the 5' overhang it is supposed to, on the
-  strand it is supposed to be on?
-* Are the two terminal ends the vector's sticky ends, and nothing else?
-* Where does one fragment stop and the next begin, relative to the ATG,
-  the tag and the cleavage site?
-
-**Coordinates.** One frame spans the whole construct. Column 0 is the 5'-most
-base of the top strand — the first base of the left sticky end. The bottom
-strand starts further right by the width of that sticky end, and runs further
-right at the other end by the width of the right one. Wherever a strand is
-absent the column holds a space, which is precisely what a single-stranded
-overhang looks like::
-
-    5'-TATGGGTTCTTCT…                 top strand starts here
-          ||||||||||
-    3'-  ACCCAAGAAGA…                 bottom starts two columns in
-
-**Strand sense.** The top line reads 5'→3' left to right. The bottom line
-reads 3'→5' left to right, which is how a duplex is drawn everywhere and how
-the bases line up with their partners. The oligo you actually order for the
-bottom strand is that line reversed — `OligoPair.reverse` holds it that way.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -34,17 +5,15 @@ from dataclasses import dataclass, field
 from gsynth_engine.esd import ESDResult, OligoPair
 from gsynth_engine.sequence import SequenceError, complement, reverse_complement
 
-#: A column with no strand present.
 GAP = " "
 
-#: Line width for the text rendering. Sixty bases is the convention in
-#: sequence viewers and fits an 80-column terminal with room for numbering.
+
 DEFAULT_WIDTH = 60
 
 
 @dataclass(frozen=True)
 class Span:
-    """A labelled stretch of the frame, half-open [start, end)."""
+
 
     name: str
     start: int
@@ -58,13 +27,13 @@ class Span:
 
 @dataclass(frozen=True)
 class DuplexRow:
-    """One wrapped line of the rendering."""
 
-    start: int          #: frame coordinate of column 0 of this row
+
+    start: int
     top: str
-    ticks: str          #: '|' where the strands pair
+    ticks: str
     bottom: str
-    top_start: int | None    #: 1-based position of the first top base, if any
+    top_start: int | None
     top_end: int | None
     bottom_start: int | None
     bottom_end: int | None
@@ -72,10 +41,10 @@ class DuplexRow:
 
 @dataclass
 class DuplexView:
-    """Both strands of a construct in one coordinate frame."""
 
-    top: str                              #: 5'→3', GAP where absent
-    bottom: str                           #: 3'→5', GAP where absent
+
+    top: str
+    bottom: str
     segments: list[Span] = field(default_factory=list)
     top_fragments: list[Span] = field(default_factory=list)
     bottom_fragments: list[Span] = field(default_factory=list)
@@ -88,7 +57,7 @@ class DuplexView:
         return len(self.top)
 
     def paired(self) -> str:
-        """'|' where both strands are present and complementary, else ' '."""
+
         marks = []
         for top_base, bottom_base in zip(self.top, self.bottom, strict=False):
             if top_base == GAP or bottom_base == GAP:
@@ -96,20 +65,16 @@ class DuplexView:
             elif complement(top_base) == bottom_base:
                 marks.append("|")
             else:
-                # A mismatch here is a bug in the design, not in the drawing.
+
                 marks.append("x")
         return "".join(marks)
 
     def mismatches(self) -> list[int]:
-        """Frame coordinates where two present bases fail to pair."""
+
         return [i for i, mark in enumerate(self.paired()) if mark == "x"]
 
     def rows(self, width: int = DEFAULT_WIDTH) -> list[DuplexRow]:
-        """Wrap the frame into fixed-width lines, numbered per strand.
 
-        Numbering counts real bases, not columns, so a row that begins in the
-        middle of an overhang still reports the position of its first base.
-        """
         ticks = self.paired()
         rows: list[DuplexRow] = []
 
@@ -133,7 +98,7 @@ class DuplexView:
         return rows
 
     def to_text(self, width: int = DEFAULT_WIDTH) -> str:
-        """Plain-text rendering, for the protocol and for copy-paste."""
+
         number_width = len(str(self.width)) + 1
         lines: list[str] = []
 
@@ -151,7 +116,7 @@ class DuplexView:
 
 
 def _first_base_number(strand: str, start: int, stop: int) -> int | None:
-    """1-based index, among real bases, of the first base in [start, stop)."""
+
     before = sum(1 for ch in strand[:start] if ch != GAP)
     for offset in range(start, stop):
         if strand[offset] != GAP:
@@ -165,15 +130,7 @@ def _last_base_number(strand: str, start: int, stop: int) -> int | None:
 
 
 def _lay_out(top: str, bottom_sense: str, bottom_offset: int) -> tuple[str, str, int]:
-    """Place two strands in one frame; returns the padded lines and top's column.
 
-    `bottom_offset` is how far right the bottom strand's left end sits
-    relative to the top strand's. It is positive for a 5' overhang on the
-    left (the top strand starts first) and negative for a 3' overhang, where
-    the bottom strand is the one that starts first — ApaI, KpnI, PstI and
-    SacI all cut that way, and a view that assumed otherwise would draw
-    their constructs wrong while still looking plausible.
-    """
     top_column = max(0, -bottom_offset)
     bottom_column = max(0, bottom_offset)
 
@@ -186,12 +143,7 @@ def _lay_out(top: str, bottom_sense: str, bottom_offset: int) -> tuple[str, str,
 
 
 def construct_duplex(plan: ESDResult) -> DuplexView:
-    """Both strands of the full construct, with fragment boundaries marked.
 
-    The two strands are staggered by the sticky ends the cloning enzymes
-    leave, which is what makes the terminal overhangs and every internal
-    junction visible as geometry rather than as a note in a table.
-    """
     top = plan.construct_forward
     bottom_sense = reverse_complement(plan.construct_reverse)
     offset = plan.fragments[0].bottom_offset if plan.fragments else 0
@@ -217,9 +169,7 @@ def construct_duplex(plan: ESDResult) -> DuplexView:
         for f in plan.fragments
     ]
 
-    # Walk the bottom pieces instead of deriving them from overhang widths:
-    # they tile the bottom strand in fragment order, whatever the polarity of
-    # the terminal ends.
+
     bottom_fragments: list[Span] = []
     cursor = max(0, offset)
     for fragment in plan.fragments:
@@ -246,11 +196,7 @@ def construct_duplex(plan: ESDResult) -> DuplexView:
 
 
 def fragment_duplex(fragment: OligoPair) -> DuplexView:
-    """One fragment on its own, as it exists in its annealing tube.
 
-    Built from the two oligos as ordered, not sliced out of the construct —
-    so if the two ever disagreed, this view would show it.
-    """
     top = fragment.forward
     bottom_sense = reverse_complement(fragment.reverse)
     top_line, bottom_line, top_column = _lay_out(
@@ -281,39 +227,29 @@ def fragment_duplex(fragment: OligoPair) -> DuplexView:
     )
 
 
-# ── Junctions ───────────────────────────────────────────────────────────────
-
-
 @dataclass
 class JunctionView:
-    """One ligation seam, drawn twice: before the join and after it.
 
-    A banner saying "the overhangs match" asks to be believed. Showing the
-    two ends about to anneal, base against base, can be checked — and it is
-    the only rendering in which an overhang that is one base short, or the
-    right sequence on the wrong strand, looks obviously wrong instead of
-    looking like a passing test.
-    """
 
     name: str
     enzyme: str
     overhang: str
-    kind: str                 #: 5', 3' or blunt
+    kind: str
     compatible: bool
     reason: str = ""
 
-    #: The two ends as they exist before ligation, in one frame each.
+
     left_top: str = ""
     left_bottom: str = ""
     right_top: str = ""
     right_bottom: str = ""
 
-    #: The same region after ligation, and where the seam falls in it.
+
     joined_top: str = ""
     joined_bottom: str = ""
     joined_pairs: str = ""
     seam: int = 0
-    #: Columns the overhang occupies in the joined frame, for highlighting.
+
     overhang_span: tuple[int, int] = (0, 0)
 
     @property
@@ -332,17 +268,7 @@ def junction_view(
     strand: str,
     flank: int = 18,
 ) -> JunctionView:
-    """Draw one seam of a finished plasmid as the two ends that made it.
 
-    `position` is where the upstream piece's top strand ends. `strand` says
-    which strand carried the overhang on the *upstream* side, which is what
-    decides how the two ends are staggered before they meet.
-
-    The ends are reconstructed from the ligated molecule rather than kept
-    from the design, so what is drawn is what the plasmid actually contains.
-    A drawing taken from the plan would agree with the plan by construction
-    and could not catch anything.
-    """
     length = len(plasmid)
     if length == 0:
         raise SequenceError("The plasmid is empty.")
@@ -355,8 +281,7 @@ def junction_view(
     joined_bottom = complement(joined_top)
     seam = flank
 
-    # Where each strand was cut, in this frame. The top cut is the seam; the
-    # bottom cut sits `width` away, on whichever side the polarity puts it.
+
     top_cut = seam
     if kind == "blunt":
         bottom_cut = seam
@@ -367,9 +292,7 @@ def junction_view(
 
     low, high = min(top_cut, bottom_cut), max(top_cut, bottom_cut)
 
-    # Before ligation, *both* pieces carry the overhang — on opposite strands.
-    # That is what lets them anneal, and a drawing that gives it to only one
-    # of them shows a join that could not happen.
+
     left_top = joined_top[:top_cut].ljust(high, GAP)
     left_bottom = joined_bottom[:bottom_cut].ljust(high, GAP)
     right_top = (GAP * (top_cut - low)) + joined_top[top_cut:]

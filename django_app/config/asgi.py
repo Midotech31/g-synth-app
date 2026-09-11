@@ -1,7 +1,3 @@
-"""ASGI entry point (uvicorn / daphne).
-
-Loads `.env` before resolving DJANGO_SETTINGS_MODULE — see wsgi.py.
-"""
 import os
 from pathlib import Path
 

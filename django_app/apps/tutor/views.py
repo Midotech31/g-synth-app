@@ -1,4 +1,3 @@
-"""Optional private study-assistant endpoints."""
 from __future__ import annotations
 
 from django.conf import settings
@@ -17,7 +16,7 @@ TUTOR_NOTICE = (
 
 
 class TutorStatusView(APIView):
-    """Report study-assistant availability and scientific limits."""
+
 
     def get(self, request):
         enabled = bool(settings.TUTOR_ENABLED)
@@ -33,7 +32,7 @@ class TutorStatusView(APIView):
 
 
 class TutorView(APIView):
-    """Submit a bounded question to the configured private service."""
+
 
     throttle_scope = "tutor"
 

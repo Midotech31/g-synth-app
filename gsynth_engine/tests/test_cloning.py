@@ -1,10 +1,3 @@
-"""Tests for in-silico cloning.
-
-The strongest property here is the **round trip**: cut the recombinant
-plasmid with the same two enzymes and you must get the insert back, base for
-base. If the ligation arithmetic is wrong anywhere — cut offsets, overhang
-polarity, the wrap around the origin — that test fails.
-"""
 from __future__ import annotations
 
 import random
@@ -29,16 +22,7 @@ INSERT = "GGCATCGTGGAACAGTGCTGCACCAGCATCTGCAGCCTGTACCAGCTGGAAAACTACTGC"
 
 
 def clean_filler(length: int, seed: int = 7) -> str:
-    """Random DNA guaranteed to contain no recognition site from the table.
 
-    Built rather than hand-written: a filler that accidentally carries a
-    second BamHI site turns a test of cloning into a test of luck.
-
-    Grown one base at a time, rejecting a base that would complete a site,
-    rather than by resampling the whole string. Resampling works fine for a
-    200 bp stretch and never terminates for a 5 kb one — with ~38 patterns
-    to avoid, essentially every candidate of that length contains one.
-    """
     rng = random.Random(seed)
     sites = [str(info["recognition"]) for info in RESTRICTION_ENZYMES.values()]
     sites += [reverse_complement(site) for site in sites]
@@ -52,12 +36,12 @@ def clean_filler(length: int, seed: int = 7) -> str:
                 out.append(base)
                 break
         else:
-            out.pop()          # dead end: back up and try a different base
+            out.pop()
     return "".join(out)
 
 
 def build_vector(left: str, right: str, *, seed: int = 7) -> str:
-    """A circular vector with exactly one site for each of the two enzymes."""
+
     left_site = str(RESTRICTION_ENZYMES[left]["recognition"])
     right_site = str(RESTRICTION_ENZYMES[right]["recognition"])
     vector = (
@@ -82,9 +66,6 @@ def ssd():
     return design_small_sequence(INSERT, enzyme_pair="NdeI / XhoI")
 
 
-# ── Site finding ────────────────────────────────────────────────────────────
-
-
 class TestFindSites:
     def test_finds_a_site(self):
         assert find_sites("AAAACATATGAAAA", "NdeI", circular=False) == [4]
@@ -93,7 +74,7 @@ class TestFindSites:
         assert find_sites(clean_filler(300), "NdeI", circular=False) == []
 
     def test_finds_a_site_on_the_reverse_strand(self):
-        """Non-palindromic sites cut whichever strand carries them."""
+
         forward = find_sites("AAAAGCGGCCGCAAAA", "NotI", circular=False)
         reverse = find_sites(
             reverse_complement("AAAAGCGGCCGCAAAA"), "NotI", circular=False
@@ -101,8 +82,8 @@ class TestFindSites:
         assert forward and reverse
 
     def test_finds_a_site_spanning_the_origin(self):
-        """A circular plasmid has no beginning; the search must not either."""
-        vector = "TATG" + clean_filler(200) + "CA"      # CATATG across the join
+
+        vector = "TATG" + clean_filler(200) + "CA"
         assert find_sites(vector, "NdeI", circular=True)
         assert find_sites(vector, "NdeI", circular=False) == []
 
@@ -111,15 +92,12 @@ class TestFindSites:
             find_sites("ACGT", "NotAnEnzyme")
 
 
-# ── Ends ────────────────────────────────────────────────────────────────────
-
-
 class TestEnds:
     def test_two_matching_five_prime_overhangs_ligate(self):
         assert End("TCGA", "top").anneals_to(End("TCGA", "bottom"))
 
     def test_the_same_strand_twice_does_not_ligate(self):
-        """Two top-strand overhangs leave both bottom strands unpaired."""
+
         assert not End("TCGA", "top").anneals_to(End("TCGA", "top"))
 
     def test_different_sequences_do_not_ligate(self):
@@ -130,20 +108,12 @@ class TestEnds:
         assert not End("", "blunt").anneals_to(End("TCGA", "top"))
 
     def test_polarity_depends_on_the_end_as_well_as_the_strand(self):
-        """The two strands run in opposite directions, so the side matters.
 
-        A protruding top strand is a 5' overhang at a fragment's left end and
-        a 3' overhang at its right end. Reading polarity off the strand alone
-        reports NdeI — a textbook 5' cutter — as leaving a 3' overhang.
-        """
         assert End("TCGA", "top", "left").kind == "5'"
         assert End("TCGA", "top", "right").kind == "3'"
         assert End("GTAC", "bottom", "left").kind == "3'"
         assert End("GTAC", "bottom", "right").kind == "5'"
         assert End("", "blunt").kind == "blunt"
-
-
-# ── Digestion ───────────────────────────────────────────────────────────────
 
 
 class TestLinearise:
@@ -153,18 +123,18 @@ class TestLinearise:
 
     def test_backbone_ends_are_the_enzymes_own_overhangs(self, vector):
         backbone = linearise(vector, left_enzyme="NdeI", right_enzyme="XhoI")
-        # The backbone begins at the XhoI cut and ends at the NdeI one.
+
         assert backbone.left_end.sequence == enzyme_overhang("XhoI")[0]
         assert backbone.right_end.sequence == enzyme_overhang("NdeI")[0]
 
     def test_the_two_ends_sit_on_opposite_strands(self, vector):
-        """Otherwise the backbone could circularise on itself."""
+
         backbone = linearise(vector, left_enzyme="NdeI", right_enzyme="XhoI")
         assert backbone.left_end.strand == "top"
         assert backbone.right_end.strand == "bottom"
 
     def test_a_second_site_is_refused(self):
-        """The single most common reason a good design fails at the bench."""
+
         vector = clean_filler(200) + "CATATG" + clean_filler(50) + "CTCGAG" \
             + clean_filler(50) + "CATATG" + clean_filler(100)
         with pytest.raises(SequenceError, match="NdeI cuts it 2 times"):
@@ -184,7 +154,7 @@ class TestLinearise:
             linearise(vector, left_enzyme="NdeI", right_enzyme="XhoI", circular=False)
 
     def test_handles_a_site_across_the_origin(self):
-        """Rotating a plasmid must not change what the digest produces."""
+
         vector = build_vector("NdeI", "XhoI")
         straight = linearise(vector, left_enzyme="NdeI", right_enzyme="XhoI")
 
@@ -194,9 +164,6 @@ class TestLinearise:
         assert turned.length == straight.length
         assert turned.removed_length == straight.removed_length
         assert turned.top == straight.top
-
-
-# ── Cloning ─────────────────────────────────────────────────────────────────
 
 
 class TestClone:
@@ -231,7 +198,7 @@ class TestClone:
         assert result.plasmid[result.insert_start : result.insert_end] == ssd.forward
 
     def test_recutting_the_plasmid_returns_the_insert(self, vector, ssd):
-        """The round trip. Everything else is a detail of this."""
+
         result = clone(vector, ssd.forward, left_enzyme="NdeI", right_enzyme="XhoI")
         recut = linearise(result.plasmid, left_enzyme="NdeI", right_enzyme="XhoI")
 
@@ -239,18 +206,17 @@ class TestClone:
         assert recut.length == result.backbone_length
 
     def test_round_trip_holds_across_enzyme_pairs(self):
-        """Including 3' overhangs and blunt ends, where the geometry inverts."""
+
         pairs = [
-            ("NdeI", "XhoI"),      # 5' / 5'
-            ("BamHI", "EcoRI"),    # 5' / 5'
-            ("KpnI", "SacI"),      # 3' / 3'
-            ("ApaI", "PstI"),      # 3' / 3'
-            ("NdeI", "KpnI"),      # 5' / 3'
-            ("EcoRV", "SmaI"),     # blunt / blunt
+            ("NdeI", "XhoI"),
+            ("BamHI", "EcoRI"),
+            ("KpnI", "SacI"),
+            ("ApaI", "PstI"),
+            ("NdeI", "KpnI"),
+            ("EcoRV", "SmaI"),
         ]
-        # A site-free insert: recutting a plasmid whose gene contains an
-        # internal PstI site is supposed to fail, and would be testing the
-        # wrong thing here.
+
+
         clean_insert = clean_filler(60, seed=41)
 
         for left, right in pairs:
@@ -279,16 +245,12 @@ class TestClone:
         assert end.enzyme == "XhoI"
 
     def test_junction_polarity_matches_the_enzyme_catalogue(self):
-        """What the junction reports must be what the supplier's table says.
 
-        Telling someone NdeI leaves a 3' overhang is wrong in a way that
-        looks authoritative on a printed protocol.
-        """
         for left, right in [
-            ("NdeI", "XhoI"),      # both 5'
-            ("KpnI", "SacI"),      # both 3'
-            ("NdeI", "KpnI"),      # one of each
-            ("EcoRV", "SmaI"),     # both blunt
+            ("NdeI", "XhoI"),
+            ("KpnI", "SacI"),
+            ("NdeI", "KpnI"),
+            ("EcoRV", "SmaI"),
         ]:
             design = design_small_sequence(
                 clean_filler(60, seed=11), enzyme_pair=f"{left} / {right}"
@@ -304,7 +266,7 @@ class TestClone:
                 assert reported[enzyme] == (expected_kind, expected_sequence), enzyme
 
     def test_both_sites_are_regenerated(self, vector, ssd):
-        """How the clone gets verified: cut it back out and run a gel."""
+
         result = clone(vector, ssd.forward, left_enzyme="NdeI", right_enzyme="XhoI")
         assert all(junction.site_regenerated for junction in result.junctions)
 
@@ -315,7 +277,7 @@ class TestClone:
             assert set(junction.context) <= set("ACGT")
 
     def test_an_insert_cut_with_the_wrong_enzyme_is_refused(self, vector):
-        """Read off the duplex, not assumed — otherwise the check is vacuous."""
+
         wrong = design_small_sequence(INSERT, enzyme_pair="BamHI / EcoRI")
         result = clone(
             vector, wrong.forward, insert_reverse=wrong.reverse,
@@ -325,7 +287,7 @@ class TestClone:
         assert any("does not match" in problem for problem in result.problems)
 
     def test_a_hand_pasted_insert_with_the_wrong_start_is_caught(self, vector):
-        """Only the forward strand: the visible end must still be right."""
+
         result = clone(
             vector, "GGGGCCCCAAAATTTT", left_enzyme="NdeI", right_enzyme="XhoI"
         )
@@ -356,9 +318,6 @@ class TestClone:
             clone(vector, "ACGTXYZ", left_enzyme="NdeI", right_enzyme="XhoI")
 
 
-# ── Reading frame ───────────────────────────────────────────────────────────
-
-
 class TestReadingFrame:
     def test_translates_the_standard_cassette(self, vector, ssd):
         result = clone(
@@ -366,7 +325,7 @@ class TestReadingFrame:
             left_enzyme="NdeI", right_enzyme="XhoI", orf_start=ssd.orf_start,
         )
         assert result.protein.startswith("MGSSHHHHHHSSG")
-        assert "LVPRGS" in result.protein          # the thrombin site
+        assert "LVPRGS" in result.protein
         assert result.translation_start == result.insert_start + ssd.orf_start
 
     def test_a_stop_inside_the_insert_blocks_the_clone(self, vector):
@@ -381,7 +340,7 @@ class TestReadingFrame:
         assert any("truncated" in problem for problem in result.problems)
 
     def test_an_inserts_own_stop_is_a_note_not_a_problem(self, vector):
-        """Ending the gene is normal; it just means no C-terminal vector tag."""
+
         design = design_small_sequence(
             INSERT + "TAA", enzyme_pair="NdeI / XhoI"
         )
@@ -398,7 +357,7 @@ class TestReadingFrame:
             left_enzyme="NdeI", right_enzyme="XhoI", orf_start=ssd.orf_start,
         )
         assert result.protein
-        # Either it stops in the insert or it runs on — both must be stated.
+
         assert result.warnings or result.problems
 
     def test_no_frame_check_without_an_orf_start(self, vector, ssd):
@@ -427,7 +386,7 @@ class TestReadingFrame:
         assert result.reading_frame.status == "review"
 
     def test_translation_origin_is_retained_on_a_non_expression_backbone(self, vector, ssd):
-        """Displaying the translated insert does not imply confirmed expression."""
+
         from dataclasses import replace
 
         result = clone(
@@ -517,8 +476,7 @@ class TestReadingFrame:
         assert translate("ATGAAAG") == "MK"
 
     def test_open_reading_frames_finds_the_cloned_construct(self, vector, ssd):
-        """The insert sits at the end of the plasmid string, so this only
-        works if the scan wraps — which on a circular molecule it must."""
+
         result = clone(
             vector, ssd.forward, insert_reverse=ssd.reverse,
             left_enzyme="NdeI", right_enzyme="XhoI",
@@ -539,12 +497,9 @@ class TestReadingFrame:
         assert orfs == sorted(orfs, key=lambda o: o["codons"], reverse=True)
 
 
-# ── Internal sites ──────────────────────────────────────────────────────────
-
-
 class TestInternalSites:
     def test_an_internal_site_is_a_note_because_esd_never_digests(self, vector):
-        """The build is unaffected; the diagnostic digest is not."""
+
         design = design_small_sequence(
             "GGCATCGGATCCGAACAGTGCTGCACCAGC", enzyme_pair="BamHI / EcoRI"
         )
@@ -562,9 +517,6 @@ class TestInternalSites:
         assert not any("internal" in note for note in result.warnings)
 
 
-# ── Annotations ─────────────────────────────────────────────────────────────
-
-
 class TestAnnotations:
     def test_features_move_with_the_backbone(self, vector, ssd):
         features = [{"name": "ori", "type": "rep_origin", "start": 10, "end": 60}]
@@ -579,7 +531,7 @@ class TestAnnotations:
         assert result.plasmid[moved["start"] : moved["end"]] == vector[10:60]
 
     def test_features_in_the_removed_stretch_are_dropped(self, vector, ssd):
-        """Drawing a feature that is not in the molecule any more is a lie."""
+
         backbone = linearise(vector, left_enzyme="NdeI", right_enzyme="XhoI")
         inside = backbone.removed_start + 2
         features = [
@@ -610,18 +562,11 @@ class TestAnnotations:
         assert result.annotations == []
 
 
-# ── Orientation ─────────────────────────────────────────────────────────────
-
-
 class TestOrientation:
-    """The insert's enzymes are named as they sit on the insert, not on the
-    vector. In a real pET the expression cassette reads on the minus strand.
-    """
+
 
     def test_a_real_pet21a_keeps_its_backbone(self):
-        """The bug this class exists for: assuming the left enzyme cuts first
-        keeps the 80 bp cloning stuffer and throws away the origin, the
-        marker and everything else, while the arithmetic still adds up."""
+
         from gsynth_engine import vectors
 
         record = vectors.sequence_of("pET-21a")
@@ -635,14 +580,14 @@ class TestOrientation:
         assert backbone.length + backbone.removed_length == record["length"]
 
     def test_the_insert_lands_against_the_c_terminal_tag(self):
-        """Which is the whole point of cloning NdeI/XhoI into a pET-21."""
+
         from gsynth_engine import vectors
 
         backbone = linearise(
             vectors.sequence_of("pET-21a")["sequence"],
             left_enzyme="NdeI", right_enzyme="XhoI",
         )
-        # XhoI leaves TCGAG, then the vector's six histidines and a stop.
+
         assert backbone.top.startswith("TCGAGCACCACCACCACCACCACTGA")
 
     def test_round_trip_holds_on_a_real_vector(self):
@@ -665,13 +610,13 @@ class TestOrientation:
         assert recut.removed_length == len(design.forward)
 
     def test_a_forward_oriented_vector_is_not_flipped(self):
-        """Flipping when it is not needed would be just as wrong."""
+
         vector = build_vector("NdeI", "XhoI")
         backbone = linearise(vector, left_enzyme="NdeI", right_enzyme="XhoI")
         assert not backbone.reversed_insert
 
     def test_vector_features_follow_the_flip(self):
-        """Otherwise every feature lands on the wrong side of the plasmid."""
+
         from gsynth_engine import vectors
 
         record = vectors.sequence_of("pET-21a")
@@ -687,7 +632,7 @@ class TestOrientation:
         amp = by_name["AmpR"]
         original = [a for a in record["annotations"] if a["name"] == "AmpR"][0]
         assert amp["end"] - amp["start"] == original["end"] - original["start"]
-        # The feature must still be the resistance gene where it now sits.
+
         assert result.plasmid[amp["start"]:amp["end"]] == reverse_complement(
             record["sequence"][original["start"]:original["end"]]
         )

@@ -1,8 +1,3 @@
-"""WSGI entry point (gunicorn / uWSGI).
-
-Loads `.env` before resolving DJANGO_SETTINGS_MODULE so the same
-configuration contract holds under gunicorn as under manage.py.
-"""
 import os
 from pathlib import Path
 

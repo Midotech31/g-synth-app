@@ -1,10 +1,3 @@
-"""Test settings.
-
-Inherits dev, then lifts the rate limits so ordinary test cases (which hit
-register/login repeatedly) don't trip the throttle. The throttling
-regression tests re-tighten the rates themselves with `override_settings`,
-so the protection is still verified — just not in every unrelated test.
-"""
 from .dev import *  # noqa: F401, F403
 
 REST_FRAMEWORK = {
@@ -19,10 +12,8 @@ REST_FRAMEWORK = {
     },
 }
 
-# Fast, deterministic hashing — tests don't need PBKDF2's work factor.
+
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
-# The public UI uses the deterministic bundled Learn library. Enable the
-# separate optional tutor endpoint only inside its isolated API tests so the
-# adapter's validation and failure handling remain covered.
+
 TUTOR_ENABLED = True

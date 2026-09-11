@@ -1,4 +1,3 @@
-"""Tests for antiparallel strand hybridization and cohesive-end geometry."""
 from __future__ import annotations
 
 import pytest
@@ -23,9 +22,8 @@ class TestAntiparallelPlacement:
         assert result.right_end["kind"] == "blunt"
 
     def test_the_two_external_five_prime_sticky_ends_are_visible(self):
-        # Physical duplex:
-        # 5′ AATTATGC     3′
-        #        TACGCCGG 5′
+
+
         result = hybridize("AATTATGC", "GGCCGCAT")
 
         assert result.top == "AATTATGC    "

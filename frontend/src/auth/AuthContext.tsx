@@ -17,8 +17,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // On boot, a stored token may be expired or revoked — ask the server who
-  // we are rather than trusting localStorage.
+
   useEffect(() => {
     let cancelled = false;
     (async () => {

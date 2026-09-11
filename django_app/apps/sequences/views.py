@@ -1,4 +1,3 @@
-"""Sequence upload endpoint."""
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -8,12 +7,7 @@ from apps.sequences.parsing import MAX_UPLOAD_BYTES, ParseError, parse_sequence_
 
 
 class ParseSequenceFileView(APIView):
-    """POST /api/sequences/parse/ — multipart upload of a FASTA/GenBank file.
 
-    Returns the parsed record with viewer-ready annotations. Nothing is
-    written to the database: the client decides whether to keep it, and
-    saves it through /api/projects/.
-    """
 
     parser_classes = (MultiPartParser, FormParser)
 

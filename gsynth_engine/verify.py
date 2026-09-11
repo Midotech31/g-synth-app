@@ -1,24 +1,3 @@
-"""Sequencing verification — did you get the construct you designed?
-
-The last step of the workflow, and the one still done by eye. A Sanger read
-comes back, and someone squints at a chromatogram against a printout. This
-compares the read to the designed sequence and says what differs, where,
-and whether it matters to the protein.
-
-**What makes it awkward.** A read arrives in whichever orientation the
-primer happened to point, so half of them are the reverse complement of
-what you are comparing against. The first thirty to fifty bases are noise
-and the last two hundred degrade. And the construct is circular, so a read
-across the origin is split in the coordinates but continuous in the
-molecule. All three are handled here rather than left to the user, because
-all three produce false differences that look exactly like real mutations.
-
-**How it locates the read.** Exact k-mer anchors vote on an orientation and
-an offset, then a banded alignment runs only in the located window. Full
-dynamic programming over a 5 kb plasmid is 5 million cells for every read;
-the band is a few thousand and gives the same answer, because a Sanger read
-of a designed construct is nearly identical to it by construction.
-"""
 from __future__ import annotations
 
 from collections import Counter
@@ -28,44 +7,34 @@ from gsynth_engine.chromatogram import DEFAULT_TRIM_QUALITY, Chromatogram
 from gsynth_engine.cloning import translate
 from gsynth_engine.sequence import SequenceError, clean_dna, reverse_complement
 
-#: Anchor length. Long enough to be unique in a plasmid, short enough that a
-#: read with a mismatch every 40 bases still produces anchors.
 ANCHOR = 14
 
-#: How far the alignment may wander from the anchored diagonal. Sanger reads
-#: of a designed construct do not carry large indels; anything bigger than
-#: this is a different molecule, not a variant.
+
 BAND = 24
 
 
 @dataclass(frozen=True)
 class Difference:
-    """One place the read and the design disagree."""
 
-    kind: str            #: "substitution", "insertion" or "deletion"
-    position: int        #: 0-based, in the design
+
+    kind: str
+    position: int
     expected: str
     found: str
-    #: Filled in when the position falls inside a coding region.
+
     codon: int | None = None
     residue: int | None = None
     from_residue: str = ""
     to_residue: str = ""
     silent: bool | None = None
-    #: Where this fell in the read, and how good that base was. Both are
-    #: None when the read arrived as letters rather than as a trace.
+
+
     read_index: int | None = None
     quality: int | None = None
 
     @property
     def confident(self) -> bool | None:
-        """Whether the trace supports this difference being real.
 
-        Q20 is one wrong call in a hundred. Below it a "mutation" is more
-        likely the basecaller choosing between a peak and its neighbour's
-        shoulder, and the trace has to be looked at before anyone reorders
-        an oligo over it.
-        """
         return None if self.quality is None else self.quality >= 20
 
     @property
@@ -91,56 +60,51 @@ class Difference:
 
 @dataclass
 class ReadAlignment:
-    """One sequencing read placed against the design."""
+
 
     name: str
     length: int
-    #: Where the aligned part of the read sits in the design, 0-based.
+
     start: int
     end: int
     reverse_complemented: bool
-    identity: float               #: percent over the aligned stretch
+    identity: float
     matched: int
     differences: list[Difference] = field(default_factory=list)
-    trimmed_start: int = 0        #: bases dropped from the read's 5' end
+    trimmed_start: int = 0
     trimmed_end: int = 0
     warnings: list[str] = field(default_factory=list)
-    #: None when the read came as letters; a Phred mean when it came as a trace.
+
     mean_quality: float | None = None
 
     @property
     def unconfident_differences(self) -> list[Difference]:
-        """Differences the trace does not support. Not mutations — noise."""
+
         return [d for d in self.differences if d.confident is False]
 
     @property
     def confirmed_differences(self) -> list[Difference]:
-        """Differences a trace backs, plus every difference without one."""
+
         return [d for d in self.differences if d.confident is not False]
 
     @property
     def covered(self) -> int:
-        """Bases spanned by this read: end − start, half-open, 0-based.
 
-        The span between the outermost aligned positions, not a count of
-        bases that matched — a read with mismatches inside it covers the
-        same span as a clean one. Use `identity` for how well it agreed.
-        """
         return self.end - self.start
 
     @property
     def is_clean(self) -> bool:
-        """True when the read agrees with the design everywhere it covers."""
+
         return not self.differences
 
 
 @dataclass
 class VerificationReport:
-    """Every read, and what they say together."""
+
 
     design_length: int
     reads: list[ReadAlignment] = field(default_factory=list)
-    #: Positions of the design no read covers.
+
     gaps: list[tuple[int, int]] = field(default_factory=list)
     coverage: float = 0.0
     warnings: list[str] = field(default_factory=list)
@@ -155,23 +119,18 @@ class VerificationReport:
 
     @property
     def is_verified(self) -> bool:
-        """The requested region is fully read and every read agrees."""
+
         return bool(self.reads) and self.fully_covered and not self.differences
 
     @property
     def fully_covered(self) -> bool:
-        """Every base of the design was read by at least one trace.
 
-        Coverage only — it says nothing about whether the reads *agreed*.
-        A design can be fully covered and still differ; ``is_verified``
-        requires both complete coverage and agreement.
-        """
         return not self.gaps
 
 
 @dataclass(frozen=True)
 class ConsensusPosition:
-    """One reference position in an assembled forward/reverse consensus."""
+
 
     position: int
     reference: str
@@ -184,7 +143,7 @@ class ConsensusPosition:
 
 @dataclass
 class ConsensusReport:
-    """Reference-guided assembly of all admitted read calls."""
+
 
     reference_length: int
     sequence: str
@@ -216,13 +175,7 @@ def _anchors(sequence: str, k: int = ANCHOR) -> dict[str, list[int]]:
 
 
 def _locate(design: str, read: str, *, circular: bool) -> tuple[int, bool] | None:
-    """Find the read's offset and orientation, or None when it does not fit.
 
-    Anchors vote on a diagonal. A unique k-mer that lands at design position
-    p from read position q implies an offset of p − q; the offset with the
-    most votes wins. Repeated k-mers are ignored rather than allowed to vote
-    for several diagonals at once.
-    """
     scan = design + design[: ANCHOR - 1] if circular else design
     index = _anchors(scan)
 
@@ -251,21 +204,7 @@ def _align(
     int,
     list[tuple[int | None, str, str, int | None]],
 ]:
-    """Banded global alignment of the read against the design at `offset`.
 
-    Returns the edit operations, number of matches, and every aligned column
-    as ``(design position, expected, found, read index)``. ``expected`` empty
-    means an insertion in the read; ``found`` empty means a deletion. An
-    insertion has no design position and a deletion has no read index. The
-    complete columns are also used to assemble forward/reverse consensus.
-
-    **Everything here is sized by the band, not by the read.** Two rolling
-    buffers, and a traceback row of the band's width indexed relative to its
-    own start. Allocating a full row per base is what turns a linear
-    algorithm back into a quadratic one: at 20,000 bases it was minutes of
-    CPU and hundreds of megabytes for an answer the band computes in a
-    fraction of a second.
-    """
     n = len(read)
     length = len(design)
     if circular:
@@ -280,12 +219,9 @@ def _align(
 
     MATCH, MISMATCH, GAP = 1, -1, -2
     OUTSIDE = -(1 << 30)
-    WIDTH = 2 * BAND + 4          # band, plus the cells its neighbours read
+    WIDTH = 2 * BAND + 4
 
-    # Semi-global alignment: the read must align end-to-end, but reference
-    # bases before and after it are free. Penalising the leading reference
-    # context makes a short exact read lose to an earlier, worse match in the
-    # same window — particularly in repetitive synthetic constructs.
+
     previous = [0] * (m + 1)
     current = [OUTSIDE] * (m + 1)
     trace: list[bytearray] = []
@@ -295,8 +231,7 @@ def _align(
         low = max(1, i - 1)
         high = min(m, i + 2 * BAND + 1)
 
-        # Clear only what this row will write plus the cells the next row
-        # reads past its end, so no value from an older row leaks in.
+
         current[0] = i * GAP
         for j in range(max(1, low - 1), min(m, high + 2) + 1):
             current[j] = OUTSIDE
@@ -310,7 +245,7 @@ def _align(
             )
             up = previous[j] + GAP
             left = current[j - 1] + GAP
-            best, step = diagonal, 0                   # 0 = match, 1 = ins, 2 = del
+            best, step = diagonal, 0
             if up > best:
                 best, step = up, 1
             if left > best:
@@ -322,8 +257,7 @@ def _align(
         bands.append(low)
         previous, current = current, previous
 
-    # Walk back from the best cell in the last row: the read is contained in
-    # the window, so the design may extend past it on the right.
+
     last_low = bands[-1] if bands else 1
     last_high = min(m, n + 2 * BAND + 1)
     j = max(range(last_low, last_high + 1), key=lambda x: previous[x]) if n else 0
@@ -335,7 +269,7 @@ def _align(
     while i > 0:
         low = bands[i - 1]
         if not low <= j < low + WIDTH:
-            break                                      # fell out of the band
+            raise SequenceError("The read alignment exceeds the supported alignment window; it cannot be verified completely.")
         step = trace[i - 1][j - low]
         if step == 0:
             expected, found = window[j - 1], read[i - 1]
@@ -367,17 +301,12 @@ def _align(
 
 
 def _reference_position(position: int, length: int, circular: bool) -> int:
-    """Map a window coordinate back to the reference molecule."""
+
     return position % length if circular else min(max(position, 0), length)
 
 
 def _trim(read: str, *, trim: int) -> tuple[str, int, int]:
-    """Drop the unreliable ends of a Sanger read.
 
-    The first bases are the primer's own noise and the last few hundred
-    degrade. Leaving them in produces differences that look exactly like
-    real mutations, which is worse than reading less.
-    """
     if trim <= 0 or len(read) <= 2 * trim:
         return read, 0, 0
     return read[trim : len(read) - trim], trim, trim
@@ -386,7 +315,7 @@ def _trim(read: str, *, trim: int) -> tuple[str, int, int]:
 def _coding_effect(
     design: str, position: int, found: str, coding_start: int, coding_end: int,
 ) -> dict:
-    """What a substitution does to the protein, when it lands in one."""
+
     if not (coding_start <= position < coding_end):
         return {}
 
@@ -424,27 +353,7 @@ def verify_read(
     trace: Chromatogram | None = None,
     trim_quality: int = DEFAULT_TRIM_QUALITY,
 ) -> ReadAlignment:
-    """Place one sequencing read against the design and list what differs.
 
-    Args:
-        trim: bases to drop from each end before comparing. Sanger reads are
-            noise at the start and degrade at the end; the default is
-            deliberately conservative. Ignored when `trace` is given — the
-            quality values say where the good sequence actually stops, and a
-            fixed count is wrong in both directions on the same read.
-        trace: the chromatogram this read came from. Supplying it trims by
-            quality and marks each difference with the confidence of the base
-            that produced it, which is what separates a mutation from a bad
-            call.
-        trim_quality: Phred cutoff used by Mott trimming when ``trace`` is
-            supplied. Ignored for sequence-only reads.
-        coding_start / coding_end: the reading frame, so a substitution can
-            be reported as silent or as an amino-acid change.
-
-    Raises:
-        SequenceError: when the read cannot be placed in the design at all,
-            which usually means it is a different construct.
-    """
     template = clean_dna(design)
     raw = clean_dna(read)
     if not template:
@@ -453,7 +362,7 @@ def verify_read(
         raise SequenceError(f"{name} is empty.")
 
     if trace is not None and trace.quality:
-        # Mott trimming: the good stretch, not a fixed number of bases.
+
         start, stop = trace.trim(trim_quality)
         trimmed = raw[start:stop]
         cut_start, cut_end = start, len(raw) - stop
@@ -474,11 +383,7 @@ def verify_read(
     offset, flipped = placed
     full_oriented = reverse_complement(trimmed) if flipped else trimmed
 
-    # A sequencing read may contain vector sequence on both sides of a short
-    # linear reference (for example, a T7 read across a 123 bp insert).  The
-    # reference alignment is semi-global, so those read flanks are free too:
-    # clip them before entering the banded DP rather than allowing a read
-    # longer than the reference to run past the final band row.
+
     oriented_prefix = 0
     oriented_suffix = 0
     aligned_offset = offset
@@ -564,19 +469,7 @@ def assemble_consensus(
     region: tuple[int, int] | None = None,
     trim_quality: int = 0,
 ) -> ConsensusReport:
-    """Assemble oriented trace calls into a reference-guided consensus.
 
-    Forward and reverse traces are first placed independently, transformed
-    into the reference orientation, and aligned.  Their calls are then merged
-    position by position.  ``coverage`` is the fraction of the requested
-    reference region for which the assembled consensus contains a base call;
-    it is deliberately distinct from ``bidirectional_overlap``, the fraction
-    supported by reads in both orientations.
-
-    ``trim_quality=0`` retains every called base and therefore describes raw
-    consensus coverage.  A positive value applies Mott trimming before the
-    assembly and is suitable for a confidence-gated consensus.
-    """
     template = clean_dna(design)
     if not template:
         raise SequenceError("The design is empty.")
@@ -585,7 +478,7 @@ def assemble_consensus(
     if not (0 <= start < stop <= len(template)):
         raise SequenceError("The consensus region is outside the design.")
 
-    # base, quality, read name, orientation (False=forward, True=reverse)
+
     calls: dict[int, list[tuple[str, int, str, bool]]] = {
         position: [] for position in range(start, stop)
     }
@@ -639,9 +532,13 @@ def assemble_consensus(
                 )
                 continue
 
-        _operations, _matched, columns = _align(
-            template, oriented, aligned_offset, circular=circular,
-        )
+        try:
+            _operations, _matched, columns = _align(
+                template, oriented, aligned_offset, circular=circular,
+            )
+        except SequenceError as error:
+            warnings.append(f"{name}: {error}")
+            continue
         for position, _expected, found, read_at in columns:
             if position is None or read_at is None or not found:
                 continue
@@ -679,9 +576,7 @@ def assemble_consensus(
         for base, quality, name, _flipped in position_calls:
             by_base.setdefault(base, []).append((quality, name))
 
-        # First prefer the largest number of agreeing reads, then their
-        # cumulative quality.  An exact tie remains ambiguous (N) rather than
-        # silently choosing the reference base.
+
         ranked = sorted(
             (
                 (len(support), sum(quality for quality, _name in support), base)
@@ -754,16 +649,7 @@ def verify(
     traces: dict[str, Chromatogram] | None = None,
     trim_quality: int = DEFAULT_TRIM_QUALITY,
 ) -> VerificationReport:
-    """Check every read against the design and report coverage and changes.
 
-    Args:
-        region: the stretch that has to be covered — normally the insert.
-            Coverage of a whole plasmid by two Sanger reads is never going
-            to be complete, and reporting it as a failure would be noise.
-
-    A read that cannot be placed becomes a warning rather than an exception:
-    one bad trace out of six should not stop the other five being reported.
-    """
     template = clean_dna(design)
     entries = reads if isinstance(reads, dict) else {
         f"read {i + 1}": sequence for i, sequence in enumerate(reads)
@@ -787,7 +673,7 @@ def verify(
     for read in aligned:
         if read.end > read.start:
             wanted -= set(range(read.start, read.end))
-        else:                                    # wraps the origin
+        else:
             wanted -= set(range(read.start, len(template)))
             wanted -= set(range(read.end))
 

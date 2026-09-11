@@ -1,5 +1,3 @@
-"""Common-feature recognition is exact, strand-aware and reviewable."""
-
 from gsynth_engine.annotations import detect_common_features
 from gsynth_engine.constants import HIS_TAG
 from gsynth_engine.sequence import reverse_complement

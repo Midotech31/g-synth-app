@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the operational evidence-completion kit required for a 9.9/10 rating."""
+
 
 from __future__ import annotations
 
